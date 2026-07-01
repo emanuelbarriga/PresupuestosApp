@@ -1,0 +1,8 @@
+{
+  "name": "Gestor de Presupuestos",
+  "description": "Aplicación SPA para la gestión, control y visualización de ingresos y egresos presupuestados vs. ejecutados.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
