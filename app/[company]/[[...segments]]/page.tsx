@@ -272,7 +272,7 @@ export default function CompanyPage({ params }: Props) {
                 };
               }),
             );
-            await updateEjecucion(companyId, docId, { comprobantes });
+            await updateEjecucion(companyId, docId, { comprobantes: JSON.parse(JSON.stringify(comprobantes)) });
           }
           break;
         }

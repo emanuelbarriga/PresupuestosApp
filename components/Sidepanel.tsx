@@ -1208,7 +1208,8 @@ function ComprobanteUploader({
         };
         const updated = [...comprobantes, newComp];
         onComprobantesChange(updated);
-        await updateEjecucion(companyId, ejecucionId, { comprobantes: updated });
+        // Sanitize: Firestore rejects undefined values
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
         setNewDesc('');
         setNewTipo('');
       } catch (err) {
@@ -1231,7 +1232,7 @@ function ComprobanteUploader({
       const updated = comprobantes.filter(c => c.id !== comp.id);
       onComprobantesChange(updated);
       if (ejecucionId) {
-        await updateEjecucion(companyId, ejecucionId, { comprobantes: updated });
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
       }
     } catch (err) {
       console.error('Delete failed:', err);
