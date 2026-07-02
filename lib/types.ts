@@ -165,3 +165,8 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'client'; record: Client }
   | { mode: 'edit'; type: 'provider'; record: Provider }
   | { mode: 'edit'; type: 'tercero'; record: Tercero };
+
+export type NavScreen =
+  | { id: string; type: 'data'; data: SidepanelData }
+  | { id: string; type: 'view'; detail: RecordDetail }
+  | { id: string; type: 'form'; form: ActiveForm };

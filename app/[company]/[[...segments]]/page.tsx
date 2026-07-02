@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, Month, TransactionType, MONTHS } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
@@ -51,13 +51,17 @@ export default function CompanyPage({ params }: Props) {
   const router = useRouter();
   const { view: activeView, tab: activeTab } = viewFromSegments(segments);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidepanelData, setSidepanelData] = useState<SidepanelData | null>(null);
-  const [recordDetail, setRecordDetail] = useState<RecordDetail | null>(null);
-  const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
+  const [navStack, setNavStack] = useState<NavScreen[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  const current = navStack[navStack.length - 1];
+  const sidepanelData = current?.type === 'data' ? current.data : null;
+  const recordDetail = current?.type === 'view' ? current.detail : null;
+  const activeForm = current?.type === 'form' ? current.form : null;
+  const canGoBack = navStack.length > 1;
 
   const isConjunto = companyId === 'all';
 
@@ -126,11 +130,22 @@ export default function CompanyPage({ params }: Props) {
 
   const projectsForCompany = isConjunto ? [] : projects;
 
-  const closePanel = () => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm(null);
+  const pushScreen = useCallback((screen: NavScreen) => {
+    setNavStack(prev => [...prev, screen]);
+    setSidebarCollapsed(true);
+  }, []);
+
+  const popScreen = useCallback(() => {
+    setNavStack(prev => prev.slice(0, -1));
+  }, []);
+
+  const clearScreens = useCallback(() => {
+    setNavStack([]);
     setSidebarCollapsed(false);
+  }, []);
+
+  const closePanel = () => {
+    clearScreens();
   };
 
   const navigateTo = (view: ViewType, tab?: string) => {
@@ -149,10 +164,7 @@ export default function CompanyPage({ params }: Props) {
   };
 
   const handleCellClick = (data: SidepanelData) => {
-    setRecordDetail(null);
-    setActiveForm(null);
-    setSidepanelData(data);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'data', data });
   };
 
   const handleProjectClick = (projectId: string, projectName: string) => {
@@ -173,10 +185,7 @@ export default function CompanyPage({ params }: Props) {
       budgets: relatedBudgets,
       ejecuciones: relatedEjecuciones,
     };
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
   const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
@@ -201,39 +210,24 @@ export default function CompanyPage({ params }: Props) {
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     }
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm({ mode: 'add', type: formType, defaults });
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
 
   const handleViewRecord = (detail: RecordDetail) => {
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
   const handleAddNew = (type: FormType) => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm({ mode: 'add', type });
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type } });
   };
 
   const handleEditRecord = (form: ActiveForm) => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm(form);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form });
   };
 
   const handleTerceroClick = (detail: RecordDetail) => {
     if (isConjunto) return;
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
   const handleFormSubmit = async (form: ActiveForm, data: Record<string, any>) => {
@@ -317,10 +311,12 @@ export default function CompanyPage({ params }: Props) {
           break;
       }
     }
-    closePanel();
+    popScreen();
   };
 
   const handleSidepanelClose = () => closePanel();
+
+  const handleSidepanelBack = () => popScreen();
 
   return (
     <CompanyProvider companyId={companyId}>
@@ -345,25 +341,10 @@ export default function CompanyPage({ params }: Props) {
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
             companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
-            onCellClick={handleCellClick} onViewRecord={handleViewRecord}
-            onEditProject={(project) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm({ mode: 'edit', type: 'project', record: project });
-              setSidebarCollapsed(true);
-            }}
-            onEditTercero={(tercero) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm({ mode: 'edit', type: 'tercero', record: tercero });
-              setSidebarCollapsed(true);
-            }}
-            onEditCellRecord={(form) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm(form);
-              setSidebarCollapsed(true);
-            }}
+            onCellClick={handleCellClick}
+            canGoBack={canGoBack}
+            onBack={handleSidepanelBack}
+            onNavigate={pushScreen}
             projects={projectsForCompany} />
         </main>
       </div>

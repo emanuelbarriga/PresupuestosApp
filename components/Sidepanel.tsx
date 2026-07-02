@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -33,15 +33,34 @@ interface SidepanelProps {
   companyId: string;
   onClose: () => void;
   onFormSubmit: (form: ActiveForm, data: Record<string, any>) => Promise<void>;
-  onEditProject?: (project: Project) => void;
-  onEditTercero?: (tercero: Tercero) => void;
-  onEditCellRecord?: (form: ActiveForm) => void;
   onCellClick?: (data: SidepanelData) => void;
-  onViewRecord?: (detail: RecordDetail) => void;
   projects?: Project[];
+
+  // Navigation stack props
+  canGoBack: boolean;
+  onBack: () => void;
+  onNavigate: (screen: NavScreen) => void;
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onEditCellRecord, onCellClick, onViewRecord, projects }: SidepanelProps) {
+function PanelHeader({ title, canGoBack, onBack, onClose }: { title: string; canGoBack: boolean; onBack: () => void; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+      <div className="flex items-center gap-2 min-w-0">
+        {canGoBack && (
+          <button onClick={onBack} className="p-1 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        <h3 className="text-sm font-bold text-slate-800 truncate">{title}</h3>
+      </div>
+      <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+        <X size={20} className="text-slate-400" />
+      </button>
+    </div>
+  );
+}
+
+export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onCellClick, projects, canGoBack, onBack, onNavigate }: SidepanelProps) {
   const visible = data || recordDetail || activeForm;
 
   return (
@@ -54,17 +73,17 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
           <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl mt-auto"><Settings size={20} /></button>
         </div>
       ) : activeForm ? (
-        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} />
+        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} onBack={onBack} canGoBack={canGoBack} />
       ) : recordDetail ? (
-        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onEditProject={onEditProject} onEditTercero={onEditTercero} onCellClick={onCellClick} projects={projects} />
+        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : data ? (
-        <DataPanel data={data} onClose={onClose} onEditCellRecord={onEditCellRecord} onViewRecord={onViewRecord} projects={projects} />
+        <DataPanel data={data} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : null}
     </aside>
   );
 }
 
-function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[] }) {
+function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [clients, setClients] = useState<Client[]>([]);
@@ -267,11 +286,12 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       entries.push(data);
     }
 
-    // Submit all at once, panel closes after ALL complete
+    // Submit all at once, panel pops back after ALL complete
     for (const entry of entries) {
       await onSubmit(form, entry);
     }
     setSaving(false);
+    onBack();
   };
 
   const filteredBudgets = allBudgets.filter(b => {
@@ -310,10 +330,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     };
     return (
       <div className="flex flex-col h-full w-[360px] absolute inset-0">
-        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <FormInput label="Sigla" value={f('name')} onChange={v => set('name', v)} />
           <FormInput label="Nombre completo" value={f('descripcion')} onChange={v => set('descripcion', v)} />
@@ -392,10 +409,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
   if (ft === 'client' || ft === 'provider' || ft === 'tercero') {
     return (
       <div className="flex flex-col h-full w-[360px] absolute inset-0">
-        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <FormInput label="Nombre *" value={f('name')} onChange={v => set('name', v)} />
           <FormInput label="Apodo" value={f('apodo')} onChange={v => set('apodo', v)} />
@@ -444,10 +458,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         <TipoSwitch value={f('tipo')} onChange={v => set('tipo', v)} />
         <SearchableSelect label="Proyecto" value={f('projectId') || f('projectName')} onChange={v => {
@@ -796,21 +807,18 @@ function TerceroGroupPanel({ projects, onCellClick, mode }: {
   );
 }
 
-function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onCellClick, projects }: {
-  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void; onEditTercero?: (tercero: Tercero) => void; onCellClick?: (data: SidepanelData) => void; projects?: Project[];
+function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onCellClick, projects, onNavigate, canGoBack, onBack }: {
+  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void; onEditTercero?: (tercero: Tercero) => void; onCellClick?: (data: SidepanelData) => void; projects?: Project[]; onNavigate: (screen: NavScreen) => void; canGoBack: boolean; onBack: () => void;
 }) {
   const title = recordDetail.type === 'budget' ? 'Presupuesto' : recordDetail.type === 'ejecucion' ? 'Ejecución'
     : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente'
     : recordDetail.type === 'provider' ? 'Proveedor' : recordDetail.type === 'tercero' ? 'Tercero' : '';
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} />}
-        {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} />}
+        {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onNavigate={onNavigate} />}
+        {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} onNavigate={onNavigate} />}
         {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onEditProject={onEditProject} />}
         {recordDetail.type === 'client' && (<><DF label="Nombre" v={recordDetail.client.name} />
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Proyectos ({recordDetail.projects.length})</p>{recordDetail.projects.map(p => <div key={p.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{p.name}</span><span className="font-bold">{p.estado}</span></div>)}</div>
@@ -964,13 +972,12 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
   );
 }
 
-function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
-  budget: Budget; ejecuciones: Ejecucion[]; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onNavigate }: {
+  budget: Budget; ejecuciones: Ejecucion[]; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onNavigate: (screen: NavScreen) => void;
 }) {
   const [addingEj, setAddingEj] = useState(false);
   const [ejForm, setEjForm] = useState({ descripcion: '', montoEjecutado: '', fechaEjecutado: new Date().toISOString().split('T')[0] });
   const [saving, setSaving] = useState(false);
-  const [viewEj, setViewEj] = useState<Ejecucion | null>(null);
 
   const handleAddEj = async () => {
     setSaving(true);
@@ -993,15 +1000,6 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
     setAddingEj(false);
   };
 
-  if (viewEj) {
-    return (
-      <>
-        <button onClick={() => setViewEj(null)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mb-4 flex items-center gap-1">← Volver al presupuesto</button>
-        <MiniEjecucionView ejecucion={viewEj} companyId={companyId} />
-      </>
-    );
-  }
-
   return (
     <>
       <DF label="Descripción" v={budget.descripcion} />
@@ -1020,7 +1018,7 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
           </button>
         </div>
         {ejecuciones.map((e) => (
-          <div key={e.id} onClick={() => setViewEj(e)} className="flex justify-between text-xs bg-slate-50 hover:bg-indigo-50 p-2 rounded mb-1 cursor-pointer transition-colors">
+          <div key={e.id} onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })} className="flex justify-between text-xs bg-slate-50 hover:bg-indigo-50 p-2 rounded mb-1 cursor-pointer transition-colors">
             <span className="text-slate-600">{e.fechaEjecutado} - {e.descripcion}</span>
             <span className="font-bold text-slate-700">{formatCurrency(e.montoEjecutado)}</span>
           </div>
@@ -1037,26 +1035,6 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
           <button onClick={handleAddEj} disabled={saving} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg py-2 text-xs font-bold transition-colors">
             {saving ? 'Guardando...' : 'Guardar Ejecución'}
           </button>
-        </div>
-      )}
-    </>
-  );
-}
-
-function MiniEjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; companyId: string }) {
-  return (
-    <>
-      <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Ejecución</p>
-      <DF label="Descripción" v={ejecucion.descripcion} />
-      <DF label="Proyecto" v={ejecucion.projectName} />
-      <DF label="Cliente/Proveedor" v={ejecucion.entityName} />
-      <DF label="Tipo" v={ejecucion.tipo} />
-      <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
-      <DF label="Fecha" v={ejecucion.fechaEjecutado} />
-      {ejecucion.budgetId && <DF label="Vinculado a presupuesto" v={ejecucion.budgetId} />}
-      {ejecucion.comprobantes && ejecucion.comprobantes.length > 0 && (
-        <div className="border-t border-slate-100 pt-4 mt-4">
-          <ComprobantesViewer comprobantes={ejecucion.comprobantes} />
         </div>
       )}
     </>
@@ -1372,11 +1350,10 @@ function ComprobanteUploader({
   );
 }
 
-function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; companyId: string; onClose: () => void }) {
+function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecucion; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void }) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [linking, setLinking] = useState(false);
   const [search, setSearch] = useState('');
-  const [viewBudget, setViewBudget] = useState<Budget | null>(null);
 
   useEffect(() => {
     const unsub = subscribeBudgets(companyId, setBudgets);
@@ -1393,22 +1370,6 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
     await updateEjecucion(companyId, ejecucion.id, { budgetId: '' });
   };
 
-  if (viewBudget) {
-    return (
-      <>
-        <button onClick={() => setViewBudget(null)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mb-4 flex items-center gap-1">← Volver a la ejecución</button>
-        <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Presupuesto Vinculado</p>
-        <DF label="Descripción" v={viewBudget.descripcion} />
-        <DF label="Proyecto" v={viewBudget.projectName} />
-        <DF label="Cliente/Proveedor" v={viewBudget.entityName} />
-        <DF label="Tipo" v={viewBudget.tipo} />
-        <DF label="Monto" v={formatCurrency(viewBudget.montoPresupuestado)} />
-        <DF label="Mes" v={viewBudget.mesPresupuestado} />
-        <DF label="Estado" v={viewBudget.estadoProyecto} />
-      </>
-    );
-  }
-
   return (
     <>
       <DF label="Descripción" v={ejecucion.descripcion} />
@@ -1423,7 +1384,7 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
           <Link2 size={12} /> Presupuesto vinculado
         </p>
         {linkedBudget ? (
-          <div onClick={() => setViewBudget(linkedBudget)} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
+          <div onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: linkedBudget, ejecuciones: [] } })} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
             <div>
               <p className="text-xs font-semibold text-indigo-700">{linkedBudget.descripcion}</p>
               <p className="text-[10px] text-indigo-500">{linkedBudget.projectName} • {formatCurrency(linkedBudget.montoPresupuestado)}</p>
@@ -1510,10 +1471,7 @@ function SettingsEditor({ category, title, items, companyId, onClose }: {
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={false} onBack={() => {}} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-3">
         {localItems.map((item: any, index: number) => (
           <div key={index} className="flex items-center gap-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
@@ -1618,7 +1576,7 @@ function Calculator({ value, onChange, onResult }: { value: string; onChange: (v
 
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
-function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; onViewRecord?: (detail: RecordDetail) => void; projects?: Project[] }) {
+function DataPanel({ data, onClose, onNavigate, projects, canGoBack, onBack }: { data: SidepanelData; onClose: () => void; onNavigate: (screen: NavScreen) => void; projects?: Project[]; canGoBack: boolean; onBack: () => void }) {
   const [expandedEj, setExpandedEj] = useState<string | null>(null);
   // Parse title "Proyecto / Mes" for cell-level data
   const titleParts = data.title?.split(' / ') || [];
@@ -1646,17 +1604,18 @@ function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: 
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     }
-    onEditCellRecord?.({ mode: 'add', type: formType, defaults });
+    onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      {/* HEADER — siempre visible */}
-      <div className="p-6 border-b border-slate-100 shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-slate-800">Detalle de {data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} {data.mode === 'Presupuestado' ? 'Presupuestado' : 'Ejecutado'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+      <PanelHeader
+        title={`Detalle de ${data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} ${data.mode === 'Presupuestado' ? 'Presupuestado' : 'Ejecutado'}`}
+        canGoBack={canGoBack}
+        onBack={onBack}
+        onClose={onClose}
+      />
+      <div className="px-5 py-3">
         <div className={clsx("rounded-xl p-4 border", data.mode === 'Presupuestado' ? "bg-sky-50 border-sky-100 text-sky-900" : "bg-slate-800 border-slate-700 text-white")}>
           <p className={clsx("text-[10px] font-bold uppercase tracking-widest", data.mode === 'Presupuestado' ? "text-sky-600" : "text-slate-400")}>Seleccionado</p>
           <p className="text-sm font-bold mt-1">{data.title}</p>
@@ -1691,15 +1650,15 @@ function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: 
                 <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <button onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: ejbs })}
+                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: ejbs } })}
                   className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
                   <FileText size={11} /> Ver
                 </button>
-                <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
+                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'budget', record: b } })}
                   className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
                   <Save size={11} /> Editar
                 </button>
-                <button onClick={() => onEditCellRecord?.({ mode: 'add', type: 'ejecucion', defaults: {
+                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'ejecucion', defaults: {
                   projectId: b.projectId || '',
                   projectName: b.projectName || '',
                   entityId: b.entityId || '',
@@ -1707,7 +1666,7 @@ function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: 
                   entityType: b.entityType || 'client',
                   tipo: b.tipo,
                   budgetId: b.id,
-                }})}
+                } } })}
                   className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
                   <Plus size={11} /> Ejecutar
                 </button>
@@ -1730,15 +1689,15 @@ function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: 
                   <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <button onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}
+                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })}
                     className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
                     <FileText size={11} /> Ver
                   </button>
-                  <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
+                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
                     className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
                     <Save size={11} /> Editar
                   </button>
-                  <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
+                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
                     className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
                     <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
                   </button>
