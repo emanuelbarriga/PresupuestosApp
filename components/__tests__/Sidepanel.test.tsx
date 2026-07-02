@@ -32,6 +32,21 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('@/lib/firebase', () => ({
   db: {},
+  storage: {},
+}));
+
+vi.mock('@/lib/fileUpload', () => ({
+  validateFile: vi.fn().mockImplementation((file: File) => {
+    const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowed.includes(file.type)) return { valid: false as const, error: 'Tipo no soportado: ' + file.type + '. Permitidos: PDF, JPG, PNG' };
+    if (file.size > 5 * 1024 * 1024) return { valid: false as const, error: 'Archivo demasiado grande. Máximo: 5MB' };
+    return { valid: true as const };
+  }),
+  uploadFile: vi.fn().mockResolvedValue({ url: 'https://example.com/file.pdf', path: 'c1/ejecuciones/ej-1/file.pdf' }),
+  deleteFile: vi.fn().mockResolvedValue(undefined),
+  generateFilePath: vi.fn().mockImplementation((companyId: string, ejecucionId: string, fileName: string) =>
+    `${companyId}/ejecuciones/${ejecucionId}/${fileName}`,
+  ),
 }));
 
 // ─── Callback capture variables ─────────────────────────────────────────────
@@ -104,6 +119,7 @@ import { Dashboard, buildTerceroGroups } from '@/components/Dashboard';
 import type {
   Budget,
   Ejecucion,
+  Comprobante,
   Project,
   Client,
   ActiveForm,
@@ -1645,6 +1661,143 @@ describe('Sidepanel', () => {
       expect(data.ejecuciones[0].entityId).toBe('e2');
       expect(data.presupuestado).toBe(300000);
       expect(data.ejecutado).toBe(100000);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Comprobantes de Ejecución — Phase 3: UI + Display
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('R16 — Comprobantes: upload form + display', () => {
+    it('3.1a ADD ejecucion form muestra "Agregar comprobante" y "Comprobantes" sección', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Comprobantes')).toBeInTheDocument();
+      expect(screen.getByText('Agregar comprobante')).toBeInTheDocument();
+    });
+
+    it('3.1b ADD form submit sin comprobantes no añade _pendingComprobantes al payload', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(data._pendingComprobantes).toBeUndefined();
+    });
+
+    it('3.4a EjecucionView muestra comprobantes y download link', () => {
+      const comprobantes: Comprobante[] = [
+        { id: 'c1', name: 'factura.pdf', url: 'https://example.com/factura.pdf', path: 'c1/ejecuciones/ej-1/factura.pdf', type: 'application/pdf', size: 204800, uploadedAt: '2026-07-01T00:00:00.000Z' },
+        { id: 'c2', name: 'recibo.jpg', url: 'https://example.com/recibo.jpg', path: 'c1/ejecuciones/ej-1/recibo.jpg', type: 'image/jpeg', size: 102400, uploadedAt: '2026-07-02T00:00:00.000Z' },
+      ];
+      const ejecucion = makeEjecucion({ comprobantes });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('factura.pdf')).toBeInTheDocument();
+      expect(screen.getByText('recibo.jpg')).toBeInTheDocument();
+      expect(screen.getByText(/Comprobantes \(2\)/)).toBeInTheDocument();
+
+      // Download links should exist
+      const links = screen.getAllByRole('link');
+      const pdfLink = links.find(l => l.getAttribute('href') === 'https://example.com/factura.pdf');
+      expect(pdfLink).toBeTruthy();
+    });
+
+    it('3.4b EjecucionView sin comprobantes no muestra sección', () => {
+      const ejecucion = makeEjecucion({ comprobantes: [] });
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.queryByText(/Comprobantes/)).not.toBeInTheDocument();
+    });
+
+    it('3.4c MiniEjecucionView (via BudgetView) muestra comprobantes', () => {
+      const comprobantes: Comprobante[] = [
+        { id: 'c1', name: 'recibo.pdf', url: 'https://example.com/recibo.pdf', path: 'c1/ejecuciones/ej-1/recibo.pdf', type: 'application/pdf', size: 102400, uploadedAt: '2026-07-01T00:00:00.000Z' },
+      ];
+      const ejecucion = makeEjecucion({ id: 'ej-1', comprobantes });
+      const budget = makeBudget({ id: 'b1' });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget, ejecuciones: [ejecucion] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // Click on the ejecucion within BudgetView to open MiniEjecucionView
+      fireEvent.click(screen.getByText(/Ejecucion Test/));
+
+      expect(screen.getByText('recibo.pdf')).toBeInTheDocument();
+      expect(screen.getByText(/Comprobantes \(1\)/)).toBeInTheDocument();
+    });
+
+    it('3.5 EDIT ejecucion form muestra comprobantes existentes en el formulario', () => {
+      const comprobantes: Comprobante[] = [
+        { id: 'c1', name: 'existente.pdf', url: 'https://example.com/existente.pdf', path: 'c1/ejecuciones/ej-1/existente.pdf', type: 'application/pdf', size: 204800, uploadedAt: '2026-07-01T00:00:00.000Z' },
+      ];
+      const ejecucion = makeEjecucion({ comprobantes });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'edit', type: 'ejecucion', record: ejecucion }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // Should show the form with the existing comprobante listed
+      expect(screen.getByText('existente.pdf')).toBeInTheDocument();
+      // Download link should be present
+      const links = screen.getAllByRole('link');
+      const link = links.find(l => l.getAttribute('href') === 'https://example.com/existente.pdf');
+      expect(link).toBeTruthy();
     });
   });
 

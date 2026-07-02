@@ -1,13 +1,28 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react';
-import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2 } from 'lucide-react';
+import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface PendingComprobante {
+  id: string;
+  file: File;
+  name: string;
+  type: string;
+  size: number;
+}
 
 interface SidepanelProps {
   data: SidepanelData | null;
@@ -76,6 +91,10 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
   const [customUnidad, setCustomUnidad] = useState('');
   const [settingsCat, setSettingsCat] = useState<SettingsCategorias | null>(null);
 
+  // Comprobantes state
+  const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
+  const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
+
   const safeProjects = projects || [];
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
@@ -134,6 +153,15 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       // 'project' type has no automatic defaults — all fields come from the form
       if (form.defaults) Object.assign(init, form.defaults);
       setFields(init);
+    }
+  }, [form]);
+
+  useEffect(() => {
+    if (form.mode === 'edit' && form.type === 'ejecucion') {
+      setComprobantes(form.record.comprobantes || []);
+    } else {
+      setComprobantes([]);
+      setPendingComprobantes([]);
     }
   }, [form]);
 
@@ -218,7 +246,14 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
         if (!data.entityType) data.entityType = '';
       }
       if (ft === 'budget') { data.montoPresupuestado = Number(data.montoPresupuestado) || 0; delete data.fechaEjecutado; }
-      if (ft === 'ejecucion') data.montoEjecutado = Number(data.montoEjecutado) || 0;
+      if (ft === 'ejecucion') {
+        data.montoEjecutado = Number(data.montoEjecutado) || 0;
+        if (form.mode === 'add' && pendingComprobantes.length > 0) {
+          data._pendingComprobantes = pendingComprobantes.map(pc => ({
+            id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size,
+          }));
+        }
+      }
       if (ft === 'project') {
         data.cantidad = Number(data.cantidad) || 0;
         if (data.tipoProyectos === '__custom__') data.tipoProyectos = '';
@@ -494,6 +529,18 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
                 set('tipo', b.tipo);
               }
             }} options={filteredBudgets.map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto..." />
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comprobantes</p>
+              <ComprobanteUploader
+                companyId={companyId}
+                ejecucionId={form.mode === 'edit' ? (form as any).record?.id : undefined}
+                comprobantes={comprobantes}
+                onComprobantesChange={setComprobantes}
+                mode={form.mode === 'add' ? 'add' : 'edit'}
+                pendingComprobantes={pendingComprobantes}
+                onPendingChange={setPendingComprobantes}
+              />
+            </div>
           </>
         )}
         {form.mode === 'add' && (ft === 'budget' || ft === 'ejecucion') && (
@@ -1003,7 +1050,208 @@ function MiniEjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; com
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
       {ejecucion.budgetId && <DF label="Vinculado a presupuesto" v={ejecucion.budgetId} />}
+      {ejecucion.comprobantes && ejecucion.comprobantes.length > 0 && (
+        <div className="border-t border-slate-100 pt-4 mt-4">
+          <ComprobantesViewer comprobantes={ejecucion.comprobantes} />
+        </div>
+      )}
     </>
+  );
+}
+
+function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  if (comprobantes.length === 0) return null;
+
+  return (
+    <>
+      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+        <Upload size={12} /> Comprobantes ({comprobantes.length})
+      </p>
+      <div className="space-y-2">
+        {comprobantes.map(c => (
+          <div key={c.id} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">
+            {c.type.startsWith('image/') ? (
+              <img
+                src={c.url}
+                alt={c.name}
+                className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity shrink-0"
+                onClick={() => setLightbox(c.url)}
+              />
+            ) : (
+              <FileText size={22} className="text-slate-400 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
+              <p className="text-[10px] text-slate-400">
+                {c.type === 'application/pdf' ? 'PDF' : c.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(c.size)}
+                {c.uploadedAt && ` · ${new Date(c.uploadedAt).toLocaleDateString('es-CO')}`}
+              </p>
+            </div>
+            <a href={c.url} target="_blank" rel="noopener noreferrer"
+              className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" title="Abrir">
+              <Download size={16} />
+            </a>
+          </div>
+        ))}
+      </div>
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Comprobante" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+        </div>
+      )}
+    </>
+  );
+}
+
+function ComprobanteUploader({
+  companyId,
+  ejecucionId,
+  comprobantes,
+  onComprobantesChange,
+  mode,
+  pendingComprobantes,
+  onPendingChange,
+}: {
+  companyId: string;
+  ejecucionId?: string;
+  comprobantes: Comprobante[];
+  onComprobantesChange: (updated: Comprobante[]) => void;
+  mode: 'add' | 'edit';
+  pendingComprobantes?: PendingComprobante[];
+  onPendingChange?: (updated: PendingComprobante[]) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [validationError, setValidationError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setValidationError('');
+
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      setValidationError(validation.error);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (mode === 'add' && onPendingChange) {
+      onPendingChange([...(pendingComprobantes || []), { id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size }]);
+    } else if (mode === 'edit' && ejecucionId) {
+      setUploading(true);
+      setUploadProgress(0);
+      try {
+        const path = generateFilePath(companyId, ejecucionId, file.name);
+        const result = await uploadFile(file, path, (progress) => {
+          setUploadProgress(progress);
+        });
+        const newComp: Comprobante = {
+          id: crypto.randomUUID(),
+          name: file.name,
+          url: result.url,
+          path: result.path,
+          type: file.type,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        };
+        const updated = [...comprobantes, newComp];
+        onComprobantesChange(updated);
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: updated });
+      } catch (err) {
+        console.error('Upload failed:', err);
+        setValidationError('Error al subir el archivo');
+      } finally {
+        setUploading(false);
+        setUploadProgress(0);
+      }
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRemove = async (comp: Comprobante) => {
+    try {
+      if (ejecucionId && comp.path) {
+        await deleteFile(comp.path);
+      }
+      const updated = comprobantes.filter(c => c.id !== comp.id);
+      onComprobantesChange(updated);
+      if (ejecucionId) {
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: updated });
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileSelect} className="hidden" />
+      <button onClick={() => fileInputRef.current?.click()}
+        className="flex items-center justify-center gap-1.5 w-full text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+        <Upload size={14} /> Agregar comprobante
+      </button>
+
+      {validationError && (
+        <p className="text-[10px] text-rose-600 font-medium">{validationError}</p>
+      )}
+
+      {uploading && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] text-slate-500">
+            <span>Subiendo...</span>
+            <span>{Math.round(uploadProgress)}%</span>
+          </div>
+          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Existing comprobantes (EDIT mode) */}
+      {comprobantes.map(c => (
+        <div key={c.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
+          {c.type.startsWith('image/') ? (
+            <img src={c.url} alt={c.name} className="w-8 h-8 rounded object-cover shrink-0" />
+          ) : (
+            <FileText size={16} className="text-slate-400 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-medium text-slate-700 truncate">{c.name}</p>
+            <p className="text-[9px] text-slate-400">{formatFileSize(c.size)}</p>
+          </div>
+          <a href={c.url} target="_blank" rel="noopener noreferrer"
+            className="text-slate-400 hover:text-indigo-600 shrink-0" title="Descargar">
+            <Download size={12} />
+          </a>
+          {mode === 'edit' && (
+            <button onClick={() => handleRemove(c)} className="text-slate-400 hover:text-rose-500 shrink-0" title="Eliminar">
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      ))}
+
+      {/* Pending comprobantes (ADD mode) */}
+      {pendingComprobantes?.map(pc => (
+        <div key={pc.id} className="flex items-center gap-2 bg-amber-50 rounded-lg p-2 border border-amber-200">
+          <FileText size={16} className="text-amber-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-medium text-amber-800 truncate">{pc.name}</p>
+            <p className="text-[9px] text-amber-600">{formatFileSize(pc.size)}</p>
+          </div>
+          <span className="text-[9px] font-bold text-amber-600 uppercase bg-amber-100 px-1.5 py-0.5 rounded">Pendiente</span>
+          <button onClick={() => onPendingChange?.((pendingComprobantes || []).filter(p => p.id !== pc.id))}
+            className="text-amber-400 hover:text-rose-500 shrink-0" title="Quitar">
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1096,6 +1344,12 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
           </>
         )}
       </div>
+
+      {ejecucion.comprobantes && ejecucion.comprobantes.length > 0 && (
+        <div className="border-t border-slate-100 pt-4">
+          <ComprobantesViewer comprobantes={ejecucion.comprobantes} />
+        </div>
+      )}
     </>
   );
 }
