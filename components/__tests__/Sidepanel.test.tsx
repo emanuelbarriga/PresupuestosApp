@@ -61,16 +61,46 @@ vi.mock('@/lib/firestore', () => ({
       return mockUnsub;
     },
   ),
+  subscribeTerceros: vi.fn((onData: (data: any[]) => void) => {
+    onData([]);
+    return mockUnsub;
+  }),
+  subscribeSettings: vi.fn((onData: (data: any) => void) => {
+    onData({
+      stateProject: [
+        { name: 'Activo', color: '#22c55e', order: 0 },
+        { name: 'Cerrado', color: '#64748b', order: 1 },
+        { name: 'Negociación', color: '#f97316', order: 2 },
+        { name: 'En ejecución', color: '#6366f1', order: 3 },
+        { name: 'Cancelado', color: '#ef4444', order: 4 },
+      ],
+      tipoProyectos: [
+        { name: 'Serie', color: '#a855f7', order: 0 },
+        { name: 'Película', color: '#ec4899', order: 1 },
+        { name: 'Reallity', color: '#f59e0b', order: 2 },
+        { name: 'Shot', color: '#14b8a6', order: 3 },
+      ],
+      unidades: [
+        { name: 'episodios', color: '#06b6d4', order: 0 },
+        { name: 'secuencias', color: '#8b5cf6', order: 1 },
+        { name: 'plano', color: '#84cc16', order: 2 },
+        { name: 'película', color: '#f472b6', order: 3 },
+      ],
+    });
+    return mockUnsub;
+  }),
+  updateSettings: vi.fn().mockResolvedValue(undefined),
   updateEjecucion: vi.fn().mockResolvedValue(undefined),
   addEjecucion: vi.fn().mockResolvedValue('new-id'),
   addClient: vi.fn().mockResolvedValue('new-id'),
+  addTercero: vi.fn().mockResolvedValue('new-id'),
   addProject: vi.fn().mockResolvedValue('new-id'),
 }));
 
 // ─── Imports (resolved after mocks) ─────────────────────────────────────────
 
 import { Sidepanel } from '@/components/Sidepanel';
-import { Dashboard } from '@/components/Dashboard';
+import { Dashboard, buildTerceroGroups } from '@/components/Dashboard';
 import type {
   Budget,
   Ejecucion,
@@ -80,6 +110,8 @@ import type {
   FormType,
   Month,
   SidepanelData,
+  RecordDetail,
+  DetalleTerceroGroup,
 } from '@/lib/types';
 
 // ─── Factory helpers ─────────────────────────────────────────────────────────
@@ -88,8 +120,11 @@ function makeBudget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: 'budget-1',
     descripcion: 'Presupuesto Test',
-    proyectoAsignado: 'Proyecto Alpha',
-    clienteOProveedor: 'Cliente Beta',
+    projectId: 'proj-1',
+    projectName: 'Proyecto Alpha',
+    entityId: 'client-1',
+    entityName: 'Cliente Beta',
+    entityType: 'client',
     tipo: 'ingreso',
     montoPresupuestado: 500000,
     mesPresupuestado: 'Julio',
@@ -103,11 +138,15 @@ function makeEjecucion(overrides: Partial<Ejecucion> = {}): Ejecucion {
   return {
     id: 'ej-1',
     descripcion: 'Ejecucion Test',
-    proyectoAsignado: 'Proyecto Alpha',
-    clienteOProveedor: 'Cliente Beta',
+    projectId: 'proj-1',
+    projectName: 'Proyecto Alpha',
+    entityId: 'client-1',
+    entityName: 'Cliente Beta',
+    entityType: 'client',
     tipo: 'ingreso',
     montoEjecutado: 250000,
     fechaEjecutado: '2026-07-15',
+    comprobantes: [],
     ...overrides,
   };
 }
@@ -177,9 +216,11 @@ async function emitBudgets(data: any[]) {
 
 function getInputByLabel(labelText: string): HTMLInputElement {
   const label = screen.getByText(labelText);
-  const parent = label.closest('div')!;
-  const input = parent.querySelector('input');
-  if (!input) throw new Error(`No input found for label "${labelText}"`);
+  // Walk up to find the container div that also holds the input
+  let el = label.parentElement;
+  while (el && !el.querySelector('input')) el = el.parentElement;
+  if (!el) throw new Error(`No input found for label "${labelText}"`);
+  const input = el.querySelector('input')!;
   return input as HTMLInputElement;
 }
 
@@ -415,7 +456,7 @@ describe('Sidepanel', () => {
       const budgets = [
         makeBudget({
           id: 'b1',
-          proyectoAsignado: 'Proyecto X',
+          projectName: 'Proyecto X',
           mesPresupuestado: 'Julio',
           montoPresupuestado: 100000,
           tipo: 'ingreso',
@@ -474,7 +515,7 @@ describe('Sidepanel', () => {
       const ejecuciones = [
         makeEjecucion({
           id: 'ej1',
-          proyectoAsignado: 'Proyecto X',
+          projectName: 'Proyecto X',
           tipo: 'ingreso',
           montoEjecutado: 50000,
           fechaEjecutado: '2026-07-15',
@@ -483,7 +524,7 @@ describe('Sidepanel', () => {
       const budgets = [
         makeBudget({
           id: 'b1',
-          proyectoAsignado: 'Proyecto X',
+          projectName: 'Proyecto X',
           mesPresupuestado: 'Julio',
           montoPresupuestado: 100000,
           tipo: 'ingreso',
@@ -521,8 +562,8 @@ describe('Sidepanel', () => {
   // Phase 3: Leaf component rendering
   // ═════════════════════════════════════════════════════════════════════════
 
-  describe('R5 — SimpleForm fields per form type', () => {
-    it('type=project muestra campos name y clientName', () => {
+  describe('R5 — Rich form fields per form type', () => {
+    it('type=project muestra campos Sigla, Tipo de proyecto, Unidades, Cliente y Estado', () => {
       render(
         <Sidepanel
           data={null}
@@ -534,11 +575,16 @@ describe('Sidepanel', () => {
         />,
       );
 
-      expect(screen.getByText('Nombre')).toBeInTheDocument();
+      expect(screen.getByText('Sigla')).toBeInTheDocument();
+      expect(screen.getByText('Nombre completo')).toBeInTheDocument();
+      expect(screen.getByText('Tipo de proyecto')).toBeInTheDocument();
+      expect(screen.getByText('Cantidad')).toBeInTheDocument();
+      expect(screen.getByText('Unidades')).toBeInTheDocument();
       expect(screen.getByText('Cliente')).toBeInTheDocument();
+      expect(screen.getByText('Estado')).toBeInTheDocument();
     });
 
-    it('type=client muestra solo campo name', () => {
+    it('type=client muestra campos del formulario de terceros con tipo por defecto cliente', () => {
       render(
         <Sidepanel
           data={null}
@@ -550,12 +596,18 @@ describe('Sidepanel', () => {
         />,
       );
 
-      expect(screen.getByText('Nombre')).toBeInTheDocument();
-      // Cliente label should NOT appear for client type
-      expect(screen.queryByText('Cliente')).not.toBeInTheDocument();
+      expect(screen.getByText('Nombre *')).toBeInTheDocument();
+      expect(screen.getByText('Apodo')).toBeInTheDocument();
+      expect(screen.getByText('Naturaleza')).toBeInTheDocument();
+      expect(screen.getByText('Documento')).toBeInTheDocument();
+      expect(screen.getByText('Número de documento')).toBeInTheDocument();
+      expect(screen.getByText('Lugar')).toBeInTheDocument();
+      expect(screen.getByText('Tipo')).toBeInTheDocument();
+      // Cliente label used by budget forms should NOT appear
+      expect(screen.queryByText('Cliente / Proveedor')).not.toBeInTheDocument();
     });
 
-    it('type=provider muestra solo campo name', () => {
+    it('type=provider muestra campos del formulario de terceros con tipo por defecto proveedor', () => {
       render(
         <Sidepanel
           data={null}
@@ -567,8 +619,15 @@ describe('Sidepanel', () => {
         />,
       );
 
-      expect(screen.getByText('Nombre')).toBeInTheDocument();
-      expect(screen.queryByText('Cliente')).not.toBeInTheDocument();
+      expect(screen.getByText('Nombre *')).toBeInTheDocument();
+      expect(screen.getByText('Apodo')).toBeInTheDocument();
+      expect(screen.getByText('Naturaleza')).toBeInTheDocument();
+      expect(screen.getByText('Documento')).toBeInTheDocument();
+      expect(screen.getByText('Número de documento')).toBeInTheDocument();
+      expect(screen.getByText('Lugar')).toBeInTheDocument();
+      expect(screen.getByText('Tipo')).toBeInTheDocument();
+      // Cliente label used by budget forms should NOT appear
+      expect(screen.queryByText('Cliente / Proveedor')).not.toBeInTheDocument();
     });
   });
 
@@ -713,13 +772,13 @@ describe('Sidepanel', () => {
       expect(screen.queryByText('Proyecto Alpha')).not.toBeInTheDocument();
       expect(screen.queryByText('Proyecto Beta')).not.toBeInTheDocument();
 
-      // Verify via submit that proyectoAsignado was set
+      // Verify via submit that projectName was set
       fireEvent.click(screen.getByText('Crear'));
       await waitFor(() => {
         expect(onFormSubmit).toHaveBeenCalled();
       });
       const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
-      expect(data.proyectoAsignado).toBe('Proyecto Beta');
+      expect(data.projectName).toBe('Proyecto Beta');
     });
   });
 
@@ -772,7 +831,7 @@ describe('Sidepanel', () => {
       expect(screen.getByText('Crear')).toBeInTheDocument();
     });
 
-    it('type=project muestra SimpleForm con nombre y cliente', () => {
+    it('type=project muestra formulario rico con Sigla, Tipo de proyecto, Cliente y Estado', () => {
       render(
         <Sidepanel
           data={null}
@@ -785,8 +844,11 @@ describe('Sidepanel', () => {
       );
 
       expect(screen.getByText('Nuevo Proyecto')).toBeInTheDocument();
-      expect(screen.getByText('Nombre')).toBeInTheDocument();
+      expect(screen.getByText('Sigla')).toBeInTheDocument();
+      expect(screen.getByText('Nombre completo')).toBeInTheDocument();
+      expect(screen.getByText('Tipo de proyecto')).toBeInTheDocument();
       expect(screen.getByText('Cliente')).toBeInTheDocument();
+      expect(screen.getByText('Estado')).toBeInTheDocument();
     });
   });
 
@@ -794,8 +856,8 @@ describe('Sidepanel', () => {
     it('muestra campos del budget y ejecuciones vinculadas', () => {
       const budget = makeBudget({
         descripcion: 'Anticipo Obra',
-        proyectoAsignado: 'Edificio A',
-        clienteOProveedor: 'Constructora X',
+        projectName: 'Edificio A',
+        entityName: 'Constructora X',
         tipo: 'ingreso',
         montoPresupuestado: 100000000,
         mesPresupuestado: 'Julio',
@@ -873,8 +935,8 @@ describe('Sidepanel', () => {
     it('muestra campos de la ejecucion y "Sin presupuesto vinculado"', () => {
       const ejecucion = makeEjecucion({
         descripcion: 'Pago proveedor',
-        proyectoAsignado: 'Obra A',
-        clienteOProveedor: 'Proveedor X',
+        projectName: 'Obra A',
+        entityName: 'Proveedor X',
         tipo: 'egreso',
         montoEjecutado: 5000000,
         fechaEjecutado: '2026-08-10',
@@ -1157,7 +1219,7 @@ describe('Sidepanel', () => {
         <Sidepanel
           data={null}
           recordDetail={null}
-          activeForm={{ mode: 'add', type: 'budget', defaults: { proyectoAsignado: 'Proyecto X', tipo: 'egreso', mesPresupuestado: 'Julio' } }}
+          activeForm={{ mode: 'add', type: 'budget', defaults: { projectName: 'Proyecto X', tipo: 'egreso', mesPresupuestado: 'Julio' } }}
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
@@ -1170,7 +1232,7 @@ describe('Sidepanel', () => {
         expect(onFormSubmit).toHaveBeenCalled();
       });
       const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
-      expect(data.proyectoAsignado).toBe('Proyecto X');
+      expect(data.projectName).toBe('Proyecto X');
       expect(data.tipo).toBe('egreso');
       expect(data.mesPresupuestado).toBe('Julio');
     });
@@ -1181,7 +1243,7 @@ describe('Sidepanel', () => {
         <Sidepanel
           data={null}
           recordDetail={null}
-          activeForm={{ mode: 'add', type: 'ejecucion', defaults: { proyectoAsignado: 'Proyecto Y', tipo: 'ingreso' } }}
+          activeForm={{ mode: 'add', type: 'ejecucion', defaults: { projectName: 'Proyecto Y', tipo: 'ingreso' } }}
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
@@ -1193,7 +1255,7 @@ describe('Sidepanel', () => {
         expect(onFormSubmit).toHaveBeenCalled();
       });
       const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
-      expect(data.proyectoAsignado).toBe('Proyecto Y');
+      expect(data.projectName).toBe('Proyecto Y');
       expect(data.tipo).toBe('ingreso');
     });
   });
@@ -1289,7 +1351,7 @@ describe('Sidepanel', () => {
   describe('R15 — Dashboard project click and empty cell click integration', () => {
     it('3.3 click en nombre de proyecto llama onProjectClick con el nombre correcto', () => {
       const budgets = [
-        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
+        makeBudget({ projectName: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
       ];
       const onProjectClick = vi.fn();
       const onCellClick = vi.fn();
@@ -1302,7 +1364,7 @@ describe('Sidepanel', () => {
       fireEvent.click(projectSpan);
 
       expect(onProjectClick).toHaveBeenCalledTimes(1);
-      expect(onProjectClick).toHaveBeenCalledWith('Proyecto Alpha');
+      expect(onProjectClick).toHaveBeenCalledWith('proj-1', 'Proyecto Alpha');
       // onCellClick NO debe llamarse
       expect(onCellClick).not.toHaveBeenCalled();
     });
@@ -1310,7 +1372,7 @@ describe('Sidepanel', () => {
     it('3.4 click en celda vacía llama onEmptyCellClick con proyecto, mes y tipo', () => {
       // Un proyecto con presupuesto en otro mes, dejando vacío Julio
       const budgets = [
-        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Agosto', montoPresupuestado: 500000 }),
+        makeBudget({ projectName: 'Proyecto Alpha', mesPresupuestado: 'Agosto', montoPresupuestado: 500000 }),
       ];
       const onEmptyCellClick = vi.fn();
       const onCellClick = vi.fn();
@@ -1326,14 +1388,14 @@ describe('Sidepanel', () => {
       fireEvent.click(emptyCells[0]);
 
       expect(onEmptyCellClick).toHaveBeenCalledTimes(1);
-      expect(onEmptyCellClick).toHaveBeenCalledWith('Proyecto Alpha', 'Enero', 'ingreso', 'Presupuestado');
+      expect(onEmptyCellClick).toHaveBeenCalledWith('proj-1', 'Proyecto Alpha', 'Enero', 'ingreso', 'Presupuestado');
       // onCellClick NO debe llamarse
       expect(onCellClick).not.toHaveBeenCalled();
     });
 
     it('3.6 celda con valor > 0 llama onCellClick (no onEmptyCellClick)', () => {
       const budgets = [
-        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
+        makeBudget({ projectName: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
       ];
       const onCellClick = vi.fn();
       const onEmptyCellClick = vi.fn();
@@ -1353,6 +1415,304 @@ describe('Sidepanel', () => {
       const data = onCellClick.mock.calls[0][0] as SidepanelData;
       expect(data.title).toBe('Proyecto Alpha / Julio');
       expect(data.value).toBe(500000);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Detalle por Tercero — buildTerceroGroups
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('buildTerceroGroups', () => {
+    it('agrupa budgets y ejecuciones por proyecto y entidad, agrega totales', () => {
+      const budgets = [
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoPresupuestado: 1000000, tipo: 'ingreso' }),
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoPresupuestado: 500000, tipo: 'ingreso' }),
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e2', entityName: 'Entidad Dos', entityType: 'provider', montoPresupuestado: 300000, tipo: 'egreso' }),
+      ];
+      const ejecuciones = [
+        makeEjecucion({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoEjecutado: 400000, tipo: 'ingreso' }),
+        makeEjecucion({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e2', entityName: 'Entidad Dos', entityType: 'provider', montoEjecutado: 100000, tipo: 'egreso' }),
+      ];
+
+      const result = buildTerceroGroups(budgets, ejecuciones, 'Presupuestado');
+
+      expect(result).toHaveLength(1); // 1 project
+      const project = result[0];
+      expect(project.projectId).toBe('p1');
+      expect(project.projectName).toBe('Proyecto A');
+      expect(project.groups).toHaveLength(2);
+
+      // Entity Uno: 1.5M presupuestado, 400K ejecutado
+      const group1 = project.groups.find(g => g.entityId === 'e1')!;
+      expect(group1.entityName).toBe('Entidad Uno');
+      expect(group1.entityType).toBe('client');
+      expect(group1.totalPresupuestado).toBe(1500000);
+      expect(group1.totalEjecutado).toBe(400000);
+      expect(group1.diferencia).toBe(-1100000);
+      expect(group1.budgets).toHaveLength(2);
+      expect(group1.ejecuciones).toHaveLength(1);
+
+      // Entity Dos: 300K presupuestado, 100K ejecutado
+      const group2 = project.groups.find(g => g.entityId === 'e2')!;
+      expect(group2.entityName).toBe('Entidad Dos');
+      expect(group2.entityType).toBe('provider');
+      expect(group2.totalPresupuestado).toBe(300000);
+      expect(group2.totalEjecutado).toBe(100000);
+      expect(group2.diferencia).toBe(-200000);
+
+      // Project totals
+      expect(project.totalPresupuestado).toBe(1800000);
+      expect(project.totalEjecutado).toBe(500000);
+      expect(project.diferencia).toBe(-1300000);
+    });
+
+    it('filtra grupos donde presupuestado y ejecutado son ambos 0', () => {
+      const budgets = [
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoPresupuestado: 100000, tipo: 'ingreso' }),
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e2', entityName: 'Entidad Cero', entityType: 'provider', montoPresupuestado: 0, tipo: 'egreso' }),
+      ];
+      const ejecuciones = [
+        makeEjecucion({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoEjecutado: 50000, tipo: 'ingreso' }),
+      ];
+
+      const result = buildTerceroGroups(budgets, ejecuciones, 'Presupuestado');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].groups).toHaveLength(1); // e2 filtered out (all zeros)
+      expect(result[0].groups[0].entityId).toBe('e1');
+    });
+
+    it('retorna array vacío cuando no hay datos', () => {
+      const result = buildTerceroGroups([], [], 'Presupuestado');
+      expect(result).toEqual([]);
+    });
+
+    it('agrupa multiples proyectos independientemente', () => {
+      const budgets = [
+        makeBudget({ projectId: 'p1', projectName: 'Proyecto A', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoPresupuestado: 500000, tipo: 'ingreso' }),
+        makeBudget({ projectId: 'p2', projectName: 'Proyecto B', entityId: 'e3', entityName: 'Entidad Tres', entityType: 'client', montoPresupuestado: 750000, tipo: 'ingreso' }),
+      ];
+      const ejecuciones: any[] = [];
+
+      const result = buildTerceroGroups(budgets, ejecuciones, 'Presupuestado');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].projectId).toBe('p1');
+      expect(result[1].projectId).toBe('p2');
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // TerceroGroupPanel — rendering and interaction
+  // ═════════════════════════════════════════════════════════════════════════
+
+  function makeDetalleTerceroRecord(overrides?: Partial<RecordDetail & { type: 'detalle-tercero' }>): RecordDetail {
+    return {
+      type: 'detalle-tercero',
+      projects: [
+        {
+          projectId: 'p1',
+          projectName: 'Proyecto Alpha',
+          groups: [
+            {
+              entityId: 'e1',
+              entityName: 'Entidad Uno',
+              entityType: 'client',
+              budgets: [makeBudget({ projectId: 'p1', projectName: 'Proyecto Alpha', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoPresupuestado: 500000 })],
+              ejecuciones: [makeEjecucion({ projectId: 'p1', projectName: 'Proyecto Alpha', entityId: 'e1', entityName: 'Entidad Uno', entityType: 'client', montoEjecutado: 200000 })],
+              totalPresupuestado: 500000,
+              totalEjecutado: 200000,
+              diferencia: -300000,
+            },
+            {
+              entityId: 'e2',
+              entityName: 'Proveedor XYZ',
+              entityType: 'provider',
+              budgets: [makeBudget({ projectId: 'p1', projectName: 'Proyecto Alpha', entityId: 'e2', entityName: 'Proveedor XYZ', entityType: 'provider', montoPresupuestado: 300000 })],
+              ejecuciones: [makeEjecucion({ projectId: 'p1', projectName: 'Proyecto Alpha', entityId: 'e2', entityName: 'Proveedor XYZ', entityType: 'provider', montoEjecutado: 100000 })],
+              totalPresupuestado: 300000,
+              totalEjecutado: 100000,
+              diferencia: -200000,
+            },
+          ],
+          totalPresupuestado: 800000,
+          totalEjecutado: 300000,
+          diferencia: -500000,
+        },
+        {
+          projectId: 'p2',
+          projectName: 'Proyecto Beta',
+          groups: [
+            {
+              entityId: 'e3',
+              entityName: 'Entidad Tres',
+              entityType: 'client',
+              budgets: [makeBudget({ projectId: 'p2', projectName: 'Proyecto Beta', entityId: 'e3', entityName: 'Entidad Tres', entityType: 'client', montoPresupuestado: 1000000 })],
+              ejecuciones: [],
+              totalPresupuestado: 1000000,
+              totalEjecutado: 0,
+              diferencia: -1000000,
+            },
+          ],
+          totalPresupuestado: 1000000,
+          totalEjecutado: 0,
+          diferencia: -1000000,
+        },
+      ],
+      totalPresupuestado: 1800000,
+      totalEjecutado: 300000,
+      diferencia: -1500000,
+      ...overrides,
+    };
+  }
+
+  describe('TerceroGroupPanel', () => {
+    it('renderiza headers de proyecto con totales en COP y grupos de terceros anidados', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={makeDetalleTerceroRecord()}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // Project headers should be visible
+      expect(screen.getByText('Proyecto Alpha')).toBeInTheDocument();
+      expect(screen.getByText('Proyecto Beta')).toBeInTheDocument();
+
+      // Tercero rows should be visible (all expanded by default)
+      expect(screen.getByText('Entidad Uno')).toBeInTheDocument();
+      expect(screen.getByText('Proveedor XYZ')).toBeInTheDocument();
+      expect(screen.getByText('Entidad Tres')).toBeInTheDocument();
+
+      // COP-formatted amounts should be visible
+      expect(screen.getByText('$ 500.000', { exact: false })).toBeInTheDocument();
+      expect(screen.getAllByText(/\$ 1\.000\.000/).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('collapse/expand toggle en project header oculta/muestra grupos', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={makeDetalleTerceroRecord()}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // All terceros visible initially
+      expect(screen.getByText('Entidad Uno')).toBeInTheDocument();
+
+      // Click project header to collapse
+      fireEvent.click(screen.getByText('Proyecto Alpha'));
+      expect(screen.queryByText('Entidad Uno')).not.toBeInTheDocument();
+
+      // Click again to expand
+      fireEvent.click(screen.getByText('Proyecto Alpha'));
+      expect(screen.getByText('Entidad Uno')).toBeInTheDocument();
+    });
+
+    it('click en tercero row llama onCellClick con SidepanelData filtrado por proyecto+entidad', () => {
+      const onCellClick = vi.fn();
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={makeDetalleTerceroRecord()}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+          onCellClick={onCellClick}
+        />,
+      );
+
+      // Click on "Proveedor XYZ" row
+      fireEvent.click(screen.getByText('Proveedor XYZ'));
+
+      expect(onCellClick).toHaveBeenCalledTimes(1);
+      const data: SidepanelData = onCellClick.mock.calls[0][0];
+      expect(data.title).toContain('Proveedor XYZ');
+      expect(data.budgets).toHaveLength(1);
+      expect(data.budgets[0].entityId).toBe('e2');
+      expect(data.ejecuciones).toHaveLength(1);
+      expect(data.ejecuciones[0].entityId).toBe('e2');
+      expect(data.presupuestado).toBe(300000);
+      expect(data.ejecutado).toBe(100000);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Matriz — filas expandibles de terceros
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('Matriz expandible por tercero', () => {
+    const budgets = [
+      makeBudget({ id: 'b1', projectName: 'Proyecto A', entityName: 'Entity Uno', entityId: 'e1', entityType: 'client', montoPresupuestado: 500000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01' }),
+      makeBudget({ id: 'b2', projectName: 'Proyecto A', entityName: 'Entity Uno', entityId: 'e1', entityType: 'client', montoPresupuestado: 300000, mesPresupuestado: 'Febrero', fechaPresupuestado: '2026-02' }),
+      makeBudget({ id: 'b3', projectName: 'Proyecto A', entityName: 'Entity Dos', entityId: 'e2', entityType: 'provider', montoPresupuestado: 200000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01' }),
+    ];
+
+    it('muestra proyecto con chevron expandible y al click muestra terceros', () => {
+      render(
+        <Dashboard onCellClick={vi.fn()} budgets={budgets} ejecuciones={[]} />,
+      );
+
+      // Find the "Proyecto A" cell, then find the expand button in its row
+      const proyectoCell = screen.getByText('Proyecto A').closest('td');
+      expect(proyectoCell).toBeTruthy();
+      if (!proyectoCell) return;
+
+      // Click first row's first button (the chevron)
+      const row = proyectoCell.closest('tr');
+      expect(row).toBeTruthy();
+      if (!row) return;
+      const expandBtn = row.querySelector('button');
+      expect(expandBtn).toBeTruthy();
+      if (!expandBtn) return;
+      fireEvent.click(expandBtn);
+
+      // After expand, tercero rows should appear
+      expect(screen.getByText('Entity Uno')).toBeInTheDocument();
+      expect(screen.getByText('Entity Dos')).toBeInTheDocument();
+      // Entity type badges (C = client, P = provider) — use getAllByText since "C" appears in Cancelado badge too
+      expect(screen.getAllByText('C').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('click en tercero cell abre DataPanel con datos filtrados', () => {
+      const onCellClick = vi.fn();
+
+      render(
+        <Dashboard onCellClick={onCellClick} budgets={budgets} ejecuciones={[]} />,
+      );
+
+      // Expand
+      const row = screen.getByText('Proyecto A').closest('tr');
+      if (row) {
+        const expandBtn = row.querySelector('button');
+        if (expandBtn) fireEvent.click(expandBtn);
+      }
+
+      // Click on Entity Uno Enero cell
+      const cell = screen.getAllByText(/\$/).find(el => {
+        const tr = el.closest('tr');
+        return tr?.textContent?.includes('Entity Uno');
+      });
+      expect(cell).toBeTruthy();
+      if (!cell) return;
+      fireEvent.click(cell);
+
+      expect(onCellClick).toHaveBeenCalledTimes(1);
+      const calledData = onCellClick.mock.calls[0][0];
+      expect(calledData.budgets).toHaveLength(1);
+      expect(calledData.budgets[0].entityId).toBe('e1');
+      expect(calledData.subtitle).toContain('Entity Uno');
     });
   });
 });

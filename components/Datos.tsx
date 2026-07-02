@@ -1,18 +1,16 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Budget, Ejecucion, Project, Client, Provider, StateProject, RecordDetail, FormType, MONTHS, Month } from '@/lib/types';
-import { subscribeClients, subscribeProjects, subscribeProviders, subscribeStateProjects } from '@/lib/firestore';
-import { ChevronDown, ChevronLeft, ChevronRight, Settings, Plus, Pencil, Search, X } from 'lucide-react';
+import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem } from '@/lib/types';
+import { subscribeProjects, subscribeTerceros, subscribeSettings } from '@/lib/firestore';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
-type TabType = 'Presupuestos' | 'Ejecuciones' | 'Proyectos' | 'Clientes' | 'Proveedores' | 'Configuración';
+type TabType = 'Presupuestos' | 'Ejecuciones' | 'Proyectos' | 'Terceros' | 'Settings';
 
 const PAGE_SIZES = [20, 50, 100, 200];
-
-const estados = ['Activo', 'Cerrado', 'Negociación', 'En ejecución', 'Cancelado'];
 
 export function Datos({
   budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, onViewRecord, onAddNew, onEditRecord,
@@ -27,7 +25,7 @@ export function Datos({
   onEditRecord?: (form: any) => void;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Clientes', 'Proveedores', 'Configuración'];
+  const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Terceros', 'Settings'];
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (initialTab) {
       const formatted = initialTab.charAt(0).toUpperCase() + initialTab.slice(1) as TabType;
@@ -35,10 +33,9 @@ export function Datos({
     }
     return 'Presupuestos';
   });
-  const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [stateProjects, setStateProjects] = useState<StateProject[]>([]);
+  const [terceros, setTerceros] = useState<Tercero[]>([]);
+  const [settingsData, setSettingsData] = useState<SettingsCategorias | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,10 +49,9 @@ export function Datos({
 
   useEffect(() => {
     const unsubs = [
-      subscribeClients(setClients, (err) => console.error('Error loading clients:', err)),
       subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
-      subscribeProviders(setProviders, (err) => console.error('Error loading providers:', err)),
-      subscribeStateProjects(setStateProjects, (err) => console.error('Error loading states:', err)),
+      subscribeTerceros(setTerceros, (err) => console.error('Error loading terceros:', err)),
+      subscribeSettings(setSettingsData, (err) => console.error('Error loading settings:', err)),
     ];
     return () => unsubs.forEach((u) => u());
   }, [companyId]);
@@ -78,8 +74,8 @@ export function Datos({
   };
 
   const proyectosConData = projects.map((p) => {
-    const bs = budgets.filter((b) => b.proyectoAsignado === p.name);
-    const ejs = ejecuciones.filter((e) => e.proyectoAsignado === p.name);
+    const bs = budgets.filter((b) => b.projectId === p.id);
+    const ejs = ejecuciones.filter((e) => e.projectId === p.id);
     return { ...p, budgets: bs, ejecuciones: ejs, totalPresupuestado: bs.reduce((s, b) => s + b.montoPresupuestado, 0), totalEjecutado: ejs.reduce((s, e) => s + e.montoEjecutado, 0) };
   });
 
@@ -124,7 +120,7 @@ export function Datos({
 
   const filteredBudgets = useMemo(() => {
     let data = budgets;
-    if (searchQuery) data = searchText(data, ['descripcion', 'proyectoAsignado', 'clienteOProveedor']);
+    if (searchQuery) data = searchText(data, ['descripcion', 'projectName', 'entityName']);
     if (filterTipo) data = data.filter(b => b.tipo === filterTipo);
     if (filterMonth) data = data.filter(b => b.mesPresupuestado === filterMonth);
     const min = filterMontoMin ? Number(filterMontoMin) : 0;
@@ -135,7 +131,7 @@ export function Datos({
 
   const filteredEjecuciones = useMemo(() => {
     let data = ejecuciones;
-    if (searchQuery) data = searchText(data, ['descripcion', 'proyectoAsignado', 'clienteOProveedor']);
+    if (searchQuery) data = searchText(data, ['descripcion', 'projectName', 'entityName']);
     if (filterTipo) data = data.filter(e => e.tipo === filterTipo);
     if (filterDateFrom) data = data.filter(e => e.fechaEjecutado >= filterDateFrom);
     if (filterDateTo) data = data.filter(e => e.fechaEjecutado <= filterDateTo);
@@ -147,7 +143,7 @@ export function Datos({
 
   const filteredProyectos = useMemo(() => {
     let data = proyectosConData;
-    if (searchQuery) data = searchText(data, ['name', 'clientName', 'estado']);
+    if (searchQuery) data = searchText(data, ['name', 'descripcion', 'tipoProyectos', 'unidades', 'clientName', 'estado']);
     if (filterEstado) data = data.filter(p => p.estado === filterEstado);
     const min = filterMontoMin ? Number(filterMontoMin) : 0;
     const max = filterMontoMax ? Number(filterMontoMax) : Infinity;
@@ -155,23 +151,19 @@ export function Datos({
     return data;
   }, [proyectosConData, searchQuery, filterEstado, filterMontoMin, filterMontoMax]);
 
-  const filteredClients = useMemo(() => {
-    if (!searchQuery) return clients;
+  const filteredTerceros = useMemo(() => {
+    if (!searchQuery) return terceros;
     const q = searchQuery.toLowerCase();
-    return clients.filter(c => c.name.toLowerCase().includes(q));
-  }, [clients, searchQuery]);
+    return terceros.filter(t =>
+      [t.name, t.apodo, t.lugar, t.tipo, t.documento].some(f => f?.toLowerCase().includes(q))
+    );
+  }, [terceros, searchQuery]);
 
-  const filteredProviders = useMemo(() => {
-    if (!searchQuery) return providers;
-    const q = searchQuery.toLowerCase();
-    return providers.filter(p => p.name.toLowerCase().includes(q));
-  }, [providers, searchQuery]);
-
-  const filteredStateProjects = useMemo(() => {
-    if (!searchQuery) return stateProjects;
-    const q = searchQuery.toLowerCase();
-    return stateProjects.filter(s => s.name.toLowerCase().includes(q));
-  }, [stateProjects, searchQuery]);
+  const stateColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (settingsData?.stateProject || []).forEach((s: SettingsItem) => map.set(s.name, s.color));
+    return map;
+  }, [settingsData]);
 
   const hasActiveFilters = searchQuery || filterTipo || filterMonth || filterDateFrom || filterDateTo || filterMontoMin || filterMontoMax || filterEstado;
 
@@ -273,9 +265,7 @@ export function Datos({
                 {activeTab === 'Presupuestos' && `${filteredBudgets.length} resultados`}
                 {activeTab === 'Ejecuciones' && `${filteredEjecuciones.length} resultados`}
                 {activeTab === 'Proyectos' && `${filteredProyectos.length} resultados`}
-                {activeTab === 'Clientes' && `${filteredClients.length} resultados`}
-                {activeTab === 'Proveedores' && `${filteredProviders.length} resultados`}
-                {activeTab === 'Configuración' && `${filteredStateProjects.length} resultados`}
+                {activeTab === 'Terceros' && `${filteredTerceros.length} resultados`}
               </span>
             )}
             {(activeTab === 'Presupuestos' || activeTab === 'Ejecuciones' || activeTab === 'Proyectos') && (
@@ -323,7 +313,9 @@ export function Datos({
                       <select value={filterEstado} onChange={e => { setFilterEstado(e.target.value); setCurrentPage(1); }}
                         className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors cursor-pointer bg-white">
                         <option value="">Todos</option>
-                        {estados.map(e => <option key={e} value={e}>{e}</option>)}
+                        {(settingsData?.stateProject || [])
+                          .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+                          .map((s: any) => <option key={s.name} value={s.name}>{s.name}</option>)}
                       </select>
                     </div>
                   )}
@@ -381,8 +373,8 @@ export function Datos({
                           <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasEj ? 'bg-emerald-400' : 'bg-amber-400')} title={hasEj ? 'Con ejecuciones' : 'Sin ejecuciones'} />
                           {b.descripcion}
                         </td>
-                        <td className="p-3 text-slate-600">{b.proyectoAsignado}</td>
-                        <td className="p-3 text-slate-500">{b.clienteOProveedor}</td>
+                        <td className="p-3 text-slate-600">{b.projectName}</td>
+                        <td className="p-3 text-slate-500">{b.entityName}</td>
                         <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", b.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700')}>{b.tipo}</span></td>
                         <td className="p-3 text-slate-600">{b.mesPresupuestado}</td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(b.montoPresupuestado)}</td>
@@ -420,8 +412,8 @@ export function Datos({
                           <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasLink ? 'bg-emerald-400' : 'bg-amber-400')} title={hasLink ? 'Vinculado a presupuesto' : 'Sin presupuesto vinculado'} />
                           {e.descripcion}
                         </td>
-                        <td className="p-3 text-slate-600">{e.proyectoAsignado}</td>
-                        <td className="p-3 text-slate-500">{e.clienteOProveedor}</td>
+                        <td className="p-3 text-slate-600">{e.projectName}</td>
+                        <td className="p-3 text-slate-500">{e.entityName}</td>
                         <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", e.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700')}>{e.tipo}</span></td>
                         <td className="p-3 text-slate-600">{e.fechaEjecutado}</td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(e.montoEjecutado)}</td>
@@ -443,6 +435,10 @@ export function Datos({
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Descripción</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Cantidad</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Unidad</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Cliente</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Estado</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center">Ppios</th>
@@ -456,8 +452,17 @@ export function Datos({
                     {paginate(filteredProyectos).map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => onViewRecord?.({ type: 'project', project: p, budgets: p.budgets, ejecuciones: p.ejecuciones })}>
                         <td className="p-3 font-semibold text-slate-700">{p.name}</td>
+                        <td className="p-3 text-slate-600 max-w-[200px] truncate">{p.descripcion ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{p.tipoProyectos ?? '—'}</td>
+                        <td className="p-3 text-right text-slate-600 font-medium">{p.cantidad ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{p.unidades ?? '—'}</td>
                         <td className="p-3 text-slate-500">{p.clientName}</td>
-                        <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", p.estado === 'Cerrado' ? 'bg-slate-200 text-slate-700' : p.estado === 'Negociación' ? 'bg-orange-100 text-orange-800' : p.estado === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800')}>{p.estado}</span></td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase"
+                            style={{ backgroundColor: (stateColorMap.get(p.estado) || '#6366f1') + '20', color: stateColorMap.get(p.estado) || '#6366f1', borderColor: (stateColorMap.get(p.estado) || '#6366f1') + '40' }}>
+                            {p.estado}
+                          </span>
+                        </td>
                         <td className="p-3 text-center text-slate-600 font-medium">{p.budgets.length}</td>
                         <td className="p-3 text-center text-slate-600 font-medium">{p.ejecuciones.length}</td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(p.totalPresupuestado)}</td>
@@ -473,73 +478,113 @@ export function Datos({
             </>
           )}
 
-          {activeTab === 'Clientes' && (
+          {activeTab === 'Terceros' && (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Apodo</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Naturaleza</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Documento</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">N° Documento</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Lugar</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] divide-y divide-slate-100">
-                    {paginate(filteredClients).map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => onViewRecord?.({ type: 'client', client: c, projects: projects.filter(p => p.clientName === c.name) })}>
-                        <td className="p-3 font-semibold text-slate-700">{c.name}</td>
-                        <ActionCell><EditBtn onClick={() => edit('client', c)} /></ActionCell>
+                    {paginate(filteredTerceros).map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>
+                        <td className="p-3 font-semibold text-slate-700">{t.name}</td>
+                        <td className="p-3 text-slate-500">{t.apodo ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{t.naturaleza ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{t.documento ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{t.numeroDocumento ?? '—'}</td>
+                        <td className="p-3 text-slate-600">{t.lugar ?? '—'}</td>
+                        <td className="p-3">
+                          <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
+                            t.tipo === 'cliente' ? 'bg-blue-100 text-blue-700' :
+                            t.tipo === 'proveedor' ? 'bg-amber-100 text-amber-700' :
+                            'bg-purple-100 text-purple-700'
+                          )}>
+                            {t.tipo === 'cliente' ? 'Cliente' : t.tipo === 'proveedor' ? 'Proveedor' : 'Ambos'}
+                          </span>
+                        </td>
+                        <ActionCell><EditBtn onClick={() => edit('tercero', t)} /></ActionCell>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <AddBtn onClick={() => onAddNew?.('client')} label="Nuevo Cliente" />
-              <PaginationControls totalItems={filteredClients.length} />
+              <AddBtn onClick={() => onAddNew?.('tercero')} label="Nuevo Tercero" />
+              <PaginationControls totalItems={filteredTerceros.length} />
             </>
           )}
 
-          {activeTab === 'Proveedores' && (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th>
-                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[11px] divide-y divide-slate-100">
-                    {paginate(filteredProviders).map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => onViewRecord?.({ type: 'provider', provider: p })}>
-                        <td className="p-3 font-semibold text-slate-700">{p.name}</td>
-                        <ActionCell><EditBtn onClick={() => edit('provider', p)} /></ActionCell>
-                      </tr>
+
+
+          {activeTab === 'Settings' && (
+            <div className="p-6 space-y-6">
+              <h2 className="text-lg font-semibold text-slate-800">Configuración</h2>
+              <p className="text-xs text-slate-500">Hacé clic en una categoría para editarla.</p>
+
+              {/* StateProject */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => onViewRecord?.({ type: 'settings-editor', category: 'stateProject', title: 'Estados de Proyecto', items: settingsData?.stateProject || [] })}>
+                  <h3 className="text-sm font-bold text-slate-700">Estados de Proyecto</h3>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {(settingsData?.stateProject || [])
+                    .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+                    .map((s: any) => (
+                      <span key={s.name} className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ backgroundColor: s.color + '20', color: s.color, borderColor: s.color + '40' }}>
+                        {s.name}
+                      </span>
                     ))}
-                  </tbody>
-                </table>
+                </div>
               </div>
-              <AddBtn onClick={() => onAddNew?.('provider')} label="Nuevo Proveedor" />
-              <PaginationControls totalItems={filteredProviders.length} />
-            </>
-          )}
 
-          {activeTab === 'Configuración' && (
-            <div className="p-6 space-y-8">
-              <div>
-                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2"><Settings size={16} /> Estados de Proyecto</h3>
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr><th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th></tr>
-                  </thead>
-                  <tbody className="text-[11px] divide-y divide-slate-100">
-                    {paginate(filteredStateProjects).map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 font-semibold text-slate-700">{s.name}</td>
-                      </tr>
+              {/* TipoProyectos */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => onViewRecord?.({ type: 'settings-editor', category: 'tipoProyectos', title: 'Tipos de Proyecto', items: settingsData?.tipoProyectos || [] })}>
+                  <h3 className="text-sm font-bold text-slate-700">Tipos de Proyecto</h3>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {(settingsData?.tipoProyectos || [])
+                    .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+                    .map((s: any) => (
+                      <span key={s.name} className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ backgroundColor: s.color + '20', color: s.color, borderColor: s.color + '40' }}>
+                        {s.name}
+                      </span>
                     ))}
-                  </tbody>
-                </table>
-                <PaginationControls totalItems={filteredStateProjects.length} />
+                </div>
+              </div>
+
+              {/* Unidades */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => onViewRecord?.({ type: 'settings-editor', category: 'unidades', title: 'Unidades', items: settingsData?.unidades || [] })}>
+                  <h3 className="text-sm font-bold text-slate-700">Unidades</h3>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {(settingsData?.unidades || [])
+                    .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+                    .map((s: any) => (
+                      <span key={s.name} className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ backgroundColor: s.color + '20', color: s.color, borderColor: s.color + '40' }}>
+                        {s.name}
+                      </span>
+                    ))}
+                </div>
               </div>
             </div>
           )}

@@ -13,11 +13,13 @@ import {
   addClient,
   addProvider,
   addProject,
+  addTercero,
   updateBudget,
   updateEjecucion,
   updateClient,
   updateProvider,
   updateProject,
+  updateTercero,
   subscribeCompanies,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
@@ -152,18 +154,18 @@ export default function CompanyPage({ params }: Props) {
     setSidebarCollapsed(true);
   };
 
-  const handleProjectClick = (projectName: string) => {
+  const handleProjectClick = (projectId: string, projectName: string) => {
     if (isConjunto) return;
-    const found = projects.find(p => p.name === projectName);
+    const found = projects.find(p => p.id === projectId) || projects.find(p => p.name === projectName);
     const project: Project = found || {
-      id: '',
+      id: projectId || '',
       name: projectName,
       clientId: '',
       clientName: '',
       estado: 'Activo',
     };
-    const relatedBudgets = budgets.filter(b => b.proyectoAsignado === projectName);
-    const relatedEjecuciones = ejecuciones.filter(e => e.proyectoAsignado === projectName);
+    const relatedBudgets = budgets.filter(b => (b.projectId && b.projectId === projectId) || (!b.projectId && b.projectName === projectName));
+    const relatedEjecuciones = ejecuciones.filter(e => (e.projectId && e.projectId === projectId) || (!e.projectId && e.projectName === projectName));
     const detail: RecordDetail = {
       type: 'project',
       project,
@@ -176,19 +178,27 @@ export default function CompanyPage({ params }: Props) {
     setSidebarCollapsed(true);
   };
 
-  const handleEmptyCellClick = (projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
+  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
     if (isConjunto) return;
     const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
+    const monthIndex = MONTHS.indexOf(month);
+    const currentYear = new Date().getFullYear();
     const defaults: Record<string, string> = {
-      proyectoAsignado: projectName,
+      projectName,
       tipo,
     };
+    if (projectId) defaults.projectId = projectId;
+    // Resolve client from project
+    const project = projects.find(p => p.id === projectId || p.name === projectName);
+    if (project?.clientName) {
+      defaults.entityName = project.clientName;
+      defaults.entityType = 'client';
+    }
     if (formType === 'budget') {
       defaults.mesPresupuestado = month;
+      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     } else {
-      // Infer a date in the middle of the month for the month
-      const monthIndex = MONTHS.indexOf(month);
-      defaults.fechaEjecutado = `2026-${String(monthIndex + 1).padStart(2, '0')}-15`;
+      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     }
     setSidepanelData(null);
     setRecordDetail(null);
@@ -214,6 +224,14 @@ export default function CompanyPage({ params }: Props) {
     setSidepanelData(null);
     setRecordDetail(null);
     setActiveForm(form);
+    setSidebarCollapsed(true);
+  };
+
+  const handleTerceroClick = (detail: RecordDetail) => {
+    if (isConjunto) return;
+    setSidepanelData(null);
+    setActiveForm(null);
+    setRecordDetail(detail);
     setSidebarCollapsed(true);
   };
 
@@ -243,6 +261,9 @@ export default function CompanyPage({ params }: Props) {
         case 'provider':
           await addProvider(data as Omit<Provider, 'id'>);
           break;
+        case 'tercero':
+          await addTercero(data);
+          break;
       }
     } else {
       switch (form.type) {
@@ -255,9 +276,9 @@ export default function CompanyPage({ params }: Props) {
         case 'project':
           await updateProject(companyId, form.record.id, data as Partial<Project>);
           if (data.estado && form.record) {
-            const projectName = (form.record as Project).name;
+            const projectId = (form.record as Project).id;
             setBudgets(prev => prev.map(b =>
-              b.proyectoAsignado === projectName ? { ...b, estadoProyecto: data.estado } : b
+              b.projectId === projectId ? { ...b, estadoProyecto: data.estado } : b
             ));
           }
           break;
@@ -266,6 +287,9 @@ export default function CompanyPage({ params }: Props) {
           break;
         case 'provider':
           await updateProvider(form.record.id, data as Partial<Provider>);
+          break;
+        case 'tercero':
+          await updateTercero(form.record.id, data);
           break;
       }
     }
@@ -283,7 +307,7 @@ export default function CompanyPage({ params }: Props) {
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeView === 'Dashboard' && (
-              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} budgets={budgets} ejecuciones={ejecuciones} />
+              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
             )}
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
@@ -296,7 +320,27 @@ export default function CompanyPage({ params }: Props) {
           </div>
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
-            companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit} projects={projectsForCompany} />
+            companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
+            onCellClick={handleCellClick}
+            onEditProject={(project) => {
+              setSidepanelData(null);
+              setRecordDetail(null);
+              setActiveForm({ mode: 'edit', type: 'project', record: project });
+              setSidebarCollapsed(true);
+            }}
+            onEditTercero={(tercero) => {
+              setSidepanelData(null);
+              setRecordDetail(null);
+              setActiveForm({ mode: 'edit', type: 'tercero', record: tercero });
+              setSidebarCollapsed(true);
+            }}
+            onEditCellRecord={(form) => {
+              setSidepanelData(null);
+              setRecordDetail(null);
+              setActiveForm(form);
+              setSidebarCollapsed(true);
+            }}
+            projects={projectsForCompany} />
         </main>
       </div>
     </CompanyProvider>

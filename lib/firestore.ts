@@ -6,18 +6,19 @@ import {
   updateDoc,
   doc,
   onSnapshot,
+  query,
+  where,
   serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
 const EJECUCIONES_COLLECTION = 'ejecuciones';
-const CLIENTS_COLLECTION = 'clients';
+const TERCEROS_COLLECTION = 'terceros';
 const PROJECTS_COLLECTION = 'projects';
-const PROVIDERS_COLLECTION = 'providers';
 const STATE_PROJECTS_COLLECTION = 'stateProject';
 
 export async function getCompanies(): Promise<Company[]> {
@@ -43,9 +44,9 @@ export function subscribeClients(
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, CLIENTS_COLLECTION),
+    query(collection(db, TERCEROS_COLLECTION), where('tipo', 'in', ['cliente', 'ambos'])),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Client));
+      onData(snapshot.docs.map((d) => ({ id: d.id, name: d.data().name ?? '' }) as Client));
     },
     onError,
   );
@@ -70,9 +71,9 @@ export function subscribeProviders(
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, PROVIDERS_COLLECTION),
+    query(collection(db, TERCEROS_COLLECTION), where('tipo', 'in', ['proveedor', 'ambos'])),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Provider));
+      onData(snapshot.docs.map((d) => ({ id: d.id, name: d.data().name ?? '' }) as Provider));
     },
     onError,
   );
@@ -91,6 +92,49 @@ export function subscribeStateProjects(
   );
 }
 
+export function subscribeTerceros(
+  onData: (terceros: Tercero[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, TERCEROS_COLLECTION),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Tercero));
+    },
+    onError,
+  );
+}
+
+export function subscribeSettings(
+  onData: (data: SettingsCategorias) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, 'settings', 'categorias'),
+    (snapshot) => {
+      const d = snapshot.data();
+      if (d) {
+        const normalize = (items: any) => {
+          if (!items) return [];
+          if (typeof items[0] === 'string') return items.map((name: string, i: number) => ({ name, color: '#6366f1', order: i }));
+          return items;
+        };
+        onData({
+          stateProject: normalize(d.stateProject) ?? [],
+          tipoProyectos: normalize(d.tipoProyectos) ?? [],
+          unidades: normalize(d.unidades) ?? [],
+          updatedAt: d.updatedAt,
+        } as SettingsCategorias);
+      }
+    },
+    onError,
+  );
+}
+
+export async function updateSettings(data: Partial<SettingsCategorias>): Promise<void> {
+  await updateDoc(doc(db, 'settings', 'categorias'), { ...data, updatedAt: serverTimestamp() });
+}
+
 export function subscribeBudgets(
   companyId: string,
   onData: (budgets: Budget[]) => void,
@@ -99,7 +143,23 @@ export function subscribeBudgets(
   return onSnapshot(
     collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Budget));
+      onData(snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          descripcion: data.descripcion ?? '',
+          projectId: data.projectId ?? '',
+          projectName: data.projectName ?? data.proyectoAsignado ?? '',
+          entityId: data.entityId ?? '',
+          entityName: data.entityName ?? data.clienteOProveedor ?? '',
+          entityType: data.entityType ?? '',
+          tipo: data.tipo ?? 'ingreso',
+          montoPresupuestado: data.montoPresupuestado ?? 0,
+          mesPresupuestado: data.mesPresupuestado ?? 'Enero',
+          fechaPresupuestado: data.fechaPresupuestado ?? '',
+          estadoProyecto: data.estadoProyecto ?? 'Activo',
+        } as Budget;
+      }));
     },
     onError,
   );
@@ -113,7 +173,23 @@ export function subscribeEjecuciones(
   return onSnapshot(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Ejecucion));
+      onData(snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          descripcion: data.descripcion ?? '',
+          projectId: data.projectId ?? '',
+          projectName: data.projectName ?? data.proyectoAsignado ?? '',
+          entityId: data.entityId ?? '',
+          entityName: data.entityName ?? data.clienteOProveedor ?? '',
+          entityType: data.entityType ?? '',
+          tipo: data.tipo ?? 'ingreso',
+          montoEjecutado: data.montoEjecutado ?? 0,
+          fechaEjecutado: data.fechaEjecutado ?? '',
+          budgetId: data.budgetId ?? undefined,
+          comprobantes: data.comprobantes ?? [],
+        } as Ejecucion;
+      }));
     },
     onError,
   );
@@ -145,8 +221,8 @@ export async function addClient(
   client: Omit<Client, 'id'>,
 ): Promise<string> {
   const docRef = await addDoc(
-    collection(db, CLIENTS_COLLECTION),
-    { ...client, createdAt: serverTimestamp() },
+    collection(db, TERCEROS_COLLECTION),
+    { ...client, tipo: 'cliente', createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
@@ -155,8 +231,16 @@ export async function addProvider(
   provider: Omit<Provider, 'id'>,
 ): Promise<string> {
   const docRef = await addDoc(
-    collection(db, PROVIDERS_COLLECTION),
-    { ...provider, createdAt: serverTimestamp() },
+    collection(db, TERCEROS_COLLECTION),
+    { ...provider, tipo: 'proveedor', createdAt: serverTimestamp() },
+  );
+  return docRef.id;
+}
+
+export async function addTercero(data: Record<string, any>): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, TERCEROS_COLLECTION),
+    { ...data, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
@@ -185,12 +269,19 @@ export async function updateClient(
   clientId: string,
   data: Partial<Client>,
 ): Promise<void> {
-  await updateDoc(doc(db, CLIENTS_COLLECTION, clientId), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, TERCEROS_COLLECTION, clientId), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function updateProvider(
   providerId: string,
   data: Partial<Provider>,
 ): Promise<void> {
-  await updateDoc(doc(db, PROVIDERS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, TERCEROS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
+}
+
+export async function updateTercero(
+  terceroId: string,
+  data: Record<string, any>,
+): Promise<void> {
+  await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { ...data, updatedAt: serverTimestamp() });
 }

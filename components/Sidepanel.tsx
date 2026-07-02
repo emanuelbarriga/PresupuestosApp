@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react';
-import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Project, Client } from '@/lib/types';
-import { subscribeClients, subscribeProviders, subscribeBudgets, updateEjecucion, addEjecucion, addClient, addProject } from '@/lib/firestore';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, Plus, Search, Link2, Unlink, Save } from 'lucide-react';
+import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
+import { formatThousands, unformatThousands } from '@/lib/utils';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -15,10 +16,14 @@ interface SidepanelProps {
   companyId: string;
   onClose: () => void;
   onFormSubmit: (form: ActiveForm, data: Record<string, any>) => Promise<void>;
+  onEditProject?: (project: Project) => void;
+  onEditTercero?: (tercero: Tercero) => void;
+  onEditCellRecord?: (form: ActiveForm) => void;
+  onCellClick?: (data: SidepanelData) => void;
   projects?: Project[];
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, projects }: SidepanelProps) {
+export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onEditCellRecord, onCellClick, projects }: SidepanelProps) {
   const visible = data || recordDetail || activeForm;
 
   return (
@@ -33,9 +38,9 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
       ) : activeForm ? (
         <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} />
       ) : recordDetail ? (
-        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} projects={projects} />
+        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onEditProject={onEditProject} onEditTercero={onEditTercero} onCellClick={onCellClick} projects={projects} />
       ) : data ? (
-        <DataPanel data={data} onClose={onClose} />
+        <DataPanel data={data} onClose={onClose} onEditCellRecord={onEditCellRecord} projects={projects} />
       ) : null}
     </aside>
   );
@@ -52,28 +57,57 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectClient, setNewProjectClient] = useState('');
 
+  // Terceros state for project client selector
+  const [terceros, setTerceros] = useState<Tercero[]>([]);
+  const [showNewProjectClient, setShowNewProjectClient] = useState(false);
+  const [newProjectClientName, setNewProjectClientName] = useState('');
+
+  // Calculator & monto formatting
+  const [showCalc, setShowCalc] = useState(false);
+  const [montoEditing, setMontoEditing] = useState(false);
+  const [calcExpr, setCalcExpr] = useState('');
+
+  // Recurring gastos
+  const [recurring, setRecurring] = useState(false);
+  const [recurringCount, setRecurringCount] = useState(3);
+
+  // Custom tipo/unidad for project form
+  const [customTipo, setCustomTipo] = useState('');
+  const [customUnidad, setCustomUnidad] = useState('');
+  const [settingsCat, setSettingsCat] = useState<SettingsCategorias | null>(null);
+
   const safeProjects = projects || [];
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeBudgets(companyId, setAllBudgets)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsCat)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 
-  const clientsAndProviders = [...clients.map(c => ({ value: c.name, label: c.name, type: 'client' })), ...providers.map(p => ({ value: p.name, label: p.name, type: 'provider' }))];
+  // Deduplicate: terceros con tipo 'ambos' aparecen en clients y providers
+  const clientsAndProviders = [
+    ...clients.map(c => ({ value: c.id, label: c.name, type: 'client' as const })),
+    ...providers
+      .filter(p => !clients.some(c => c.id === p.id))
+      .map(p => ({ value: p.id, label: p.name, type: 'provider' as const })),
+    { value: '', label: 'Interno', type: 'interno' as const },
+  ];
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) return;
-    await addClient({ name: newClientName.trim() });
-    set('clienteOProveedor', newClientName.trim());
+    const newId = await addClient({ name: newClientName.trim() });
+    set('entityId', newId);
+    set('entityName', newClientName.trim());
+    set('entityType', 'client');
     setNewClientName('');
     setShowNewClient(false);
   };
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    await addProject(companyId, { name: newProjectName.trim(), clientName: newProjectClient.trim() || 'Sin cliente', clientId: '', estado: 'Activo' });
-    set('proyectoAsignado', newProjectName.trim());
+    const newId = await addProject(companyId, { name: newProjectName.trim(), clientName: newProjectClient.trim() || 'Sin cliente', clientId: '', estado: 'Activo' });
+    set('projectId', newId);
+    set('projectName', newProjectName.trim());
     setNewProjectName('');
     setNewProjectClient('');
     setShowNewProject(false);
@@ -86,9 +120,18 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       Object.keys(r).forEach(k => { if (k !== 'id') init[k] = String(r[k] ?? ''); });
       setFields(init);
     } else {
-      const init: Record<string, string> = form.type === 'ejecucion'
-        ? { tipo: 'ingreso', fechaEjecutado: new Date().toISOString().split('T')[0] }
-        : { tipo: 'ingreso' };
+      const init: Record<string, string> = {};
+      if (form.type === 'ejecucion') {
+        init.tipo = 'ingreso';
+        init.fechaEjecutado = new Date().toISOString().split('T')[0];
+      } else if (form.type === 'budget') {
+        init.tipo = 'ingreso';
+      } else if (form.type === 'client' || form.type === 'tercero') {
+        init.tipo = 'cliente';
+      } else if (form.type === 'provider') {
+        init.tipo = 'proveedor';
+      }
+      // 'project' type has no automatic defaults — all fields come from the form
       if (form.defaults) Object.assign(init, form.defaults);
       setFields(init);
     }
@@ -111,27 +154,254 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
 
   const handleSubmit = async () => {
     setSaving(true);
-    const data: Record<string, any> = { ...fields };
-    if (ft === 'budget') { data.montoPresupuestado = Number(data.montoPresupuestado) || 0; delete data.fechaEjecutado; }
-    if (ft === 'ejecucion') data.montoEjecutado = Number(data.montoEjecutado) || 0;
-    await onSubmit(form, data);
+    const base: Record<string, any> = { ...fields };
+
+    const addMonth = (monthName: string, count: number): string => {
+      const idx = MONTHS.indexOf(monthName as Month);
+      return MONTHS[(idx + count) % 12];
+    };
+      const addMonthToDate = (dateStr: string, count: number): string => {
+        if (!dateStr) return dateStr;
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        let y = parseInt(parts[0], 10);
+        let m = parseInt(parts[1], 10);
+        if (m < 1 || m > 12) return dateStr;
+        m += count;
+        while (m > 12) { m -= 12; y++; }
+        while (m < 1) { m += 12; y--; }
+        return `${y}-${String(m).padStart(2, '0')}-${parts[2]}`;
+      };
+      const addMonthToYM = (ymStr: string, count: number): string => {
+        if (!ymStr) return ymStr;
+        const parts = ymStr.split('-');
+        if (parts.length !== 2) return ymStr;
+        let y = parseInt(parts[0], 10);
+        let m = parseInt(parts[1], 10);
+        if (m < 1 || m > 12) return ymStr;
+        m += count;
+        while (m > 12) { m -= 12; y++; }
+        while (m < 1) { m += 12; y--; }
+        return `${y}-${String(m).padStart(2, '0')}`;
+      };
+
+    // Compute fechaPresupuestado from mesPresupuestado if missing
+    const ensureFechaPresupuestado = (d: Record<string, any>) => {
+      if (d.mesPresupuestado && !d.fechaPresupuestado) {
+        const monthIdx = MONTHS.indexOf(d.mesPresupuestado as Month);
+        if (monthIdx >= 0) d.fechaPresupuestado = `${new Date().getFullYear()}-${String(monthIdx + 1).padStart(2, '0')}`;
+      }
+    };
+
+    const entries: Record<string, any>[] = [];
+    const reps = recurring && form.mode === 'add' ? Math.max(1, recurringCount) : 1;
+
+    for (let i = 0; i < reps; i++) {
+      const data = { ...base };
+      ensureFechaPresupuestado(data);
+
+      if (i > 0) {
+        if (ft === 'budget') {
+          data.mesPresupuestado = addMonth(data.mesPresupuestado, i);
+          data.fechaPresupuestado = addMonthToYM(data.fechaPresupuestado || `${new Date().getFullYear()}-01`, i);
+          data.fechaEjecutado = addMonthToDate(data.fechaEjecutado, i);
+        } else if (ft === 'ejecucion') {
+          data.fechaEjecutado = addMonthToDate(data.fechaEjecutado, i);
+        }
+      }
+
+      if (ft === 'budget' || ft === 'ejecucion') {
+        if (!data.projectId) data.projectId = '';
+        if (!data.projectName) data.projectName = '';
+        if (!data.entityId) data.entityId = '';
+        if (!data.entityName) data.entityName = '';
+        if (!data.entityType) data.entityType = '';
+      }
+      if (ft === 'budget') { data.montoPresupuestado = Number(data.montoPresupuestado) || 0; delete data.fechaEjecutado; }
+      if (ft === 'ejecucion') data.montoEjecutado = Number(data.montoEjecutado) || 0;
+      if (ft === 'project') {
+        data.cantidad = Number(data.cantidad) || 0;
+        if (data.tipoProyectos === '__custom__') data.tipoProyectos = '';
+        if (data.unidades === '__custom__') data.unidades = '';
+        data.soloEgresos = data.soloEgresos === 'true';
+      }
+
+      entries.push(data);
+    }
+
+    // Submit all at once, panel closes after ALL complete
+    for (const entry of entries) {
+      await onSubmit(form, entry);
+    }
     setSaving(false);
   };
 
   const filteredBudgets = allBudgets.filter(b => {
-    const proj = f('proyectoAsignado');
-    const cli = f('clienteOProveedor');
-    if (proj && cli) return b.proyectoAsignado === proj || b.clienteOProveedor === cli;
-    if (proj) return b.proyectoAsignado === proj;
-    if (cli) return b.clienteOProveedor === cli;
+    const proj = f('projectName') || f('proyectoAsignado');
+    const cli = f('entityName') || f('clienteOProveedor');
+    if (proj && cli) return b.projectName === proj || b.entityName === cli;
+    if (proj) return b.projectName === proj;
+    if (cli) return b.entityName === cli;
     return true;
   });
 
-  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'client' ? 'Cliente' : 'Proveedor'}`;
+  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'tercero' ? 'Tercero' : ft === 'client' ? 'Cliente' : 'Proveedor'}`;
 
-  if (ft === 'project' || ft === 'client' || ft === 'provider') {
-    return <SimpleForm title={title} fields={ft === 'project' ? ['name', 'clientName'] : ['name']}
-      labels={{ name: 'Nombre', clientName: 'Cliente' }} f={f} set={set} form={form} onClose={onClose} onSubmit={handleSubmit} saving={saving} />;
+  if (ft === 'project') {
+    const clientOptions = terceros
+      .filter(t => t.tipo === 'cliente' || t.tipo === 'ambos')
+      .map(t => ({ value: t.id, label: t.name, apodo: t.apodo }));
+    const handleClientSelect = (v: string) => {
+      const found = terceros.find(t => t.id === v);
+      if (found) {
+        set('clientId', found.id);
+        set('clientName', found.name);
+      } else if (v) {
+        // Free text — user typed a new name, store as clientName only
+        set('clientId', '');
+        set('clientName', v);
+      }
+    };
+    const handleCreateProjectClient = async () => {
+      if (!newProjectClientName.trim()) return;
+      const newId = await addTercero({ name: newProjectClientName.trim(), tipo: 'cliente' });
+      set('clientId', newId);
+      set('clientName', newProjectClientName.trim());
+      setNewProjectClientName('');
+      setShowNewProjectClient(false);
+    };
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
+          <h2 className="font-bold text-slate-800">{title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormInput label="Sigla" value={f('name')} onChange={v => set('name', v)} />
+          <FormInput label="Nombre completo" value={f('descripcion')} onChange={v => set('descripcion', v)} />
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo de proyecto</label>
+            {f('tipoProyectos') === '__custom__' ? (
+              <div className="flex gap-2">
+                <input type="text" value={customTipo} onChange={e => { setCustomTipo(e.target.value); set('tipoProyectos', e.target.value); }}
+                  placeholder="Nuevo tipo..." className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 outline-none" autoFocus />
+                <button onClick={() => { set('tipoProyectos', ''); setCustomTipo(''); }} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Volver</button>
+              </div>
+            ) : (
+              <ColorSelect value={f('tipoProyectos')} onChange={v => set('tipoProyectos', v)}
+                items={(settingsCat?.tipoProyectos || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                placeholder="Seleccionar..." allowCustom />
+            )}
+          </div>
+          <FormInput label="Cantidad" value={f('cantidad')} onChange={v => set('cantidad', v)} type="number" />
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Unidades</label>
+            {f('unidades') === '__custom__' ? (
+              <div className="flex gap-2">
+                <input type="text" value={customUnidad} onChange={e => { setCustomUnidad(e.target.value); set('unidades', e.target.value); }}
+                  placeholder="Nueva unidad..." className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 outline-none" autoFocus />
+                <button onClick={() => { set('unidades', ''); setCustomUnidad(''); }} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Volver</button>
+              </div>
+            ) : (
+              <ColorSelect value={f('unidades')} onChange={v => set('unidades', v)}
+                items={(settingsCat?.unidades || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                placeholder="Seleccionar..." allowCustom />
+            )}
+          </div>
+          <SearchableSelect label="Cliente" value={f('clientId') || f('clientName')} onChange={handleClientSelect}
+            options={clientOptions.map(c => ({ value: c.value, label: c.label + (c.apodo ? ` (${c.apodo})` : '') }))}
+            placeholder="Buscar cliente..." />
+          {!showNewProjectClient && (
+            <button onClick={() => setShowNewProjectClient(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
+              <Plus size={12} /> Nuevo cliente rápido
+            </button>
+          )}
+          {showNewProjectClient && (
+            <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200 -mt-3">
+              <input type="text" value={newProjectClientName} onChange={e => setNewProjectClientName(e.target.value)}
+                placeholder="Nombre del cliente" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" autoFocus />
+              <div className="flex gap-2">
+                <button onClick={handleCreateProjectClient} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 text-[11px] font-bold">Crear</button>
+                <button onClick={() => setShowNewProjectClient(false)} className="px-3 text-slate-500 hover:text-slate-700 text-[11px] font-bold">Cancelar</button>
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+            <ColorSelect
+              value={f('estado')}
+              onChange={v => set('estado', v)}
+              items={(settingsCat?.stateProject || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+              placeholder="Seleccionar..."
+            />
+          </div>
+          <label className="flex items-center gap-2.5 cursor-pointer py-1">
+            <input type="checkbox" checked={f('soloEgresos') === 'true'} onChange={e => set('soloEgresos', e.target.checked ? 'true' : 'false')}
+              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+            <span className="text-xs font-medium text-slate-600 select-none">Solo egresos</span>
+            <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Ingresos)</span>
+          </label>
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (ft === 'client' || ft === 'provider' || ft === 'tercero') {
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
+          <h2 className="font-bold text-slate-800">{title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormInput label="Nombre *" value={f('name')} onChange={v => set('name', v)} />
+          <FormInput label="Apodo" value={f('apodo')} onChange={v => set('apodo', v)} />
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Naturaleza</label>
+            <select value={f('naturaleza')} onChange={e => set('naturaleza', e.target.value)}
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+              <option value="">Seleccionar...</option>
+              <option value="Persona Natural">Persona Natural</option>
+              <option value="Persona Jurídica">Persona Jurídica</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Documento</label>
+            <select value={f('documento')} onChange={e => set('documento', e.target.value)}
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+              <option value="">Seleccionar...</option>
+              <option value="CC">CC</option>
+              <option value="NIT">NIT</option>
+              <option value="RUC">RUC</option>
+              <option value="CI">CI</option>
+              <option value="ID">ID</option>
+              <option value="RFC">RFC</option>
+            </select>
+          </div>
+          <FormInput label="Número de documento" value={f('numeroDocumento')} onChange={v => set('numeroDocumento', v)} />
+          <FormInput label="Lugar" value={f('lugar')} onChange={v => set('lugar', v)} />
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo</label>
+            <select value={f('tipo')} onChange={e => set('tipo', e.target.value)}
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+              <option value="cliente">Cliente</option>
+              <option value="proveedor">Proveedor</option>
+              <option value="ambos">Ambos</option>
+            </select>
+          </div>
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -142,7 +412,10 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         <TipoSwitch value={f('tipo')} onChange={v => set('tipo', v)} />
-        <SearchableSelect label="Proyecto" value={f('proyectoAsignado')} onChange={v => set('proyectoAsignado', v)} options={safeProjects.map(p => ({ value: p.name, label: p.name }))} placeholder="Buscar proyecto..." />
+        <SearchableSelect label="Proyecto" value={f('projectId') || f('projectName')} onChange={v => {
+          const p = safeProjects.find(p => p.id === v);
+          if (p) { set('projectId', p.id); set('projectName', p.name); }
+        }} options={safeProjects.map(p => ({ value: p.id, label: p.name }))} placeholder="Buscar proyecto..." />
         {!showNewProject && (
           <button onClick={() => setShowNewProject(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
             <Plus size={12} /> Nuevo proyecto
@@ -158,7 +431,12 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
             </div>
           </div>
         )}
-        <SearchableSelect label="Cliente / Proveedor" value={f('clienteOProveedor')} onChange={v => set('clienteOProveedor', v)} options={clientsAndProviders} placeholder="Buscar cliente o proveedor..." />
+        <SearchableSelect label="Cliente / Proveedor" value={f('entityId') || f('entityName')} onChange={v => {
+          if (!v) { set('entityId', ''); set('entityName', 'Interno'); set('entityType', 'interno'); return; }
+          const allEntities = [...clients.map(c => ({ id: c.id, name: c.name, type: 'client' as const })), ...providers.map(p => ({ id: p.id, name: p.name, type: 'provider' as const }))];
+          const entity = allEntities.find(e => e.id === v);
+          if (entity) { set('entityId', entity.id); set('entityName', entity.name); set('entityType', entity.type); }
+        }} options={clientsAndProviders} placeholder="Buscar cliente o proveedor..." />
         {!showNewClient && (
           <button onClick={() => setShowNewClient(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
             <Plus size={12} /> Nuevo cliente
@@ -174,7 +452,27 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
           </div>
         )}
         <FormInput label="Descripción" value={f('descripcion')} onChange={v => set('descripcion', v)} />
-        <FormInput label={ft === 'budget' ? 'Monto Presupuestado' : 'Monto Ejecutado'} value={f(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado')} onChange={v => set(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado', v)} type="number" />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase">{ft === 'budget' ? 'Monto Presupuestado' : 'Monto Ejecutado'}</label>
+            <button type="button" onClick={() => { setShowCalc(!showCalc); if (!showCalc) setCalcExpr(f(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado') || ''); }}
+              className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-colors">
+              🧮 Calc
+            </button>
+          </div>
+          <input type="text" inputMode="numeric"
+            value={montoEditing ? unformatThousands(f(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado')) : formatThousands(f(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado'))}
+            onFocus={() => setMontoEditing(true)}
+            onBlur={() => setMontoEditing(false)}
+            onChange={e => set(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado', unformatThousands(e.target.value))}
+            className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-right" />
+          {showCalc && (
+            <Calculator value={calcExpr} onChange={setCalcExpr} onResult={(res) => {
+              set(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado', String(res));
+              setShowCalc(false);
+            }} />
+          )}
+        </div>
         {ft === 'budget' && (
           <div>
             <FormInput label="Fecha del presupuesto" value={f('fechaEjecutado')} onChange={handleDateChange} type="date" />
@@ -188,12 +486,32 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
               set('budgetId', v);
               const b = allBudgets.find(b => b.id === v);
               if (b) {
-                set('proyectoAsignado', b.proyectoAsignado);
-                set('clienteOProveedor', b.clienteOProveedor);
+                set('projectId', b.projectId);
+                set('projectName', b.projectName);
+                set('entityId', b.entityId);
+                set('entityName', b.entityName);
+                set('entityType', b.entityType);
                 set('tipo', b.tipo);
               }
-            }} options={filteredBudgets.map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.proyectoAsignado}` }))} placeholder="Buscar presupuesto..." />
+            }} options={filteredBudgets.map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto..." />
           </>
+        )}
+        {form.mode === 'add' && (ft === 'budget' || ft === 'ejecucion') && (
+          <div className="border-t border-slate-100 pt-4">
+            <label className="flex items-center gap-2.5 cursor-pointer py-1 mb-3">
+              <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+              <span className="text-xs font-medium text-slate-600 select-none">Gasto recurrente</span>
+            </label>
+            {recurring && (
+              <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <span className="text-[11px] font-medium text-slate-500 shrink-0">Repetir por</span>
+                <input type="number" min={1} max={60} value={recurringCount} onChange={e => setRecurringCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-16 border border-slate-200 rounded-lg p-1.5 text-sm text-center focus:border-indigo-500 outline-none bg-white" />
+                <span className="text-[11px] font-medium text-slate-500 shrink-0">meses</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="p-6 border-t border-slate-100 shrink-0">
@@ -252,36 +570,187 @@ function FormInput({ label, value, onChange, type = 'text' }: { label: string; v
   );
 }
 
-function SimpleForm({ title, fields, labels, f, set, form, onClose, onSubmit, saving }: {
-  title: string; fields: string[]; labels: Record<string, string>;
-  f: (k: string) => string; set: (k: string, v: string) => void;
-  form: ActiveForm; onClose: () => void; onSubmit: () => Promise<void>; saving: boolean;
+function ColorSelect({ value, onChange, items, placeholder, allowCustom }: {
+  value: string; onChange: (v: string) => void;
+  items: { name: string; color: string }[]; placeholder?: string; allowCustom?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find(i => i.name === value);
   return (
-    <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {fields.map(k => (
-          <div key={k}><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{labels[k] || k}</label><input type="text" value={f(k)} onChange={e => set(k, e.target.value)} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" /></div>
-        ))}
-      </div>
-      <div className="p-6 border-t border-slate-100 shrink-0">
-        <button onClick={onSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
-          {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
-        </button>
-      </div>
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-left flex items-center gap-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+        {selected ? (
+          <span className="px-2.5 py-1 rounded text-xs font-medium"
+            style={{ backgroundColor: selected.color + '20', color: selected.color, border: `1px solid ${selected.color}40` }}>
+            {selected.name}
+          </span>
+        ) : (
+          <span className="text-slate-400">{placeholder || 'Seleccionar...'}</span>
+        )}
+        <ChevronDown size={14} className="ml-auto text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {placeholder && (
+              <button type="button" onClick={() => { onChange(''); setOpen(false); }}
+                className="w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 transition-colors">
+                {placeholder}
+              </button>
+            )}
+            {items.map(item => (
+              <button key={item.name} type="button" onClick={() => { onChange(item.name); setOpen(false); }}
+                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 transition-colors flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded text-xs font-medium"
+                  style={{ backgroundColor: item.color + '20', color: item.color, border: `1px solid ${item.color}40` }}>
+                  {item.name}
+                </span>
+              </button>
+            ))}
+            {allowCustom && (
+              <button type="button" onClick={() => { onChange('__custom__'); setOpen(false); }}
+                className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors font-medium border-t border-slate-100">
+                + Personalizado
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, projects }: {
-  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[];
+function TerceroGroupPanel({ projects, onCellClick, mode }: {
+  projects: Array<{
+    projectId: string;
+    projectName: string;
+    groups: DetalleTerceroGroup[];
+    totalPresupuestado: number;
+    totalEjecutado: number;
+    diferencia: number;
+  }>;
+  onCellClick?: (data: SidepanelData) => void;
+  mode: 'Presupuestado' | 'Ejecutado';
+}) {
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
+    () => new Set(projects.map(p => p.projectId))
+  );
+
+  const toggleProject = (projectId: string) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  const handleTerceroClick = (project: typeof projects[number], group: (typeof projects[number]['groups'][number]) & DetalleTerceroGroup) => {
+    const value = mode === 'Presupuestado' ? group.totalPresupuestado : group.totalEjecutado;
+    onCellClick?.({
+      title: `${project.projectName} / ${group.entityName}`,
+      subtitle: `${mode} — ${project.projectName}`,
+      formula: `Transacciones de ${group.entityName} en ${project.projectName}`,
+      budgets: group.budgets,
+      ejecuciones: group.ejecuciones,
+      value,
+      presupuestado: group.totalPresupuestado,
+      ejecutado: group.totalEjecutado,
+      diferencia: group.diferencia,
+      mode,
+      tipo: (group.budgets[0]?.tipo || group.ejecuciones[0]?.tipo || 'ingreso') as 'ingreso' | 'egreso',
+    });
+  };
+
+  const EntityTypeBadge = ({ entityType }: { entityType: string }) => {
+    const colors: Record<string, string> = {
+      client: 'bg-blue-100 text-blue-700',
+      provider: 'bg-amber-100 text-amber-700',
+      interno: 'bg-purple-100 text-purple-700',
+    };
+    const labels: Record<string, string> = {
+      client: 'Cliente',
+      provider: 'Proveedor',
+      interno: 'Interno',
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${colors[entityType] || 'bg-slate-100 text-slate-600'}`}>
+        {labels[entityType] || entityType}
+      </span>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {projects.length === 0 && (
+        <p className="text-xs text-slate-500 italic text-center py-6 bg-slate-50 rounded-lg">No hay datos disponibles</p>
+      )}
+      {projects.map(project => (
+        <div key={project.projectId} className="border border-slate-200 rounded-xl overflow-hidden">
+          {/* Project header */}
+          <button
+            onClick={() => toggleProject(project.projectId)}
+            className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">{expandedProjects.has(project.projectId) ? '▼' : '▶'}</span>
+              <span className="text-sm font-bold text-slate-800">{project.projectName}</span>
+              <span className="text-[10px] text-slate-400 font-medium">({project.groups.length} terceros)</span>
+            </div>
+            <span className="text-xs font-bold text-slate-700">{formatCurrency(mode === 'Presupuestado' ? project.totalPresupuestado : project.totalEjecutado)}</span>
+          </button>
+
+          {/* Tercero rows */}
+          {expandedProjects.has(project.projectId) && (
+            <div className="divide-y divide-slate-100">
+              <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[9px] font-bold uppercase text-slate-400 bg-white">
+                <div className="col-span-4">Tercero</div>
+                <div className="col-span-2 text-center">Tipo</div>
+                <div className="col-span-2 text-right">Presupuestado</div>
+                <div className="col-span-2 text-right">Ejecutado</div>
+                <div className="col-span-2 text-right">Diferencia</div>
+              </div>
+              {project.groups.map(group => (
+                <button
+                  key={group.entityId}
+                  onClick={() => handleTerceroClick(project, group)}
+                  className="w-full grid grid-cols-12 gap-2 px-4 py-3 hover:bg-indigo-50/50 transition-colors text-left items-center"
+                >
+                  <div className="col-span-4">
+                    <p className="text-xs font-semibold text-slate-700 truncate">{group.entityName}</p>
+                  </div>
+                  <div className="col-span-2 flex justify-center">
+                    <EntityTypeBadge entityType={group.entityType} />
+                  </div>
+                  <div className="col-span-2 text-right">
+                    <span className="text-xs font-bold text-slate-700">{formatCurrency(group.totalPresupuestado)}</span>
+                  </div>
+                  <div className="col-span-2 text-right">
+                    <span className="text-xs font-bold text-slate-700">{formatCurrency(group.totalEjecutado)}</span>
+                  </div>
+                  <div className="col-span-2 text-right">
+                    <span className={clsx("text-xs font-black", group.diferencia === 0 ? "text-slate-400" : group.diferencia > 0 ? "text-emerald-600" : "text-rose-600")}>
+                      {group.diferencia > 0 ? '+' : ''}{formatCurrency(group.diferencia)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onCellClick, projects }: {
+  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void; onEditTercero?: (tercero: Tercero) => void; onCellClick?: (data: SidepanelData) => void; projects?: Project[];
 }) {
   const title = recordDetail.type === 'budget' ? 'Presupuesto' : recordDetail.type === 'ejecucion' ? 'Ejecución'
-    : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente' : 'Proveedor';
+    : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente'
+    : recordDetail.type === 'provider' ? 'Proveedor' : recordDetail.type === 'tercero' ? 'Tercero' : '';
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
@@ -291,22 +760,65 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, projects }:
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} />}
         {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} />}
-        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} />}
+        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onEditProject={onEditProject} />}
         {recordDetail.type === 'client' && (<><DF label="Nombre" v={recordDetail.client.name} />
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Proyectos ({recordDetail.projects.length})</p>{recordDetail.projects.map(p => <div key={p.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{p.name}</span><span className="font-bold">{p.estado}</span></div>)}</div>
         </>)}
         {recordDetail.type === 'provider' && <DF label="Nombre" v={recordDetail.provider.name} />}
+        {recordDetail.type === 'tercero' && (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Tercero</p>
+              {onEditTercero && (
+                <button onClick={() => onEditTercero(recordDetail.tercero)}
+                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                  <Save size={12} /> Editar
+                </button>
+              )}
+            </div>
+            <DF label="Nombre" v={recordDetail.tercero.name} />
+            {recordDetail.tercero.apodo && <DF label="Apodo" v={recordDetail.tercero.apodo} />}
+            {recordDetail.tercero.naturaleza && <DF label="Naturaleza" v={recordDetail.tercero.naturaleza} />}
+            {recordDetail.tercero.documento && recordDetail.tercero.numeroDocumento && (
+              <DF label="Documento" v={`${recordDetail.tercero.documento} ${recordDetail.tercero.numeroDocumento}`} />
+            )}
+            {recordDetail.tercero.lugar && <DF label="Lugar" v={recordDetail.tercero.lugar} />}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo</p>
+              <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
+                recordDetail.tercero.tipo === 'cliente' ? 'bg-blue-100 text-blue-700' :
+                recordDetail.tercero.tipo === 'proveedor' ? 'bg-amber-100 text-amber-700' :
+                'bg-purple-100 text-purple-700'
+              )}>
+                {recordDetail.tercero.tipo === 'cliente' ? 'Cliente' : recordDetail.tercero.tipo === 'proveedor' ? 'Proveedor' : 'Ambos'}
+              </span>
+            </div>
+          </>
+        )}
+        {recordDetail.type === 'detalle-tercero' && (
+          <TerceroGroupPanel projects={recordDetail.projects} onCellClick={onCellClick} mode={recordDetail.type === 'detalle-tercero' ? 'Presupuestado' : 'Presupuestado'} />
+        )}
+        {recordDetail.type === 'settings-editor' && (
+          <SettingsEditor category={recordDetail.category} title={recordDetail.title} items={recordDetail.items}
+            companyId={companyId} onClose={onClose} />
+        )}
       </div>
     </div>
   );
 }
 
-function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit }: {
-  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit, onEditProject }: {
+  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void;
 }) {
   const [selectedState, setSelectedState] = useState(project.estado);
   const [saving, setSaving] = useState(false);
+  const [settingsCat, setSettingsCat] = useState<SettingsCategorias | null>(null);
   const projectRef = useRef(project.id);
+
+  useEffect(() => {
+    const unsub = subscribeSettings(setSettingsCat);
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (projectRef.current !== project.id) {
@@ -337,12 +849,26 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
     );
   };
 
-  const projectStates = ['Activo', 'Cerrado', 'Negociación', 'En ejecución', 'Cancelado'];
+  const projectStates = (settingsCat?.stateProject || [])
+    .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+    .map((s: any) => s.name);
 
   return (
     <>
-      <DF label="Nombre" v={project.name} />
-      <DF label="Cliente" v={project.clientName} />
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
+        {!isInferred && project.id && onEditProject && (
+          <button onClick={() => onEditProject(project)}
+            className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+            <Save size={12} /> Editar
+          </button>
+        )}
+      </div>
+      <DF label="Sigla" v={project.name} />
+      {project.descripcion && <DF label="Nombre completo" v={project.descripcion} />}
+      <DF label="Cliente" v={project.clientName || '—'} />
+      {project.tipoProyectos && <DF label="Tipo de proyecto" v={project.tipoProyectos} />}
+      {project.cantidad ? <DF label="Cantidad" v={String(project.cantidad) + (project.unidades ? ` ${project.unidades}` : '')} /> : null}
       <div>
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Estado</p>
         {isInferred ? (
@@ -370,8 +896,19 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
           </div>
         )}
       </div>
-      <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>{budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}</div>
-      <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({ejecuciones.length})</p>{ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}</div>
+      {project.soloEgresos && (
+        <div className="flex items-center gap-2 mt-3">
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-700 border border-rose-200">Solo egresos</span>
+        </div>
+      )}
+      <div className="border-t border-slate-100 pt-3 mt-3">
+        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>
+        {budgets.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin presupuestos</p> : budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}
+      </div>
+      <div className="border-t border-slate-100 pt-3 mt-3">
+        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({ejecuciones.length})</p>
+        {ejecuciones.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin ejecuciones</p> : ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}
+      </div>
     </>
   );
 }
@@ -390,8 +927,11 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
       { mode: 'add', type: 'ejecucion' },
       {
         descripcion: ejForm.descripcion || `Ejecución: ${budget.descripcion}`,
-        proyectoAsignado: budget.proyectoAsignado,
-        clienteOProveedor: budget.clienteOProveedor,
+        projectId: budget.projectId || '',
+        projectName: budget.projectName || '',
+        entityId: budget.entityId || '',
+        entityName: budget.entityName || '',
+        entityType: budget.entityType || '',
         tipo: budget.tipo,
         montoEjecutado: Number(ejForm.montoEjecutado) || 0,
         fechaEjecutado: ejForm.fechaEjecutado,
@@ -414,8 +954,8 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
   return (
     <>
       <DF label="Descripción" v={budget.descripcion} />
-      <DF label="Proyecto" v={budget.proyectoAsignado} />
-      <DF label="Cliente/Proveedor" v={budget.clienteOProveedor} />
+      <DF label="Proyecto" v={budget.projectName} />
+      <DF label="Cliente/Proveedor" v={budget.entityName} />
       <DF label="Tipo" v={budget.tipo} />
       <DF label="Monto Presupuestado" v={formatCurrency(budget.montoPresupuestado)} />
       <DF label="Mes" v={budget.mesPresupuestado} />
@@ -457,8 +997,8 @@ function MiniEjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; com
     <>
       <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Ejecución</p>
       <DF label="Descripción" v={ejecucion.descripcion} />
-      <DF label="Proyecto" v={ejecucion.proyectoAsignado} />
-      <DF label="Cliente/Proveedor" v={ejecucion.clienteOProveedor} />
+      <DF label="Proyecto" v={ejecucion.projectName} />
+      <DF label="Cliente/Proveedor" v={ejecucion.entityName} />
       <DF label="Tipo" v={ejecucion.tipo} />
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
@@ -478,7 +1018,7 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
     return () => unsub();
   }, [companyId]);
 
-  const filtered = search ? budgets.filter(b => b.descripcion.toLowerCase().includes(search.toLowerCase()) || b.proyectoAsignado.toLowerCase().includes(search.toLowerCase())) : budgets;
+  const filtered = search ? budgets.filter(b => b.descripcion.toLowerCase().includes(search.toLowerCase()) || b.projectName.toLowerCase().includes(search.toLowerCase())) : budgets;
   const linkedBudget = budgets.find(b => b.id === ejecucion.budgetId);
 
   const handleLink = async (budgetId: string) => {
@@ -494,8 +1034,8 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
         <button onClick={() => setViewBudget(null)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mb-4 flex items-center gap-1">← Volver a la ejecución</button>
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Presupuesto Vinculado</p>
         <DF label="Descripción" v={viewBudget.descripcion} />
-        <DF label="Proyecto" v={viewBudget.proyectoAsignado} />
-        <DF label="Cliente/Proveedor" v={viewBudget.clienteOProveedor} />
+        <DF label="Proyecto" v={viewBudget.projectName} />
+        <DF label="Cliente/Proveedor" v={viewBudget.entityName} />
         <DF label="Tipo" v={viewBudget.tipo} />
         <DF label="Monto" v={formatCurrency(viewBudget.montoPresupuestado)} />
         <DF label="Mes" v={viewBudget.mesPresupuestado} />
@@ -507,8 +1047,8 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
   return (
     <>
       <DF label="Descripción" v={ejecucion.descripcion} />
-      <DF label="Proyecto" v={ejecucion.proyectoAsignado} />
-      <DF label="Cliente/Proveedor" v={ejecucion.clienteOProveedor} />
+      <DF label="Proyecto" v={ejecucion.projectName} />
+      <DF label="Cliente/Proveedor" v={ejecucion.entityName} />
       <DF label="Tipo" v={ejecucion.tipo} />
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
@@ -521,7 +1061,7 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
           <div onClick={() => setViewBudget(linkedBudget)} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
             <div>
               <p className="text-xs font-semibold text-indigo-700">{linkedBudget.descripcion}</p>
-              <p className="text-[10px] text-indigo-500">{linkedBudget.proyectoAsignado} • {formatCurrency(linkedBudget.montoPresupuestado)}</p>
+              <p className="text-[10px] text-indigo-500">{linkedBudget.projectName} • {formatCurrency(linkedBudget.montoPresupuestado)}</p>
             </div>
             <button onClick={(e) => { e.stopPropagation(); handleUnlink(); }} className="text-slate-400 hover:text-rose-500 transition-colors" title="Desvincular">
               <Unlink size={14} />
@@ -547,7 +1087,7 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
                     <button key={b.id} onClick={() => { handleLink(b.id); setLinking(false); setSearch(''); }}
                       className={clsx("w-full text-left p-2 rounded-lg text-xs transition-colors hover:bg-indigo-50", b.id === ejecucion.budgetId ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700')}>
                       <span className="font-medium">{b.descripcion}</span>
-                      <span className="text-slate-400 ml-2">{b.proyectoAsignado} • {formatCurrency(b.montoPresupuestado)}</span>
+                      <span className="text-slate-400 ml-2">{b.projectName} • {formatCurrency(b.montoPresupuestado)}</span>
                     </button>
                   ))}
                 </div>
@@ -560,9 +1100,183 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
   );
 }
 
+function SettingsEditor({ category, title, items, companyId, onClose }: {
+  category: string; title: string; items: any[]; companyId: string; onClose: () => void;
+}) {
+  const [localItems, setLocalItems] = useState([...items]);
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = () => {
+    setLocalItems(prev => [...prev, { name: '', color: '#6366f1', order: prev.length }]);
+  };
+
+  const handleUpdate = (index: number, field: string, value: any) => {
+    setLocalItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
+  };
+
+  const handleDelete = (index: number) => {
+    setLocalItems(prev => prev.filter((_, i) => i !== index).map((item, i) => ({ ...item, order: i })));
+  };
+
+  const handleMove = (index: number, direction: 'up' | 'down') => {
+    setLocalItems(prev => {
+      const next = [...prev];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next.map((item, i) => ({ ...item, order: i }));
+    });
+  };
+
+  const handleSave = async () => {
+    if (localItems.some((i: any) => !i.name.trim())) return;
+    setSaving(true);
+    const updatePayload = { [category]: localItems.map((item: any, i: number) => ({ ...item, order: i })) };
+    await updateSettings(updatePayload);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
+        <h2 className="font-bold text-slate-800">{title}</h2>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-3">
+        {localItems.map((item: any, index: number) => (
+          <div key={index} className="flex items-center gap-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
+            <div className="flex flex-col gap-0.5">
+              <button onClick={() => handleMove(index, 'up')} disabled={index === 0}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronUp size={14} /></button>
+              <button onClick={() => handleMove(index, 'down')} disabled={index === localItems.length - 1}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} /></button>
+            </div>
+            <input type="color" value={item.color} onChange={e => handleUpdate(index, 'color', e.target.value)}
+              className="w-8 h-8 rounded border border-slate-300 cursor-pointer shrink-0" />
+            <input type="text" value={item.name} onChange={e => handleUpdate(index, 'name', e.target.value)}
+              placeholder="Nombre..." className="flex-1 border border-slate-200 rounded-lg p-2 text-sm focus:border-indigo-500 outline-none" />
+            <button onClick={() => handleDelete(index)}
+              className="text-slate-400 hover:text-red-500 transition-colors shrink-0"><Trash2 size={16} /></button>
+          </div>
+        ))}
+        <button onClick={handleAdd}
+          className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-4 py-3 rounded-lg transition-colors">
+          <Plus size={14} /> Agregar
+        </button>
+      </div>
+      <div className="p-6 border-t border-slate-100 shrink-0">
+        <button onClick={handleSave} disabled={saving || localItems.some((i: any) => !i.name.trim())}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2">
+          <Save size={16} /> {saving ? 'Guardando...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Calculator({ value, onChange, onResult }: { value: string; onChange: (v: string) => void; onResult: (res: number) => void }) {
+  const append = (ch: string) => onChange(value + ch);
+  const clear = () => onChange('');
+  const backspace = () => onChange(value.slice(0, -1));
+  const evaluate = () => {
+    try {
+      const sanitized = value.replace(/[^0-9+\-*/.()]/g, '');
+      if (!sanitized) return;
+      const result = Function(`"use strict"; return (${sanitized})`)();
+      if (typeof result === 'number' && isFinite(result)) onResult(result);
+    } catch { /* ignore */ }
+  };
+
+  // Keyboard support
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const key = e.key;
+    if (key === 'Enter') { e.preventDefault(); evaluate(); }
+    else if (key === 'Escape') { e.preventDefault(); onResult(parseFloat(value) || 0); }
+    else if (key === 'Backspace') { e.preventDefault(); backspace(); }
+    else if (key === 'Delete') { e.preventDefault(); clear(); }
+    else if (/^[0-9+\-*/.()]$/.test(key)) { e.preventDefault(); append(key); }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); evaluate(); }
+      else if (e.key === 'Escape') { e.preventDefault(); onResult(parseFloat(value) || 0); }
+      else if (e.key === 'Backspace') { e.preventDefault(); backspace(); }
+      else if (e.key === 'Delete') { e.preventDefault(); clear(); }
+      else if (/^[0-9+\-*/.()]$/.test(e.key)) { e.preventDefault(); append(e.key); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [value]);
+
+  const btnClass = "p-2 text-xs font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 transition-colors text-center select-none cursor-pointer";
+  const opClass = "p-2 text-xs font-bold rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-700 transition-colors text-center select-none cursor-pointer";
+  return (
+    <div className="mt-2 bg-white border border-slate-200 rounded-xl p-3 shadow-sm" onKeyDown={handleKeyDown}>
+      <div className="bg-slate-50 rounded-lg p-2 mb-2 text-right text-sm font-mono font-bold text-slate-800 min-h-[32px] truncate border border-slate-100">
+        {value || <span className="text-slate-400 font-normal">0</span>}
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <button type="button" onClick={clear} className="p-2 text-xs font-bold rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors">C</button>
+        <button type="button" onClick={backspace} className={opClass}>⌫</button>
+        <button type="button" onClick={() => append('/')} className={opClass}>÷</button>
+        <button type="button" onClick={() => append('*')} className={opClass}>×</button>
+        <button type="button" onClick={() => append('7')} className={btnClass}>7</button>
+        <button type="button" onClick={() => append('8')} className={btnClass}>8</button>
+        <button type="button" onClick={() => append('9')} className={btnClass}>9</button>
+        <button type="button" onClick={() => append('-')} className={opClass}>−</button>
+        <button type="button" onClick={() => append('4')} className={btnClass}>4</button>
+        <button type="button" onClick={() => append('5')} className={btnClass}>5</button>
+        <button type="button" onClick={() => append('6')} className={btnClass}>6</button>
+        <button type="button" onClick={() => append('+')} className={opClass}>+</button>
+        <button type="button" onClick={() => append('1')} className={btnClass}>1</button>
+        <button type="button" onClick={() => append('2')} className={btnClass}>2</button>
+        <button type="button" onClick={() => append('3')} className={btnClass}>3</button>
+        <button type="button" onClick={evaluate} className="p-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors row-span-2">=</button>
+        <button type="button" onClick={() => append('0')} className={`${btnClass} col-span-2`}>0</button>
+        <button type="button" onClick={() => append('.')} className={btnClass}>.</button>
+      </div>
+      <button type="button" onClick={() => { const r = parseFloat(value); if (!isNaN(r)) onResult(r); }}
+        className="w-full mt-2 p-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
+        Usar resultado
+      </button>
+    </div>
+  );
+}
+
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
-function DataPanel({ data, onClose }: { data: SidepanelData; onClose: () => void }) {
+function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; projects?: Project[] }) {
+  // Parse title "Proyecto / Mes" for cell-level data
+  const titleParts = data.title?.split(' / ') || [];
+  const cellProjectName = titleParts.length === 2 ? titleParts[0] : '';
+  const cellMonth = titleParts.length === 2 ? titleParts[1] : '';
+  const cellProject = projects?.find(p => p.name === cellProjectName || p.id === cellProjectName);
+
+  const handleAddFromCell = (formType: 'budget' | 'ejecucion') => {
+    if (!cellProjectName || !cellMonth) return;
+    const monthIndex = MONTHS.indexOf(cellMonth as Month);
+    if (monthIndex < 0) return;
+    const currentYear = new Date().getFullYear();
+    const defaults: Record<string, string> = {
+      projectName: cellProjectName,
+      tipo: data.tipo,
+    };
+    if (cellProject) defaults.projectId = cellProject.id;
+    if (cellProject?.clientName) {
+      defaults.entityName = cellProject.clientName;
+      defaults.entityType = 'client';
+    }
+    if (formType === 'budget') {
+      defaults.mesPresupuestado = cellMonth;
+      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+    } else {
+      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+    }
+    onEditCellRecord?.({ mode: 'add', type: formType, defaults });
+  };
+
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <div className="p-6 border-b border-slate-100 shrink-0">
@@ -575,18 +1289,62 @@ function DataPanel({ data, onClose }: { data: SidepanelData; onClose: () => void
           <p className="text-sm font-bold mt-1">{data.title}</p>
           <p className="text-xs mt-1 opacity-80">{data.subtitle}</p>
         </div>
+        {cellProjectName && cellMonth && (
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => handleAddFromCell('budget')}
+              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+              <Plus size={13} /> {data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} Presupuestado
+            </button>
+            <button onClick={() => handleAddFromCell('ejecucion')}
+              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-lg transition-colors">
+              <Plus size={13} /> {data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} Ejecutado
+            </button>
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => (
-          <div key={b.id} className="flex justify-between items-start border-b border-slate-50 pb-2 mb-2">
-            <div><p className="text-xs font-semibold text-slate-700">{b.descripcion}</p><p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.clienteOProveedor}</p></div>
-            <p className="text-xs font-bold text-slate-800">{formatCurrency(b.montoPresupuestado)}</p>
+          <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
+            <div className="flex items-start justify-between mb-1">
+              <div className="flex-1 min-w-0 mr-2">
+                <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
+                <p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.entityName}</p>
+              </div>
+              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
+            </div>
+            <div className="flex gap-1.5 mt-1.5">
+              <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                <Save size={11} /> Editar
+              </button>
+              <button onClick={() => onEditCellRecord?.({ mode: 'add', type: 'ejecucion', defaults: {
+                projectId: b.projectId || '',
+                projectName: b.projectName || '',
+                entityId: b.entityId || '',
+                entityName: b.entityName || '',
+                entityType: b.entityType || 'client',
+                tipo: b.tipo,
+                budgetId: b.id,
+              }})}
+                className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
+                <Plus size={11} /> + Ejecución
+              </button>
+            </div>
           </div>
         ))}</div>
         <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>{data.ejecuciones.map(e => (
-          <div key={e.id} className="flex justify-between items-start border-b border-slate-50 pb-2 mb-2">
-            <div><p className="text-xs font-semibold text-slate-700">{e.descripcion}</p><p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.clienteOProveedor}</p></div>
-            <p className="text-xs font-bold text-slate-800">{formatCurrency(e.montoEjecutado)}</p>
+          <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
+            <div className="flex items-start justify-between mb-1">
+              <div className="flex-1 min-w-0 mr-2">
+                <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
+                <p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.entityName}</p>
+              </div>
+              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
+            </div>
+            <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
+              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+              <Save size={11} /> Editar
+            </button>
           </div>
         ))}</div>
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
