@@ -159,6 +159,7 @@ export function subscribeBudgets(
           mesPresupuestado: data.mesPresupuestado ?? 'Enero',
           fechaPresupuestado: data.fechaPresupuestado ?? '',
           estadoProyecto: data.estadoProyecto ?? 'Activo',
+          archivado: data.archivado ?? false,
         } as Budget;
       }));
     },
@@ -189,6 +190,7 @@ export function subscribeEjecuciones(
           fechaEjecutado: data.fechaEjecutado ?? '',
           budgetId: data.budgetId ?? undefined,
           comprobantes: data.comprobantes ?? [],
+          archivado: data.archivado ?? false,
         } as Ejecucion;
       }));
     },

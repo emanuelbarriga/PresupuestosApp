@@ -99,6 +99,7 @@ export interface Budget {
   mesPresupuestado: Month;
   fechaPresupuestado: string;
   estadoProyecto: ProjectState;
+  archivado?: boolean;
 }
 
 export interface Ejecucion {
@@ -114,6 +115,7 @@ export interface Ejecucion {
   fechaEjecutado: string;
   budgetId?: string;
   comprobantes: Comprobante[];
+  archivado?: boolean;
 }
 
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración';

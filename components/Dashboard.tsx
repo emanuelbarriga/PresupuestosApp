@@ -143,6 +143,7 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
   const [centerMonthIdx, setCenterMonthIdx] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
+  const [showArchivados, setShowArchivados] = useState(false);
   const [ingresoTotals, setIngresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
   const [egresoTotals, setEgresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
 
@@ -183,12 +184,12 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
 
   const yearStr = String(selectedYear);
   const filteredBudgets = useMemo(
-    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr)),
-    [budgets, yearStr],
+    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) && (showArchivados || !b.archivado)),
+    [budgets, yearStr, showArchivados],
   );
   const filteredEjecuciones = useMemo(
-    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr)),
-    [ejecuciones, yearStr],
+    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr) && (showArchivados || !e.archivado)),
+    [ejecuciones, yearStr, showArchivados],
   );
 
   const hasTerceroData = filteredBudgets.length > 0 || filteredEjecuciones.length > 0;
@@ -245,6 +246,9 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           )} */}
           <button onClick={() => setShowNegociacion(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
             Negociación {showNegociacion ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
           </button>
         </div>
       </header>

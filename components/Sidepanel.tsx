@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
 import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
@@ -77,7 +77,7 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
       ) : recordDetail ? (
         <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : data ? (
-        <DataPanel data={data} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
+        <DataPanel data={data} companyId={companyId} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : null}
     </aside>
   );
@@ -1578,8 +1578,22 @@ function Calculator({ value, onChange, onResult }: { value: string; onChange: (v
 
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
-function DataPanel({ data, onClose, onNavigate, projects, canGoBack, onBack }: { data: SidepanelData; onClose: () => void; onNavigate: (screen: NavScreen) => void; projects?: Project[]; canGoBack: boolean; onBack: () => void }) {
+function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, onBack }: { data: SidepanelData; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void; projects?: Project[]; canGoBack: boolean; onBack: () => void }) {
   const [expandedEj, setExpandedEj] = useState<string | null>(null);
+  const [archiveConfirm, setArchiveConfirm] = useState<{ type: 'budget' | 'ejecucion'; id: string } | null>(null);
+
+  const handleArchive = async (type: 'budget' | 'ejecucion', id: string) => {
+    try {
+      if (type === 'budget') {
+        await updateBudget(companyId, id, { archivado: true });
+      } else {
+        await updateEjecucion(companyId, id, { archivado: true });
+      }
+    } catch (err) {
+      console.error('Archive failed:', err);
+    }
+    setArchiveConfirm(null);
+  };
   // Parse title "Proyecto / Mes" for cell-level data
   const titleParts = data.title?.split(' / ') || [];
   const cellProjectName = titleParts.length === 2 ? titleParts[0] : '';
@@ -1672,6 +1686,23 @@ function DataPanel({ data, onClose, onNavigate, projects, canGoBack, onBack }: {
                   className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
                   <Plus size={11} /> Ejecutar
                 </button>
+                {archiveConfirm?.id === b.id && archiveConfirm?.type === 'budget' ? (
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleArchive('budget', b.id)}
+                      className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                      Confirmar
+                    </button>
+                    <button onClick={() => setArchiveConfirm(null)}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setArchiveConfirm({ type: 'budget', id: b.id })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                    <Trash2 size={11} /> Archivar
+                  </button>
+                )}
               </div>
             </div>
           )})}</div>
@@ -1703,6 +1734,23 @@ function DataPanel({ data, onClose, onNavigate, projects, canGoBack, onBack }: {
                     className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
                     <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
                   </button>
+                  {archiveConfirm?.id === e.id && archiveConfirm?.type === 'ejecucion' ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleArchive('ejecucion', e.id)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                        Confirmar
+                      </button>
+                      <button onClick={() => setArchiveConfirm(null)}
+                        className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setArchiveConfirm({ type: 'ejecucion', id: e.id })}
+                      className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                      <Trash2 size={11} /> Archivar
+                    </button>
+                  )}
                 </div>
                 {/* Siempre mostrar comprobantes si existen */}
                 {cCount > 0 && (
