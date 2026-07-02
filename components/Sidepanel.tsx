@@ -1060,7 +1060,7 @@ function MiniEjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; com
 }
 
 function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [modal, setModal] = useState<Comprobante | null>(null);
 
   if (comprobantes.length === 0) return null;
 
@@ -1077,28 +1077,61 @@ function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
                 src={c.url}
                 alt={c.name}
                 className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity shrink-0"
-                onClick={() => setLightbox(c.url)}
+                onClick={() => setModal(c)}
               />
             ) : (
-              <FileText size={22} className="text-slate-400 shrink-0" />
+              <button onClick={() => setModal(c)} className="shrink-0">
+                <FileText size={22} className="text-slate-400 hover:text-indigo-600 transition-colors" />
+              </button>
             )}
-            <div className="flex-1 min-w-0">
+            <button className="flex-1 min-w-0 text-left" onClick={() => setModal(c)}>
               <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
               <p className="text-[10px] text-slate-400">
                 {c.type === 'application/pdf' ? 'PDF' : c.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(c.size)}
                 {c.uploadedAt && ` · ${new Date(c.uploadedAt).toLocaleDateString('es-CO')}`}
               </p>
-            </div>
+            </button>
             <a href={c.url} target="_blank" rel="noopener noreferrer"
-              className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" title="Abrir">
+              className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" title="Abrir en nueva pestaña">
               <Download size={16} />
             </a>
           </div>
         ))}
       </div>
-      {lightbox && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="Comprobante" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+
+      {/* Modal unificado para imágenes y PDFs */}
+      {modal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 md:p-8" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">{modal.name}</p>
+                <p className="text-[10px] text-slate-400">
+                  {modal.type === 'application/pdf' ? 'PDF' : modal.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(modal.size)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <a href={modal.url} target="_blank" rel="noopener noreferrer"
+                  className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-all" title="Descargar">
+                  <Download size={18} />
+                </a>
+                <button onClick={() => setModal(null)}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-2 bg-slate-100/50 flex items-center justify-center min-h-[300px]">
+              {modal.type.startsWith('image/') ? (
+                <img src={modal.url} alt={modal.name} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+              ) : (
+                <iframe src={modal.url} className="w-full h-[70vh] rounded-lg" title={modal.name} />
+              )}
+            </div>
+          </div>
         </div>
       )}
     </>
