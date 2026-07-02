@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Project, Client } from '@/lib/types';
-import { subscribeProjects, subscribeClients, subscribeBudgets, updateEjecucion, addEjecucion } from '@/lib/firestore';
+import { subscribeProjects, subscribeClients, subscribeProviders, subscribeBudgets, updateEjecucion, addEjecucion, addClient, addProject } from '@/lib/firestore';
 import { X, FileText, Bell, Settings, Filter, ChevronDown, Plus, Search, Link2, Unlink } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -45,12 +45,37 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
   const [fields, setFields] = useState<Record<string, string>>({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectClient, setNewProjectClient] = useState('');
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeProjects(companyId, setProjects), subscribeClients(setClients), subscribeBudgets(companyId, setAllBudgets)];
+    const unsubs = [subscribeProjects(companyId, setProjects), subscribeClients(setClients), subscribeProviders(setProviders), subscribeBudgets(companyId, setAllBudgets)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
+
+  const clientsAndProviders = [...clients.map(c => ({ value: c.name, label: c.name, type: 'client' })), ...providers.map(p => ({ value: p.name, label: p.name, type: 'provider' }))];
+
+  const handleCreateClient = async () => {
+    if (!newClientName.trim()) return;
+    await addClient({ name: newClientName.trim() });
+    set('clienteOProveedor', newClientName.trim());
+    setNewClientName('');
+    setShowNewClient(false);
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+    await addProject(companyId, { name: newProjectName.trim(), clientName: newProjectClient.trim() || 'Sin cliente', clientId: '', estado: 'Activo' });
+    set('proyectoAsignado', newProjectName.trim());
+    setNewProjectName('');
+    setNewProjectClient('');
+    setShowNewProject(false);
+  };
 
   useEffect(() => {
     if (form.mode === 'edit') {
@@ -114,7 +139,36 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         <TipoSwitch value={f('tipo')} onChange={v => set('tipo', v)} />
         <SearchableSelect label="Proyecto" value={f('proyectoAsignado')} onChange={v => set('proyectoAsignado', v)} options={projects.map(p => ({ value: p.name, label: p.name }))} placeholder="Buscar proyecto..." />
-        <SearchableSelect label="Cliente / Proveedor" value={f('clienteOProveedor')} onChange={v => set('clienteOProveedor', v)} options={clients.map(c => ({ value: c.name, label: c.name }))} placeholder="Buscar cliente..." />
+        {!showNewProject && (
+          <button onClick={() => setShowNewProject(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
+            <Plus size={12} /> Nuevo proyecto
+          </button>
+        )}
+        {showNewProject && (
+          <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
+            <input type="text" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="Nombre del proyecto" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" autoFocus />
+            <input type="text" value={newProjectClient} onChange={e => setNewProjectClient(e.target.value)} placeholder="Cliente (opcional)" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" />
+            <div className="flex gap-2">
+              <button onClick={handleCreateProject} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 text-[11px] font-bold">Crear</button>
+              <button onClick={() => setShowNewProject(false)} className="px-3 text-slate-500 hover:text-slate-700 text-[11px] font-bold">Cancelar</button>
+            </div>
+          </div>
+        )}
+        <SearchableSelect label="Cliente / Proveedor" value={f('clienteOProveedor')} onChange={v => set('clienteOProveedor', v)} options={clientsAndProviders} placeholder="Buscar cliente o proveedor..." />
+        {!showNewClient && (
+          <button onClick={() => setShowNewClient(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
+            <Plus size={12} /> Nuevo cliente
+          </button>
+        )}
+        {showNewClient && (
+          <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
+            <input type="text" value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="Nombre del cliente" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" autoFocus />
+            <div className="flex gap-2">
+              <button onClick={handleCreateClient} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 text-[11px] font-bold">Crear</button>
+              <button onClick={() => setShowNewClient(false)} className="px-3 text-slate-500 hover:text-slate-700 text-[11px] font-bold">Cancelar</button>
+            </div>
+          </div>
+        )}
         <FormInput label="Descripción" value={f('descripcion')} onChange={v => set('descripcion', v)} />
         <FormInput label={ft === 'budget' ? 'Monto Presupuestado' : 'Monto Ejecutado'} value={f(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado')} onChange={v => set(ft === 'budget' ? 'montoPresupuestado' : 'montoEjecutado', v)} type="number" />
         {ft === 'budget' && (

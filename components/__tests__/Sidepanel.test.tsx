@@ -51,6 +51,10 @@ vi.mock('@/lib/firestore', () => ({
     onClientsCallback = onData;
     return mockUnsub;
   }),
+  subscribeProviders: vi.fn((onData: (data: any[]) => void) => {
+    onData([]);
+    return mockUnsub;
+  }),
   subscribeBudgets: vi.fn(
     (_companyId: string, onData: (data: any[]) => void) => {
       onBudgetsCallback = onData;
@@ -59,6 +63,8 @@ vi.mock('@/lib/firestore', () => ({
   ),
   updateEjecucion: vi.fn().mockResolvedValue(undefined),
   addEjecucion: vi.fn().mockResolvedValue('new-id'),
+  addClient: vi.fn().mockResolvedValue('new-id'),
+  addProject: vi.fn().mockResolvedValue('new-id'),
 }));
 
 // ─── Imports (resolved after mocks) ─────────────────────────────────────────

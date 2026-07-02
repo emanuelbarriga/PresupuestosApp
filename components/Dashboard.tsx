@@ -303,7 +303,7 @@ function Matrix({ tipo, mode, onCellClick, visibleMonths, budgets, ejecuciones }
                   <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
                     <div className="flex flex-col gap-1">
                       <span className="font-semibold truncate text-slate-800">{row.proyecto}</span>
-                      <span className="text-[10px] truncate text-slate-500">{row.cliente}</span>
+                      {tipo === 'ingreso' && <span className="text-[10px] truncate text-slate-500">{row.cliente}</span>}
                       <div><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span></div>
                     </div>
                   </td>
