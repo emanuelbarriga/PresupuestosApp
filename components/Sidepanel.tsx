@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -1535,6 +1535,7 @@ function Calculator({ value, onChange, onResult }: { value: string; onChange: (v
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
 function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; projects?: Project[] }) {
+  const [expandedEj, setExpandedEj] = useState<string | null>(null);
   // Parse title "Proyecto / Mes" for cell-level data
   const titleParts = data.title?.split(' / ') || [];
   const cellProjectName = titleParts.length === 2 ? titleParts[0] : '';
@@ -1619,21 +1620,43 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
             </div>
           </div>
         ))}</div>
-        <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>{data.ejecuciones.map(e => (
-          <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
-            <div className="flex items-start justify-between mb-1">
-              <div className="flex-1 min-w-0 mr-2">
-                <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
-                <p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.entityName}</p>
+        {(() => {
+          const items: ReactNode[] = [];
+          items.push(<p key="title" className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>);
+          data.ejecuciones.forEach(e => {
+            const hasFiles = e.comprobantes && e.comprobantes.length > 0;
+            const isOpen = expandedEj === e.id;
+            items.push(
+              <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex-1 min-w-0 mr-2">
+                    <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
+                    <p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.entityName}</p>
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                    <Save size={11} /> Editar
+                  </button>
+                  {hasFiles && (
+                    <button onClick={() => setExpandedEj(isOpen ? null : e.id)}
+                      className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
+                      {isOpen ? <ChevronUp size={11} /> : <Paperclip size={11} />} {e.comprobantes.length} comprobante{(e.comprobantes.length !== 1 ? 's' : '')}
+                    </button>
+                  )}
+                </div>
+                {isOpen && hasFiles && (
+                  <div className="mt-2">
+                    <ComprobantesViewer comprobantes={e.comprobantes} />
+                  </div>
+                )}
               </div>
-              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
-            </div>
-            <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-              <Save size={11} /> Editar
-            </button>
-          </div>
-        ))}</div>
+            );
+          });
+          return items;
+        })()}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Presupuestado</span><span className="text-slate-700 font-bold">{formatCurrency(data.presupuestado)}</span></div>
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Ejecutado</span><span className="text-slate-700 font-bold">{formatCurrency(data.ejecutado)}</span></div>
