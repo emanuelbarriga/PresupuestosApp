@@ -11,6 +11,8 @@ const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 
 
 interface DashboardProps {
   onCellClick: (data: SidepanelData) => void;
+  onProjectClick?: (projectName: string) => void;
+  onEmptyCellClick?: (project: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
   budgets: Budget[];
   ejecuciones: Ejecucion[];
 }
@@ -20,7 +22,7 @@ const getMonthFromDateStr = (dateString: string): Month => {
   return MONTHS[monthIndex];
 };
 
-export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps) {
+export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, budgets, ejecuciones }: DashboardProps) {
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
   const [timeView, setTimeView] = useState<'year' | '5months'>('year');
   const [centerMonthIdx, setCenterMonthIdx] = useState<number>(new Date().getMonth());
@@ -82,8 +84,8 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
       </header>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
-        <Matrix tipo="egreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
+        <Matrix tipo="ingreso" mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
+        <Matrix tipo="egreso" mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
       </div>
     </div>
   );
@@ -93,12 +95,14 @@ interface MatrixProps {
   tipo: TransactionType;
   mode: 'Presupuestado' | 'Ejecutado';
   onCellClick: (data: SidepanelData) => void;
+  onProjectClick?: (projectName: string) => void;
+  onEmptyCellClick?: (project: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
   visibleMonths: Month[];
   budgets: Budget[];
   ejecuciones: Ejecucion[];
 }
 
-function Matrix({ tipo, mode, onCellClick, visibleMonths, budgets, ejecuciones }: MatrixProps) {
+function Matrix({ tipo, mode, onCellClick, onProjectClick, onEmptyCellClick, visibleMonths, budgets, ejecuciones }: MatrixProps) {
   const isP = mode === 'Presupuestado';
   const colorTheme = tipo === 'ingreso' ? 'text-emerald-600' : 'text-rose-600';
   const hoverBgTheme = tipo === 'ingreso' ? (isP ? 'hover:bg-emerald-50 hover:text-emerald-700' : 'hover:bg-emerald-50/50 hover:text-emerald-700') : (isP ? 'hover:bg-rose-50 hover:text-rose-700' : 'hover:bg-rose-50/50 hover:text-rose-700');
@@ -295,16 +299,20 @@ function Matrix({ tipo, mode, onCellClick, visibleMonths, budgets, ejecuciones }
             </tr>
           </thead>
           <tbody className={clsx("text-[11px] divide-y", isP ? "divide-sky-50" : "divide-slate-100")}>
-            {matrixData.rows.length === 0 ? (
-              <tr><td colSpan={visibleMonths.length + 2} className="p-4 text-center text-slate-500 italic">No hay datos de {tipo}s.</td></tr>
-            ) : (
-              matrixData.rows.map((row) => (
+            {(() => {
+              const visibleRows = matrixData.rows.filter(row => {
+                const total = mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado;
+                return total > 0;
+              });
+              if (visibleRows.length === 0) {
+                return <tr><td colSpan={visibleMonths.length + 2} className="p-4 text-center text-slate-500 italic">No hay datos de {tipo}s.</td></tr>;
+              }
+              return visibleRows.map((row) => (
                 <tr key={row.proyecto} className={clsx("transition-colors group", isP ? "hover:bg-sky-50/40" : "hover:bg-slate-50")}>
                   <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold truncate text-slate-800">{row.proyecto}</span>
-                      {tipo === 'ingreso' && <span className="text-[10px] truncate text-slate-500">{row.cliente}</span>}
-                      <div><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span></div>
+                      <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span>
                     </div>
                   </td>
                   {visibleMonths.map(m => {
@@ -325,8 +333,8 @@ function Matrix({ tipo, mode, onCellClick, visibleMonths, budgets, ejecuciones }
                     {formatCurrency(mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado)}
                   </td>
                 </tr>
-              ))
-            )}
+              ));
+            })()}
           </tbody>
           <tfoot className={clsx("font-bold text-[11px]", isP ? "bg-sky-900 text-white" : "bg-slate-900 text-white")}>
             <tr>

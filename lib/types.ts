@@ -86,7 +86,7 @@ export type RecordDetail =
 export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider';
 
 export type ActiveForm =
-  | { mode: 'add'; type: FormType }
+  | { mode: 'add'; type: FormType; defaults?: Record<string, string> }
   | { mode: 'edit'; type: 'budget'; record: Budget }
   | { mode: 'edit'; type: 'ejecucion'; record: Ejecucion }
   | { mode: 'edit'; type: 'project'; record: Project }
