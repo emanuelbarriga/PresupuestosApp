@@ -11,6 +11,7 @@ export interface SettingsCategorias {
   stateProject: SettingsItem[];
   tipoProyectos: SettingsItem[];
   unidades: SettingsItem[];
+  tipoComprobante: SettingsItem[];
   updatedAt?: string;
 }
 
@@ -43,6 +44,8 @@ export interface Comprobante {
   type: string;
   size: number;
   uploadedAt: string;
+  descripcion?: string;
+  tipo?: string;
 }
 
 /** Unified third-party — stores clients AND providers in /terceros collection */

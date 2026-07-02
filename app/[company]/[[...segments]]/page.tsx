@@ -251,7 +251,7 @@ export default function CompanyPage({ params }: Props) {
           await addBudget(companyId, data as Omit<Budget, 'id'>);
           break;
         case 'ejecucion': {
-          const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number }> | undefined;
+          const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number; descripcion?: string; tipo?: string }> | undefined;
           delete data._pendingComprobantes;
           const docId = await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
           if (pendingFiles && pendingFiles.length > 0) {
@@ -267,6 +267,8 @@ export default function CompanyPage({ params }: Props) {
                   type: pf.type,
                   size: pf.size,
                   uploadedAt: new Date().toISOString(),
+                  descripcion: pf.descripcion || undefined,
+                  tipo: pf.tipo || undefined,
                 };
               }),
             );

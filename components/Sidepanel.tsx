@@ -22,6 +22,8 @@ interface PendingComprobante {
   name: string;
   type: string;
   size: number;
+  descripcion?: string;
+  tipo?: string;
 }
 
 interface SidepanelProps {
@@ -89,7 +91,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
   // Custom tipo/unidad for project form
   const [customTipo, setCustomTipo] = useState('');
   const [customUnidad, setCustomUnidad] = useState('');
-  const [settingsCat, setSettingsCat] = useState<SettingsCategorias | null>(null);
+  const [settingsData, setSettingsData] = useState<SettingsCategorias | null>(null);
 
   // Comprobantes state
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
@@ -99,7 +101,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsCat)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsData)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 
@@ -324,7 +326,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
               </div>
             ) : (
               <ColorSelect value={f('tipoProyectos')} onChange={v => set('tipoProyectos', v)}
-                items={(settingsCat?.tipoProyectos || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                items={(settingsData?.tipoProyectos || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
                 placeholder="Seleccionar..." allowCustom />
             )}
           </div>
@@ -339,7 +341,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
               </div>
             ) : (
               <ColorSelect value={f('unidades')} onChange={v => set('unidades', v)}
-                items={(settingsCat?.unidades || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                items={(settingsData?.unidades || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
                 placeholder="Seleccionar..." allowCustom />
             )}
           </div>
@@ -366,7 +368,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
             <ColorSelect
               value={f('estado')}
               onChange={v => set('estado', v)}
-              items={(settingsCat?.stateProject || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+              items={(settingsData?.stateProject || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
               placeholder="Seleccionar..."
             />
           </div>
@@ -539,6 +541,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
                 mode={form.mode === 'add' ? 'add' : 'edit'}
                 pendingComprobantes={pendingComprobantes}
                 onPendingChange={setPendingComprobantes}
+                tiposComprobante={settingsData?.tipoComprobante || []}
               />
             </div>
           </>
@@ -1085,7 +1088,10 @@ function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
               </button>
             )}
             <button className="flex-1 min-w-0 text-left" onClick={() => setModal(c)}>
-              <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
+              <p className="text-xs font-semibold text-slate-700 truncate">
+                {c.descripcion || c.name}
+                {c.tipo && <span className="ml-1.5 text-[9px] text-indigo-500 font-normal">({c.tipo})</span>}
+              </p>
               <p className="text-[10px] text-slate-400">
                 {c.type === 'application/pdf' ? 'PDF' : c.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(c.size)}
                 {c.uploadedAt && ` · ${new Date(c.uploadedAt).toLocaleDateString('es-CO')}`}
@@ -1107,9 +1113,10 @@ function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">{modal.name}</p>
+                <p className="text-sm font-bold text-slate-800 truncate">{modal.descripcion || modal.name}</p>
                 <p className="text-[10px] text-slate-400">
                   {modal.type === 'application/pdf' ? 'PDF' : modal.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(modal.size)}
+                  {modal.tipo && <span className="ml-2 text-indigo-500">({modal.tipo})</span>}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-4">
@@ -1146,6 +1153,7 @@ function ComprobanteUploader({
   mode,
   pendingComprobantes,
   onPendingChange,
+  tiposComprobante,
 }: {
   companyId: string;
   ejecucionId?: string;
@@ -1154,11 +1162,14 @@ function ComprobanteUploader({
   mode: 'add' | 'edit';
   pendingComprobantes?: PendingComprobante[];
   onPendingChange?: (updated: PendingComprobante[]) => void;
+  tiposComprobante: SettingsItem[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [newTipo, setNewTipo] = useState('');
+  const [newDesc, setNewDesc] = useState('');
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1173,7 +1184,9 @@ function ComprobanteUploader({
     }
 
     if (mode === 'add' && onPendingChange) {
-      onPendingChange([...(pendingComprobantes || []), { id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size }]);
+      onPendingChange([...(pendingComprobantes || []), { id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size, descripcion: newDesc, tipo: newTipo }]);
+      setNewDesc('');
+      setNewTipo('');
     } else if (mode === 'edit' && ejecucionId) {
       setUploading(true);
       setUploadProgress(0);
@@ -1190,10 +1203,14 @@ function ComprobanteUploader({
           type: file.type,
           size: file.size,
           uploadedAt: new Date().toISOString(),
+          descripcion: newDesc || undefined,
+          tipo: newTipo || undefined,
         };
         const updated = [...comprobantes, newComp];
         onComprobantesChange(updated);
         await updateEjecucion(companyId, ejecucionId, { comprobantes: updated });
+        setNewDesc('');
+        setNewTipo('');
       } catch (err) {
         console.error('Upload failed:', err);
         setValidationError('Error al subir el archivo');
@@ -1223,6 +1240,22 @@ function ComprobanteUploader({
 
   return (
     <div className="space-y-2">
+      {/* Descripción + Tipo antes de subir */}
+      <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+        placeholder="Descripción del comprobante (opcional)"
+        className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
+      {tiposComprobante.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {tiposComprobante.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(t => (
+            <button key={t.name} type="button" onClick={() => setNewTipo(newTipo === t.name ? '' : t.name)}
+              className={clsx("px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors",
+                newTipo === t.name ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}>
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileSelect} className="hidden" />
       <button onClick={() => fileInputRef.current?.click()}
         className="flex items-center justify-center gap-1.5 w-full text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
@@ -1254,8 +1287,8 @@ function ComprobanteUploader({
             <FileText size={16} className="text-slate-400 shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-medium text-slate-700 truncate">{c.name}</p>
-            <p className="text-[9px] text-slate-400">{formatFileSize(c.size)}</p>
+            <p className="text-[11px] font-medium text-slate-700 truncate">{c.descripcion || c.name}</p>
+            <p className="text-[9px] text-slate-400">{formatFileSize(c.size)}{c.tipo && <span className="ml-1.5 text-indigo-500">({c.tipo})</span>}</p>
           </div>
           <a href={c.url} target="_blank" rel="noopener noreferrer"
             className="text-slate-400 hover:text-indigo-600 shrink-0" title="Descargar">

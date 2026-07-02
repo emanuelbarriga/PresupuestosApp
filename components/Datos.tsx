@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem } from '@/lib/types';
 import { subscribeProjects, subscribeTerceros, subscribeSettings } from '@/lib/firestore';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -400,6 +400,7 @@ export function Datos({
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Cliente/Prov.</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Comp.</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Monto</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
@@ -411,16 +412,21 @@ export function Datos({
                         <td className="p-3 font-semibold text-slate-700">
                           <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasLink ? 'bg-emerald-400' : 'bg-amber-400')} title={hasLink ? 'Vinculado a presupuesto' : 'Sin presupuesto vinculado'} />
                           {e.descripcion}
-                          {e.comprobantes && e.comprobantes.length > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold" title={`${e.comprobantes.length} comprobante(s)`}>
-                              {e.comprobantes.length}
-                            </span>
-                          )}
                         </td>
                         <td className="p-3 text-slate-600">{e.projectName}</td>
                         <td className="p-3 text-slate-500">{e.entityName}</td>
                         <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", e.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700')}>{e.tipo}</span></td>
                         <td className="p-3 text-slate-600">{e.fechaEjecutado}</td>
+                        <td className="p-3 text-center">
+                          {e.comprobantes && e.comprobantes.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-indigo-600" title={`${e.comprobantes.length} comprobante(s)`}>
+                              <Paperclip size={13} />
+                              <span className="text-[10px] font-bold">{e.comprobantes.length}</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(e.montoEjecutado)}</td>
                         <ActionCell><EditBtn onClick={() => edit('ejecucion', e)} /></ActionCell>
                       </tr>);
@@ -582,6 +588,25 @@ export function Datos({
                 </div>
                 <div className="p-4 flex flex-wrap gap-2">
                   {(settingsData?.unidades || [])
+                    .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+                    .map((s: any) => (
+                      <span key={s.name} className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ backgroundColor: s.color + '20', color: s.color, borderColor: s.color + '40' }}>
+                        {s.name}
+                      </span>
+                    ))}
+                </div>
+              </div>
+
+              {/* TipoComprobante */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => onViewRecord?.({ type: 'settings-editor', category: 'tipoComprobante', title: 'Tipos de Comprobante', items: settingsData?.tipoComprobante || [] })}>
+                  <h3 className="text-sm font-bold text-slate-700">Tipos de Comprobante</h3>
+                  <ChevronRight size={16} className="text-slate-400" />
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {(settingsData?.tipoComprobante || [])
                     .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
                     .map((s: any) => (
                       <span key={s.name} className="px-3 py-1.5 rounded-lg text-xs font-medium border"

@@ -123,6 +123,7 @@ export function subscribeSettings(
           stateProject: normalize(d.stateProject) ?? [],
           tipoProyectos: normalize(d.tipoProyectos) ?? [],
           unidades: normalize(d.unidades) ?? [],
+          tipoComprobante: normalize(d.tipoComprobante) ?? [],
           updatedAt: d.updatedAt,
         } as SettingsCategorias);
       }
