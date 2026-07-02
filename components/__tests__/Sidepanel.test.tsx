@@ -1671,7 +1671,7 @@ describe('Sidepanel', () => {
   // ═════════════════════════════════════════════════════════════════════════
 
   describe('R16 — Comprobantes: upload form + display', () => {
-    it('3.1a ADD ejecucion form muestra "Agregar comprobante" y "Comprobantes" sección', () => {
+    it('3.1a ADD ejecucion form muestra "Seleccionar archivos" y "Comprobantes" sección', () => {
       render(
         <Sidepanel
           data={null}
@@ -1683,8 +1683,7 @@ describe('Sidepanel', () => {
         />,
       );
 
-      expect(screen.getByText('Comprobantes')).toBeInTheDocument();
-      expect(screen.getByText('Agregar comprobante')).toBeInTheDocument();
+      expect(screen.getByText('Seleccionar archivos')).toBeInTheDocument();
     });
 
     it('3.1b ADD form submit sin comprobantes no añade _pendingComprobantes al payload', async () => {

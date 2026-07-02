@@ -345,7 +345,7 @@ export default function CompanyPage({ params }: Props) {
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
             companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
-            onCellClick={handleCellClick}
+            onCellClick={handleCellClick} onViewRecord={handleViewRecord}
             onEditProject={(project) => {
               setSidepanelData(null);
               setRecordDetail(null);

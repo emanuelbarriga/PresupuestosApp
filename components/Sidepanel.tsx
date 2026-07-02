@@ -37,10 +37,11 @@ interface SidepanelProps {
   onEditTercero?: (tercero: Tercero) => void;
   onEditCellRecord?: (form: ActiveForm) => void;
   onCellClick?: (data: SidepanelData) => void;
+  onViewRecord?: (detail: RecordDetail) => void;
   projects?: Project[];
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onEditCellRecord, onCellClick, projects }: SidepanelProps) {
+export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onEditCellRecord, onCellClick, onViewRecord, projects }: SidepanelProps) {
   const visible = data || recordDetail || activeForm;
 
   return (
@@ -57,7 +58,7 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
       ) : recordDetail ? (
         <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onEditProject={onEditProject} onEditTercero={onEditTercero} onCellClick={onCellClick} projects={projects} />
       ) : data ? (
-        <DataPanel data={data} onClose={onClose} onEditCellRecord={onEditCellRecord} projects={projects} />
+        <DataPanel data={data} onClose={onClose} onEditCellRecord={onEditCellRecord} onViewRecord={onViewRecord} projects={projects} />
       ) : null}
     </aside>
   );
@@ -1170,58 +1171,81 @@ function ComprobanteUploader({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [newTipo, setNewTipo] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<PendingComprobante[]>([]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const addFilesToList = (files: FileList | null) => {
+    if (!files) return;
     setValidationError('');
-
-    const validation = validateFile(file);
-    if (!validation.valid) {
-      setValidationError(validation.error);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
+    const newItems: PendingComprobante[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        setValidationError(prev => prev ? `${prev}; ${file.name}: ${validation.error}` : `${file.name}: ${validation.error}`);
+        continue;
+      }
+      newItems.push({ id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size, descripcion: newDesc, tipo: newTipo });
     }
-
-    if (mode === 'add' && onPendingChange) {
-      onPendingChange([...(pendingComprobantes || []), { id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size, descripcion: newDesc, tipo: newTipo }]);
+    if (newItems.length > 0) {
+      // If ADD mode, use pendingComprobantes. If EDIT, use selectedFiles (local queue)
+      if (mode === 'add' && onPendingChange) {
+        onPendingChange([...(pendingComprobantes || []), ...newItems]);
+      } else {
+        setSelectedFiles(prev => [...prev, ...newItems]);
+      }
       setNewDesc('');
       setNewTipo('');
-    } else if (mode === 'edit' && ejecucionId) {
-      setUploading(true);
-      setUploadProgress(0);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const uploadAll = async () => {
+    if (!ejecucionId || selectedFiles.length === 0) return;
+    setUploading(true);
+    setUploadProgress(0);
+    let uploaded = 0;
+    const total = selectedFiles.length;
+    const newComprobantes: Comprobante[] = [];
+
+    for (const pf of selectedFiles) {
       try {
-        const path = generateFilePath(companyId, ejecucionId, file.name);
-        const result = await uploadFile(file, path, (progress) => {
-          setUploadProgress(progress);
-        });
-        const newComp: Comprobante = {
+        const path = generateFilePath(companyId, ejecucionId, pf.name);
+        const result = await uploadFile(pf.file, path, (p) => setUploadProgress(((uploaded + p / 100) / total) * 100));
+        newComprobantes.push({
           id: crypto.randomUUID(),
-          name: file.name,
+          name: pf.name,
           url: result.url,
           path: result.path,
-          type: file.type,
-          size: file.size,
+          type: pf.type,
+          size: pf.size,
           uploadedAt: new Date().toISOString(),
-          ...(newDesc ? { descripcion: newDesc } : {}),
-          ...(newTipo ? { tipo: newTipo } : {}),
-        };
-        const updated = [...comprobantes, newComp];
-        onComprobantesChange(updated);
-        // Sanitize: Firestore rejects undefined values
-        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
-        setNewDesc('');
-        setNewTipo('');
+          ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
+          ...(pf.tipo ? { tipo: pf.tipo } : {}),
+        });
+        uploaded++;
+        setUploadProgress((uploaded / total) * 100);
       } catch (err) {
-        console.error('Upload failed:', err);
-        setValidationError('Error al subir el archivo');
-      } finally {
-        setUploading(false);
-        setUploadProgress(0);
+        console.error(`Upload failed for ${pf.name}:`, err);
+        setValidationError(prev => prev ? `${prev}; Error en ${pf.name}` : `Error en ${pf.name}`);
       }
     }
 
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (newComprobantes.length > 0) {
+      const updated = [...comprobantes, ...newComprobantes];
+      onComprobantesChange(updated);
+      await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+    }
+    setSelectedFiles([]);
+    setUploading(false);
+    setUploadProgress(0);
+  };
+
+  const removeSelected = (id: string) => {
+    if (mode === 'add' && onPendingChange) {
+      onPendingChange((pendingComprobantes || []).filter(p => p.id !== id));
+    } else {
+      setSelectedFiles(prev => prev.filter(p => p.id !== id));
+    }
   };
 
   const handleRemove = async (comp: Comprobante) => {
@@ -1239,11 +1263,13 @@ function ComprobanteUploader({
     }
   };
 
+  const pendingList = mode === 'add' ? (pendingComprobantes || []) : selectedFiles;
+
   return (
     <div className="space-y-2">
-      {/* Descripción + Tipo antes de subir */}
+      {/* Descripción + Tipo */}
       <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
-        placeholder="Descripción del comprobante (opcional)"
+        placeholder="Descripción del comprobante"
         className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
       {tiposComprobante.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
@@ -1257,11 +1283,21 @@ function ComprobanteUploader({
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileSelect} className="hidden" />
-      <button onClick={() => fileInputRef.current?.click()}
-        className="flex items-center justify-center gap-1.5 w-full text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
-        <Upload size={14} /> Agregar comprobante
-      </button>
+      {/* File picker */}
+      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple
+        onChange={e => { addFilesToList(e.target.files); }} className="hidden" />
+      <div className="flex gap-2">
+        <button onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+          <Upload size={14} /> Seleccionar archivos
+        </button>
+        {pendingList.length > 0 && mode === 'edit' && (
+          <button onClick={uploadAll} disabled={uploading}
+            className="flex items-center justify-center gap-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 px-4 py-2 rounded-lg transition-colors">
+            {uploading ? `${Math.round(uploadProgress)}%` : `Subir (${pendingList.length})`}
+          </button>
+        )}
+      </div>
 
       {validationError && (
         <p className="text-[10px] text-rose-600 font-medium">{validationError}</p>
@@ -1270,7 +1306,7 @@ function ComprobanteUploader({
       {uploading && (
         <div className="space-y-1">
           <div className="flex justify-between text-[10px] text-slate-500">
-            <span>Subiendo...</span>
+            <span>Subiendo archivos...</span>
             <span>{Math.round(uploadProgress)}%</span>
           </div>
           <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -1279,45 +1315,59 @@ function ComprobanteUploader({
         </div>
       )}
 
-      {/* Existing comprobantes (EDIT mode) */}
-      {comprobantes.map(c => (
-        <div key={c.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
-          {c.type.startsWith('image/') ? (
-            <img src={c.url} alt={c.name} className="w-8 h-8 rounded object-cover shrink-0" />
-          ) : (
-            <FileText size={16} className="text-slate-400 shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-medium text-slate-700 truncate">{c.descripcion || c.name}</p>
-            <p className="text-[9px] text-slate-400">{formatFileSize(c.size)}{c.tipo && <span className="ml-1.5 text-indigo-500">({c.tipo})</span>}</p>
-          </div>
-          <a href={c.url} target="_blank" rel="noopener noreferrer"
-            className="text-slate-400 hover:text-indigo-600 shrink-0" title="Descargar">
-            <Download size={12} />
-          </a>
-          {mode === 'edit' && (
-            <button onClick={() => handleRemove(c)} className="text-slate-400 hover:text-rose-500 shrink-0" title="Eliminar">
-              <Trash2 size={12} />
-            </button>
-          )}
+      {/* Existing comprobantes (siempre visibles) */}
+      {comprobantes.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[9px] font-bold text-slate-400 uppercase">{comprobantes.length} comprobante(s) guardado(s)</p>
+          {comprobantes.map(c => (
+            <div key={c.id} className="flex items-center gap-2 bg-emerald-50 rounded-lg p-2 border border-emerald-200">
+              {c.type.startsWith('image/') ? (
+                <img src={c.url} alt={c.name} className="w-8 h-8 rounded object-cover shrink-0" />
+              ) : (
+                <FileText size={16} className="text-emerald-500 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-emerald-800 truncate">{c.descripcion || c.name}</p>
+                <p className="text-[9px] text-emerald-600">{formatFileSize(c.size)}{c.tipo && <span className="ml-1.5 text-emerald-700 font-medium">({c.tipo})</span>}</p>
+              </div>
+              <a href={c.url} target="_blank" rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-indigo-600 shrink-0" title="Descargar">
+                <Download size={12} />
+              </a>
+              {mode === 'edit' && (
+                <button onClick={() => handleRemove(c)} className="text-emerald-400 hover:text-rose-500 shrink-0" title="Eliminar">
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
-      {/* Pending comprobantes (ADD mode) */}
-      {pendingComprobantes?.map(pc => (
-        <div key={pc.id} className="flex items-center gap-2 bg-amber-50 rounded-lg p-2 border border-amber-200">
-          <FileText size={16} className="text-amber-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-medium text-amber-800 truncate">{pc.name}</p>
-            <p className="text-[9px] text-amber-600">{formatFileSize(pc.size)}</p>
-          </div>
-          <span className="text-[9px] font-bold text-amber-600 uppercase bg-amber-100 px-1.5 py-0.5 rounded">Pendiente</span>
-          <button onClick={() => onPendingChange?.((pendingComprobantes || []).filter(p => p.id !== pc.id))}
-            className="text-amber-400 hover:text-rose-500 shrink-0" title="Quitar">
-            <X size={12} />
-          </button>
+      {/* Pending / selected files list */}
+      {pendingList.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[9px] font-bold text-amber-500 uppercase">{pendingList.length} pendiente(s)</p>
+          {pendingList.map(pc => (
+            <div key={pc.id} className="flex items-center gap-2 bg-amber-50 rounded-lg p-2 border border-amber-200">
+              <FileText size={16} className="text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-amber-800 truncate">{pc.name}</p>
+                <p className="text-[9px] text-amber-600">{formatFileSize(pc.size)}{pc.tipo ? <span className="ml-1.5 text-amber-700 font-medium">({pc.tipo})</span> : ''}</p>
+              </div>
+              <button onClick={() => removeSelected(pc.id)}
+                className="text-amber-400 hover:text-rose-500 shrink-0" title="Quitar">
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          {mode === 'add' && (
+            <p className="text-[9px] text-amber-500 italic">Se subirán al guardar la ejecución</p>
+          )}
         </div>
-      ))}
+      )}
+
+      {/* Submit button for ADD mode pending comprobantes is part of form submit */}
     </div>
   );
 }
@@ -1568,7 +1618,7 @@ function Calculator({ value, onChange, onResult }: { value: string; onChange: (v
 
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
-function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; projects?: Project[] }) {
+function DataPanel({ data, onClose, onEditCellRecord, onViewRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; onViewRecord?: (detail: RecordDetail) => void; projects?: Project[] }) {
   const [expandedEj, setExpandedEj] = useState<string | null>(null);
   // Parse title "Proyecto / Mes" for cell-level data
   const titleParts = data.title?.split(' / ') || [];
@@ -1629,7 +1679,9 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
       {/* BODY — scrollable, cambia según modo */}
       <div className="flex-1 overflow-y-auto p-6">
         {data.mode === 'Presupuestado' && (
-          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => (
+          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => {
+            const ejbs = data.ejecuciones.filter(e => e.budgetId === b.id);
+            return (
             <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
               <div className="flex items-start justify-between mb-1">
                 <div className="flex-1 min-w-0 mr-2">
@@ -1638,7 +1690,11 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
                 </div>
                 <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
               </div>
-              <div className="flex gap-1.5 mt-1.5">
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <button onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: ejbs })}
+                  className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                  <FileText size={11} /> Ver
+                </button>
                 <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
                   className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
                   <Save size={11} /> Editar
@@ -1653,11 +1709,11 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
                   budgetId: b.id,
                 }})}
                   className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
-                  <Plus size={11} /> + Ejecución
+                  <Plus size={11} /> Ejecutar
                 </button>
               </div>
             </div>
-          ))}</div>
+          )})}</div>
         )}
 
         {data.mode === 'Ejecutado' && (
@@ -1674,6 +1730,10 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
                   <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <button onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                    <FileText size={11} /> Ver
+                  </button>
                   <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
                     className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
                     <Save size={11} /> Editar
@@ -1683,6 +1743,7 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
                     <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
                   </button>
                 </div>
+                {/* Siempre mostrar comprobantes si existen */}
                 {cCount > 0 && (
                   <div className="mt-2">
                     <ComprobantesViewer comprobantes={e.comprobantes} />
