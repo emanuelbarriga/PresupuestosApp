@@ -17,12 +17,14 @@ import {
   updateClient,
   updateProvider,
   updateProject,
+  subscribeCompanies,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
 import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
 import { Sidepanel } from '@/components/Sidepanel';
+import { Company } from '@/lib/types';
 
 type Props = {
   params: Promise<{ company: string; segments?: string[] }>;
@@ -50,14 +52,65 @@ export default function CompanyPage({ params }: Props) {
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
+  const isConjunto = companyId === 'all';
+
+  // Load companies list for conjunto mode
   useEffect(() => {
-    const unsubs = [
-      subscribeBudgets(companyId, setBudgets, (err) => console.error('Error loading budgets:', err)),
-      subscribeEjecuciones(companyId, setEjecuciones, (err) => console.error('Error loading ejecuciones:', err)),
-    ];
-    return () => unsubs.forEach((u) => u());
-  }, [companyId]);
+    if (isConjunto) {
+      const unsub = subscribeCompanies(
+        (data) => setCompanies(data),
+        (err) => console.error('Error loading companies:', err),
+      );
+      return () => unsub();
+    }
+  }, [isConjunto]);
+
+  // Load budgets and ejecuciones
+  useEffect(() => {
+    if (isConjunto) {
+      // In conjunto mode, load from all companies
+      const unsubs: (() => void)[] = [];
+      
+      companies.forEach((company) => {
+        const unsubBudgets = subscribeBudgets(
+          company.id,
+          (companyBudgets) => {
+            setBudgets((prev) => {
+              const filtered = prev.filter((b) => !b.id.startsWith(company.id + '_'));
+              const tagged = companyBudgets.map((b) => ({ ...b, id: company.id + '_' + b.id, _companyId: company.id }));
+              return [...filtered, ...tagged];
+            });
+          },
+          (err) => console.error(`Error loading budgets for ${company.id}:`, err),
+        );
+        
+        const unsubEjecuciones = subscribeEjecuciones(
+          company.id,
+          (companyEjecuciones) => {
+            setEjecuciones((prev) => {
+              const filtered = prev.filter((e) => !e.id.startsWith(company.id + '_'));
+              const tagged = companyEjecuciones.map((e) => ({ ...e, id: company.id + '_' + e.id, _companyId: company.id }));
+              return [...filtered, ...tagged];
+            });
+          },
+          (err) => console.error(`Error loading ejecuciones for ${company.id}:`, err),
+        );
+        
+        unsubs.push(unsubBudgets, unsubEjecuciones);
+      });
+      
+      return () => unsubs.forEach((u) => u());
+    } else {
+      // Single company mode
+      const unsubs = [
+        subscribeBudgets(companyId, setBudgets, (err) => console.error('Error loading budgets:', err)),
+        subscribeEjecuciones(companyId, setEjecuciones, (err) => console.error('Error loading ejecuciones:', err)),
+      ];
+      return () => unsubs.forEach((u) => u());
+    }
+  }, [companyId, isConjunto, companies]);
 
   const closePanel = () => {
     setSidepanelData(null);
@@ -110,6 +163,14 @@ export default function CompanyPage({ params }: Props) {
   };
 
   const handleFormSubmit = async (form: ActiveForm, data: Record<string, any>) => {
+    // In conjunto mode, we need to determine which company to use
+    // For now, disable editing in conjunto mode
+    if (isConjunto) {
+      console.warn('Editing is disabled in conjunto mode');
+      closePanel();
+      return;
+    }
+
     if (form.mode === 'add') {
       switch (form.type) {
         case 'budget':
@@ -122,10 +183,10 @@ export default function CompanyPage({ params }: Props) {
           await addProject(companyId, data as Omit<Project, 'id'>);
           break;
         case 'client':
-          await addClient(data as Omit<Client, 'id'>);
+          await addClient(companyId, data as Omit<Client, 'id'>);
           break;
         case 'provider':
-          await addProvider(data as Omit<Provider, 'id'>);
+          await addProvider(companyId, data as Omit<Provider, 'id'>);
           break;
       }
     } else {
@@ -140,10 +201,10 @@ export default function CompanyPage({ params }: Props) {
           await updateProject(companyId, form.record.id, data as Partial<Project>);
           break;
         case 'client':
-          await updateClient(form.record.id, data as Partial<Client>);
+          await updateClient(companyId, form.record.id, data as Partial<Client>);
           break;
         case 'provider':
-          await updateProvider(form.record.id, data as Partial<Provider>);
+          await updateProvider(companyId, form.record.id, data as Partial<Provider>);
           break;
       }
     }

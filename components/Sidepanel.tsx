@@ -48,7 +48,7 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeProjects(companyId, setProjects), subscribeClients(setClients), subscribeBudgets(companyId, setAllBudgets)];
+    const unsubs = [subscribeProjects(companyId, setProjects), subscribeClients(companyId, setClients), subscribeBudgets(companyId, setAllBudgets)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 

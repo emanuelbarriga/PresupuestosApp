@@ -6,6 +6,7 @@ import {
   updateDoc,
   doc,
   onSnapshot,
+  serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -38,11 +39,12 @@ export function subscribeCompanies(
 }
 
 export function subscribeClients(
+  companyId: string,
   onData: (clients: Client[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, CLIENTS_COLLECTION),
+    collection(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION),
     (snapshot) => {
       onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Client));
     },
@@ -65,11 +67,12 @@ export function subscribeProjects(
 }
 
 export function subscribeProviders(
+  companyId: string,
   onData: (providers: Provider[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, PROVIDERS_COLLECTION),
+    collection(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION),
     (snapshot) => {
       onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Provider));
     },
@@ -124,7 +127,7 @@ export async function addBudget(
 ): Promise<string> {
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),
-    { ...budget, createdAt: new Date().toISOString() },
+    { ...budget, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
@@ -135,45 +138,65 @@ export async function addEjecucion(
 ): Promise<string> {
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
-    { ...ejecucion, createdAt: new Date().toISOString() },
+    { ...ejecucion, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
 
-export async function addClient(client: Omit<Client, 'id'>): Promise<string> {
-  const docRef = await addDoc(collection(db, CLIENTS_COLLECTION), { ...client, createdAt: new Date().toISOString() });
+export async function addClient(
+  companyId: string,
+  client: Omit<Client, 'id'>,
+): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION),
+    { ...client, createdAt: serverTimestamp() },
+  );
   return docRef.id;
 }
 
-export async function addProvider(provider: Omit<Provider, 'id'>): Promise<string> {
-  const docRef = await addDoc(collection(db, PROVIDERS_COLLECTION), { ...provider, createdAt: new Date().toISOString() });
+export async function addProvider(
+  companyId: string,
+  provider: Omit<Provider, 'id'>,
+): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION),
+    { ...provider, createdAt: serverTimestamp() },
+  );
   return docRef.id;
 }
 
 export async function addProject(companyId: string, project: Omit<Project, 'id'>): Promise<string> {
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, PROJECTS_COLLECTION),
-    { ...project, createdAt: new Date().toISOString() },
+    { ...project, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
 
 export async function updateBudget(companyId: string, budgetId: string, data: Partial<Budget>): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId), { ...data, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function updateEjecucion(companyId: string, ejecucionId: string, data: Partial<Ejecucion>): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId), { ...data, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function updateProject(companyId: string, projectId: string, data: Partial<Project>): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, PROJECTS_COLLECTION, projectId), { ...data, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, PROJECTS_COLLECTION, projectId), { ...data, updatedAt: serverTimestamp() });
 }
 
-export async function updateClient(clientId: string, data: Partial<Client>): Promise<void> {
-  await updateDoc(doc(db, CLIENTS_COLLECTION, clientId), { ...data, updatedAt: new Date().toISOString() });
+export async function updateClient(
+  companyId: string,
+  clientId: string,
+  data: Partial<Client>,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION, clientId), { ...data, updatedAt: serverTimestamp() });
 }
 
-export async function updateProvider(providerId: string, data: Partial<Provider>): Promise<void> {
-  await updateDoc(doc(db, PROVIDERS_COLLECTION, providerId), { ...data, updatedAt: new Date().toISOString() });
+export async function updateProvider(
+  companyId: string,
+  providerId: string,
+  data: Partial<Provider>,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
 }
