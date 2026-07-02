@@ -39,6 +39,7 @@ export interface Comprobante {
   id: string;
   name: string;
   url: string;
+  path: string;
   type: string;
   size: number;
   uploadedAt: string;

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Project, Client, Provider, RecordDetail, ActiveForm, FormType, Month, TransactionType, MONTHS } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, Month, TransactionType, MONTHS } from '@/lib/types';
+import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
@@ -249,9 +250,30 @@ export default function CompanyPage({ params }: Props) {
         case 'budget':
           await addBudget(companyId, data as Omit<Budget, 'id'>);
           break;
-        case 'ejecucion':
-          await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
+        case 'ejecucion': {
+          const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number }> | undefined;
+          delete data._pendingComprobantes;
+          const docId = await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
+          if (pendingFiles && pendingFiles.length > 0) {
+            const comprobantes: Comprobante[] = await Promise.all(
+              pendingFiles.map(async (pf) => {
+                const path = generateFilePath(companyId, docId, pf.name);
+                const result = await uploadFile(pf.file, path);
+                return {
+                  id: crypto.randomUUID(),
+                  name: pf.name,
+                  url: result.url,
+                  path: result.path,
+                  type: pf.type,
+                  size: pf.size,
+                  uploadedAt: new Date().toISOString(),
+                };
+              }),
+            );
+            await updateEjecucion(companyId, docId, { comprobantes });
+          }
           break;
+        }
         case 'project':
           await addProject(companyId, data as Omit<Project, 'id'>);
           break;
