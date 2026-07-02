@@ -411,6 +411,11 @@ export function Datos({
                         <td className="p-3 font-semibold text-slate-700">
                           <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasLink ? 'bg-emerald-400' : 'bg-amber-400')} title={hasLink ? 'Vinculado a presupuesto' : 'Sin presupuesto vinculado'} />
                           {e.descripcion}
+                          {e.comprobantes && e.comprobantes.length > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold" title={`${e.comprobantes.length} comprobante(s)`}>
+                              {e.comprobantes.length}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-slate-600">{e.projectName}</td>
                         <td className="p-3 text-slate-500">{e.entityName}</td>
