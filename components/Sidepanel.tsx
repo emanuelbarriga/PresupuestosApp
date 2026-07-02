@@ -1603,7 +1603,7 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
       {/* HEADER — siempre visible */}
       <div className="p-6 border-b border-slate-100 shrink-0">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-slate-800">Detalle de Celda</h2>
+          <h2 className="font-bold text-slate-800">Detalle de {data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} {data.mode === 'Presupuestado' ? 'Presupuestado' : 'Ejecutado'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
         <div className={clsx("rounded-xl p-4 border", data.mode === 'Presupuestado' ? "bg-sky-50 border-sky-100 text-sky-900" : "bg-slate-800 border-slate-700 text-white")}>
