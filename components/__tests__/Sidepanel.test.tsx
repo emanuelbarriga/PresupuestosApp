@@ -1250,7 +1250,7 @@ describe('Sidepanel', () => {
       expect(select).not.toBeDisabled();
     });
 
-    it('3.5 cambiar estado en select llama onFormSubmit con nuevo estado', async () => {
+    it('3.5 cambiar estado en select y click guardar llama onFormSubmit con nuevo estado', async () => {
       const onFormSubmit = vi.fn().mockResolvedValue(undefined);
       render(
         <Sidepanel
@@ -1271,6 +1271,9 @@ describe('Sidepanel', () => {
 
       const select = screen.getByRole('combobox') as HTMLSelectElement;
       fireEvent.change(select, { target: { value: 'Cerrado' } });
+
+      const saveButton = screen.getByRole('button', { name: 'Guardar estado' });
+      fireEvent.click(saveButton);
 
       await waitFor(() => {
         expect(onFormSubmit).toHaveBeenCalled();

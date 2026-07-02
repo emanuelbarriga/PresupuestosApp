@@ -254,6 +254,12 @@ export default function CompanyPage({ params }: Props) {
           break;
         case 'project':
           await updateProject(companyId, form.record.id, data as Partial<Project>);
+          if (data.estado && form.record) {
+            const projectName = (form.record as Project).name;
+            setBudgets(prev => prev.map(b =>
+              b.proyectoAsignado === projectName ? { ...b, estadoProyecto: data.estado } : b
+            ));
+          }
           break;
         case 'client':
           await updateClient(form.record.id, data as Partial<Client>);

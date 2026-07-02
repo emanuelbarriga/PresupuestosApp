@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Project, Client } from '@/lib/types';
 import { subscribeClients, subscribeProviders, subscribeBudgets, updateEjecucion, addEjecucion, addClient, addProject } from '@/lib/firestore';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, Plus, Search, Link2, Unlink } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, Plus, Search, Link2, Unlink, Save } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -306,16 +306,25 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
 }) {
   const [selectedState, setSelectedState] = useState(project.estado);
   const [saving, setSaving] = useState(false);
+  const projectRef = useRef(project.id);
+
+  useEffect(() => {
+    if (projectRef.current !== project.id) {
+      projectRef.current = project.id;
+      setSelectedState(project.estado);
+    }
+  }, [project.id, project.estado]);
 
   const isInferred = !(projects || []).some(p => p.name === project.name);
 
-  const handleStateChange = async (newState: string) => {
-    if (isInferred || !project.id) return;
-    setSelectedState(newState);
+  const hasChanges = selectedState !== project.estado;
+
+  const handleSaveState = async () => {
+    if (isInferred || !project.id || !hasChanges) return;
     setSaving(true);
     await onFormSubmit(
       { mode: 'edit', type: 'project', record: project },
-      { estado: newState },
+      { estado: selectedState },
     );
     setSaving(false);
   };
@@ -347,10 +356,18 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
             </button>
           </div>
         ) : (
-          <select value={selectedState} onChange={e => handleStateChange(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
-            {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <div className="flex gap-2">
+            <select value={selectedState} onChange={e => setSelectedState(e.target.value)}
+              className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+              {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {hasChanges && (
+              <button onClick={handleSaveState} disabled={saving} aria-label="Guardar estado"
+                className="px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg flex items-center justify-center transition-colors shadow-sm">
+                <Save size={16} />
+              </button>
+            )}
+          </div>
         )}
       </div>
       <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>{budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}</div>
