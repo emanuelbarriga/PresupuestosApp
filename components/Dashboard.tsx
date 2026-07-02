@@ -183,7 +183,7 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
 
   const yearStr = String(selectedYear);
   const filteredBudgets = useMemo(
-    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) || !b.fechaPresupuestado),
+    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr)),
     [budgets, yearStr],
   );
   const filteredEjecuciones = useMemo(

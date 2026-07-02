@@ -239,7 +239,11 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     const ensureFechaPresupuestado = (d: Record<string, any>) => {
       if (d.mesPresupuestado && !d.fechaPresupuestado) {
         const monthIdx = MONTHS.indexOf(d.mesPresupuestado as Month);
-        if (monthIdx >= 0) d.fechaPresupuestado = `${new Date().getFullYear()}-${String(monthIdx + 1).padStart(2, '0')}`;
+        if (monthIdx >= 0) {
+          // Derive year from fechaEjecutado (set as default from cell click) or fallback to current year
+          const year = d.fechaEjecutado ? parseInt(d.fechaEjecutado.split('-')[0], 10) : new Date().getFullYear();
+          d.fechaPresupuestado = `${isNaN(year) ? new Date().getFullYear() : year}-${String(monthIdx + 1).padStart(2, '0')}`;
+        }
       }
     };
 
