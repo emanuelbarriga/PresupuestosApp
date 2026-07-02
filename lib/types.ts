@@ -69,11 +69,6 @@ export interface SidepanelData {
   diferencia: number;
   mode: 'Presupuestado' | 'Ejecutado';
   tipo: TransactionType;
-  context?: {
-    proyecto: string;
-    mes: Month;
-    cliente: string;
-  };
 }
 
 export type RecordDetail =

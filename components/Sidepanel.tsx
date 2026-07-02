@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Project, Client } from '@/lib/types';
-import { subscribeProjects, subscribeClients, subscribeProviders, subscribeBudgets, updateEjecucion, addEjecucion, addClient, addProject } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, updateEjecucion, addEjecucion, addClient, addProject } from '@/lib/firestore';
 import { X, FileText, Bell, Settings, Filter, ChevronDown, Plus, Search, Link2, Unlink } from 'lucide-react';
 import clsx from 'clsx';
 
