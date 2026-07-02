@@ -807,8 +807,8 @@ function TerceroGroupPanel({ projects, onCellClick, mode }: {
   );
 }
 
-function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onCellClick, projects, onNavigate, canGoBack, onBack }: {
-  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void; onEditTercero?: (tercero: Tercero) => void; onCellClick?: (data: SidepanelData) => void; projects?: Project[]; onNavigate: (screen: NavScreen) => void; canGoBack: boolean; onBack: () => void;
+function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onCellClick, projects, onNavigate, canGoBack, onBack }: {
+  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onCellClick?: (data: SidepanelData) => void; projects?: Project[]; onNavigate: (screen: NavScreen) => void; canGoBack: boolean; onBack: () => void;
 }) {
   const title = recordDetail.type === 'budget' ? 'Presupuesto' : recordDetail.type === 'ejecucion' ? 'Ejecución'
     : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente'
@@ -819,7 +819,7 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProje
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onNavigate={onNavigate} />}
         {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} onNavigate={onNavigate} />}
-        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onEditProject={onEditProject} />}
+        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onNavigate={onNavigate} />}
         {recordDetail.type === 'client' && (<><DF label="Nombre" v={recordDetail.client.name} />
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Proyectos ({recordDetail.projects.length})</p>{recordDetail.projects.map(p => <div key={p.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{p.name}</span><span className="font-bold">{p.estado}</span></div>)}</div>
         </>)}
@@ -828,12 +828,10 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProje
           <>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Tercero</p>
-              {onEditTercero && (
-                <button onClick={() => onEditTercero(recordDetail.tercero)}
-                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
-                  <Save size={12} /> Editar
-                </button>
-              )}
+              <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'tercero', record: recordDetail.tercero } })}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                <Save size={12} /> Editar
+              </button>
             </div>
             <DF label="Nombre" v={recordDetail.tercero.name} />
             {recordDetail.tercero.apodo && <DF label="Apodo" v={recordDetail.tercero.apodo} />}
@@ -866,8 +864,8 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProje
   );
 }
 
-function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit, onEditProject }: {
-  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void;
+function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit, onNavigate }: {
+  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onNavigate: (screen: NavScreen) => void;
 }) {
   const [selectedState, setSelectedState] = useState(project.estado);
   const [saving, setSaving] = useState(false);
@@ -916,8 +914,8 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
     <>
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
-        {!isInferred && project.id && onEditProject && (
-          <button onClick={() => onEditProject(project)}
+        {!isInferred && project.id && (
+          <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'project', record: project } })}
             className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
             <Save size={12} /> Editar
           </button>

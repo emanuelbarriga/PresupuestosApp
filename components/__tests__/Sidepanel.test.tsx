@@ -2144,4 +2144,65 @@ describe('Sidepanel', () => {
       expect(calledData.subtitle).toContain('Entity Uno');
     });
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // PanelHeader — back button (← Volver)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('PanelHeader — back button', () => {
+    it('no muestra botón back cuando canGoBack=false y X cierra', () => {
+      const onClose = vi.fn();
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [makeEjecucion()] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={onClose}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Presupuesto')).toBeInTheDocument();
+
+      // PanelHeader has border-b — navigate up from h3 to find it
+      const headerDiv = screen.getByText('Presupuesto').closest('[class*="border-b"]')!;
+      const buttons = headerDiv.querySelectorAll('button');
+      expect(buttons.length).toBe(1);
+
+      fireEvent.click(buttons[0]);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('muestra ← Volver cuando canGoBack=true, llama onBack y X sigue funcionando', () => {
+      const onBack = vi.fn();
+      const onClose = vi.fn();
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [makeEjecucion()] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={onClose}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={true}
+          onBack={onBack}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      const headerDiv = screen.getByText('Presupuesto').closest('[class*="border-b"]')!;
+      const buttons = headerDiv.querySelectorAll('button');
+      expect(buttons.length).toBe(2);
+
+      fireEvent.click(buttons[0]);
+      expect(onBack).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(buttons[1]);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
 });
