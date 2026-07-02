@@ -1135,9 +1135,11 @@ describe('Sidepanel', () => {
         />,
       );
 
+      // En modo Presupuestado muestra budgets, NO ejecuciones en el body
       expect(screen.getByText('Anticipo A')).toBeInTheDocument();
       expect(screen.getByText('Anticipo B')).toBeInTheDocument();
-      expect(screen.getByText('Pago A')).toBeInTheDocument();
+      expect(screen.queryByText('Pago A')).not.toBeInTheDocument();
+      // El footer con totales siempre visible
       expect(screen.getByText('$ 300.000', { exact: false })).toBeInTheDocument();
       expect(screen.getByText('-$ 250.000', { exact: false })).toBeInTheDocument();
     });

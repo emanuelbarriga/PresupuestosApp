@@ -1600,6 +1600,7 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      {/* HEADER — siempre visible */}
       <div className="p-6 border-b border-slate-100 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-slate-800">Detalle de Celda</h2>
@@ -1623,43 +1624,46 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
           </div>
         )}
       </div>
+
+      {/* BODY — scrollable, cambia según modo */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => (
-          <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
-            <div className="flex items-start justify-between mb-1">
-              <div className="flex-1 min-w-0 mr-2">
-                <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
-                <p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.entityName}</p>
+        {data.mode === 'Presupuestado' && (
+          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => (
+            <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex-1 min-w-0 mr-2">
+                  <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
+                  <p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.entityName}</p>
+                </div>
+                <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
               </div>
-              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
+              <div className="flex gap-1.5 mt-1.5">
+                <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
+                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                  <Save size={11} /> Editar
+                </button>
+                <button onClick={() => onEditCellRecord?.({ mode: 'add', type: 'ejecucion', defaults: {
+                  projectId: b.projectId || '',
+                  projectName: b.projectName || '',
+                  entityId: b.entityId || '',
+                  entityName: b.entityName || '',
+                  entityType: b.entityType || 'client',
+                  tipo: b.tipo,
+                  budgetId: b.id,
+                }})}
+                  className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
+                  <Plus size={11} /> + Ejecución
+                </button>
+              </div>
             </div>
-            <div className="flex gap-1.5 mt-1.5">
-              <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
-                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-                <Save size={11} /> Editar
-              </button>
-              <button onClick={() => onEditCellRecord?.({ mode: 'add', type: 'ejecucion', defaults: {
-                projectId: b.projectId || '',
-                projectName: b.projectName || '',
-                entityId: b.entityId || '',
-                entityName: b.entityName || '',
-                entityType: b.entityType || 'client',
-                tipo: b.tipo,
-                budgetId: b.id,
-              }})}
-                className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
-                <Plus size={11} /> + Ejecución
-              </button>
-            </div>
-          </div>
-        ))}</div>
-        {(() => {
-          const items: ReactNode[] = [];
-          items.push(<p key="title" className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>);
-          data.ejecuciones.forEach(e => {
-            const hasFiles = e.comprobantes && e.comprobantes.length > 0;
-            const isOpen = expandedEj === e.id;
-            items.push(
+          ))}</div>
+        )}
+
+        {data.mode === 'Ejecutado' && (
+          <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>
+          {data.ejecuciones.map(e => {
+            const cCount = e.comprobantes?.length || 0;
+            return (
               <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex-1 min-w-0 mr-2">
@@ -1668,28 +1672,29 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
                   </div>
                   <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
                 </div>
-                <div className="flex items-center gap-1.5 mt-1.5">
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
                     className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
                     <Save size={11} /> Editar
                   </button>
-                  {hasFiles && (
-                    <button onClick={() => setExpandedEj(isOpen ? null : e.id)}
-                      className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
-                      {isOpen ? <ChevronUp size={11} /> : <Paperclip size={11} />} {e.comprobantes.length} comprobante{(e.comprobantes.length !== 1 ? 's' : '')}
-                    </button>
-                  )}
+                  <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
+                    <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
+                  </button>
                 </div>
-                {isOpen && hasFiles && (
+                {cCount > 0 && (
                   <div className="mt-2">
                     <ComprobantesViewer comprobantes={e.comprobantes} />
                   </div>
                 )}
               </div>
             );
-          });
-          return items;
-        })()}
+          })}</div>
+        )}
+      </div>
+
+      {/* FOOTER — siempre visible abajo */}
+      <div className="shrink-0 p-6 border-t border-slate-100 bg-white">
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Presupuestado</span><span className="text-slate-700 font-bold">{formatCurrency(data.presupuestado)}</span></div>
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Ejecutado</span><span className="text-slate-700 font-bold">{formatCurrency(data.ejecutado)}</span></div>
