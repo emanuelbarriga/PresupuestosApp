@@ -2,11 +2,12 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Project, Client, Provider, RecordDetail, ActiveForm, FormType } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Project, Client, Provider, RecordDetail, ActiveForm, FormType, Month, TransactionType, MONTHS } from '@/lib/types';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
   subscribeEjecuciones,
+  subscribeProjects,
   addBudget,
   addEjecucion,
   addClient,
@@ -53,6 +54,7 @@ export default function CompanyPage({ params }: Props) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const isConjunto = companyId === 'all';
 
@@ -112,6 +114,15 @@ export default function CompanyPage({ params }: Props) {
     }
   }, [companyId, isConjunto, companies]);
 
+  // Load projects for single company mode
+  useEffect(() => {
+    if (isConjunto) return;
+    const unsub = subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err));
+    return () => unsub();
+  }, [companyId, isConjunto]);
+
+  const projectsForCompany = isConjunto ? [] : projects;
+
   const closePanel = () => {
     setSidepanelData(null);
     setRecordDetail(null);
@@ -138,6 +149,50 @@ export default function CompanyPage({ params }: Props) {
     setRecordDetail(null);
     setActiveForm(null);
     setSidepanelData(data);
+    setSidebarCollapsed(true);
+  };
+
+  const handleProjectClick = (projectName: string) => {
+    if (isConjunto) return;
+    const found = projects.find(p => p.name === projectName);
+    const project: Project = found || {
+      id: '',
+      name: projectName,
+      clientId: '',
+      clientName: '',
+      estado: 'Activo',
+    };
+    const relatedBudgets = budgets.filter(b => b.proyectoAsignado === projectName);
+    const relatedEjecuciones = ejecuciones.filter(e => e.proyectoAsignado === projectName);
+    const detail: RecordDetail = {
+      type: 'project',
+      project,
+      budgets: relatedBudgets,
+      ejecuciones: relatedEjecuciones,
+    };
+    setSidepanelData(null);
+    setActiveForm(null);
+    setRecordDetail(detail);
+    setSidebarCollapsed(true);
+  };
+
+  const handleEmptyCellClick = (projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
+    if (isConjunto) return;
+    const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
+    const defaults: Record<string, string> = {
+      proyectoAsignado: projectName,
+      tipo,
+    };
+    if (formType === 'budget') {
+      defaults.mesPresupuestado = month;
+    } else {
+      // Infer a date in the middle of the month for the month
+      const monthIndex = MONTHS.indexOf(month);
+      defaults.fechaEjecutado = `2026-${String(monthIndex + 1).padStart(2, '0')}-15`;
+    }
+    setSidepanelData(null);
+    setRecordDetail(null);
+    setActiveForm({ mode: 'add', type: formType, defaults });
     setSidebarCollapsed(true);
   };
 
@@ -222,7 +277,7 @@ export default function CompanyPage({ params }: Props) {
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeView === 'Dashboard' && (
-              <Dashboard onCellClick={handleCellClick} budgets={budgets} ejecuciones={ejecuciones} />
+              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} budgets={budgets} ejecuciones={ejecuciones} />
             )}
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
@@ -235,7 +290,7 @@ export default function CompanyPage({ params }: Props) {
           </div>
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
-            companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit} />
+            companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit} projects={projectsForCompany} />
         </main>
       </div>
     </CompanyProvider>

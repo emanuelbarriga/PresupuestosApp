@@ -15,9 +15,10 @@ interface SidepanelProps {
   companyId: string;
   onClose: () => void;
   onFormSubmit: (form: ActiveForm, data: Record<string, any>) => Promise<void>;
+  projects?: Project[];
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit }: SidepanelProps) {
+export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, projects }: SidepanelProps) {
   const visible = data || recordDetail || activeForm;
 
   return (
@@ -30,9 +31,9 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
           <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl mt-auto"><Settings size={20} /></button>
         </div>
       ) : activeForm ? (
-        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} />
+        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} />
       ) : recordDetail ? (
-        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} />
+        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} projects={projects} />
       ) : data ? (
         <DataPanel data={data} onClose={onClose} />
       ) : null}
@@ -40,10 +41,9 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
   );
 }
 
-function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void> }) {
+function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[] }) {
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
-  const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
   const [showNewClient, setShowNewClient] = useState(false);
@@ -52,9 +52,11 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectClient, setNewProjectClient] = useState('');
 
+  const safeProjects = projects || [];
+
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeProjects(companyId, setProjects), subscribeClients(setClients), subscribeProviders(setProviders), subscribeBudgets(companyId, setAllBudgets)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeBudgets(companyId, setAllBudgets)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 
@@ -83,10 +85,12 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
       const r = form.record as any;
       Object.keys(r).forEach(k => { if (k !== 'id') init[k] = String(r[k] ?? ''); });
       setFields(init);
-    } else if (form.type === 'ejecucion') {
-      setFields({ tipo: 'ingreso', fechaEjecutado: new Date().toISOString().split('T')[0] });
     } else {
-      setFields({ tipo: 'ingreso' });
+      const init: Record<string, string> = form.type === 'ejecucion'
+        ? { tipo: 'ingreso', fechaEjecutado: new Date().toISOString().split('T')[0] }
+        : { tipo: 'ingreso' };
+      if (form.defaults) Object.assign(init, form.defaults);
+      setFields(init);
     }
   }, [form]);
 
@@ -138,7 +142,7 @@ function FormPanel({ form, companyId, onClose, onSubmit }: { form: ActiveForm; c
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         <TipoSwitch value={f('tipo')} onChange={v => set('tipo', v)} />
-        <SearchableSelect label="Proyecto" value={f('proyectoAsignado')} onChange={v => set('proyectoAsignado', v)} options={projects.map(p => ({ value: p.name, label: p.name }))} placeholder="Buscar proyecto..." />
+        <SearchableSelect label="Proyecto" value={f('proyectoAsignado')} onChange={v => set('proyectoAsignado', v)} options={safeProjects.map(p => ({ value: p.name, label: p.name }))} placeholder="Buscar proyecto..." />
         {!showNewProject && (
           <button onClick={() => setShowNewProject(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
             <Plus size={12} /> Nuevo proyecto
@@ -273,8 +277,8 @@ function SimpleForm({ title, fields, labels, f, set, form, onClose, onSubmit, sa
   );
 }
 
-function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit }: {
-  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, projects }: {
+  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[];
 }) {
   const title = recordDetail.type === 'budget' ? 'Presupuesto' : recordDetail.type === 'ejecucion' ? 'Ejecución'
     : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente' : 'Proveedor';
@@ -287,16 +291,71 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit }: {
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} />}
         {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} />}
-        {recordDetail.type === 'project' && (<><DF label="Nombre" v={recordDetail.project.name} /><DF label="Cliente" v={recordDetail.project.clientName} /><DF label="Estado" v={recordDetail.project.estado} />
-          <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({recordDetail.budgets.length})</p>{recordDetail.budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}</div>
-          <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({recordDetail.ejecuciones.length})</p>{recordDetail.ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}</div>
-        </>)}
+        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} />}
         {recordDetail.type === 'client' && (<><DF label="Nombre" v={recordDetail.client.name} />
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Proyectos ({recordDetail.projects.length})</p>{recordDetail.projects.map(p => <div key={p.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{p.name}</span><span className="font-bold">{p.estado}</span></div>)}</div>
         </>)}
         {recordDetail.type === 'provider' && <DF label="Nombre" v={recordDetail.provider.name} />}
       </div>
     </div>
+  );
+}
+
+function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit }: {
+  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+}) {
+  const [selectedState, setSelectedState] = useState(project.estado);
+  const [saving, setSaving] = useState(false);
+
+  const isInferred = !(projects || []).some(p => p.name === project.name);
+
+  const handleStateChange = async (newState: string) => {
+    if (isInferred || !project.id) return;
+    setSelectedState(newState);
+    setSaving(true);
+    await onFormSubmit(
+      { mode: 'edit', type: 'project', record: project },
+      { estado: newState },
+    );
+    setSaving(false);
+  };
+
+  const handleCreateProject = async () => {
+    if (!project.name) return;
+    await onFormSubmit(
+      { mode: 'add', type: 'project' },
+      { name: project.name, clientName: project.clientName || 'Sin cliente', clientId: '', estado: selectedState },
+    );
+  };
+
+  const projectStates = ['Activo', 'Cerrado', 'Negociación', 'En ejecución', 'Cancelado'];
+
+  return (
+    <>
+      <DF label="Nombre" v={project.name} />
+      <DF label="Cliente" v={project.clientName} />
+      <div>
+        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Estado</p>
+        {isInferred ? (
+          <div className="space-y-2">
+            <select disabled value={selectedState} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-slate-50 text-slate-400 cursor-not-allowed">
+              {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <p className="text-[10px] text-amber-600 font-medium">Proyecto inferido — aún no tiene documento.</p>
+            <button onClick={handleCreateProject} disabled={saving} className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg py-2 text-xs font-bold transition-colors">
+              {saving ? 'Creando...' : 'Crear proyecto'}
+            </button>
+          </div>
+        ) : (
+          <select value={selectedState} onChange={e => handleStateChange(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+            {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+      </div>
+      <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>{budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}</div>
+      <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({ejecuciones.length})</p>{ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}</div>
+    </>
   );
 }
 

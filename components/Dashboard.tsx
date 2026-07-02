@@ -309,9 +309,9 @@ function Matrix({ tipo, mode, onCellClick, onProjectClick, onEmptyCellClick, vis
               }
               return visibleRows.map((row) => (
                 <tr key={row.proyecto} className={clsx("transition-colors group", isP ? "hover:bg-sky-50/40" : "hover:bg-slate-50")}>
-                  <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
+                    <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold truncate text-slate-800">{row.proyecto}</span>
+                      <span className="font-semibold truncate text-slate-800 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => onProjectClick?.(row.proyecto)}>{row.proyecto}</span>
                       <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span>
                     </div>
                   </td>
@@ -323,7 +323,13 @@ function Matrix({ tipo, mode, onCellClick, onProjectClick, onEmptyCellClick, vis
                     const isZero = val === 0;
                     return (
                       <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && `font-bold ${hoverBgTheme} ${colorTheme}`, isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
-                        onClick={() => handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || [])}>
+                        onClick={() => {
+                          if (isZero) {
+                            onEmptyCellClick?.(row.proyecto, m, tipo, mode);
+                          } else {
+                            handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || []);
+                          }
+                        }}>
                         {isZero ? '-' : formatCurrency(val)}
                       </td>
                     );
