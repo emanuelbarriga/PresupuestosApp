@@ -5,6 +5,8 @@ import { SidepanelData, MONTHS, Month, ProjectState, Budget, Ejecucion, Transact
 import { ChevronLeft, ChevronRight, Calendar, CalendarRange } from 'lucide-react';
 import clsx from 'clsx';
 
+const currentYear = new Date().getFullYear();
+
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
 
 interface DashboardProps {
@@ -22,6 +24,7 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
   const [timeView, setTimeView] = useState<'year' | '5months'>('year');
   const [centerMonthIdx, setCenterMonthIdx] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
   const visibleMonths = useMemo(() => {
     if (timeView === 'year') return MONTHS;
@@ -34,6 +37,16 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
   const handlePrevMonth = () => setCenterMonthIdx(prev => Math.max(2, prev - 1));
   const handleNextMonth = () => setCenterMonthIdx(prev => Math.min(9, prev + 1));
 
+  const yearStr = String(selectedYear);
+  const filteredBudgets = useMemo(
+    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) || !b.fechaPresupuestado),
+    [budgets, yearStr],
+  );
+  const filteredEjecuciones = useMemo(
+    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr)),
+    [ejecuciones, yearStr],
+  );
+
   return (
     <div className={clsx("flex-1 flex flex-col min-w-0 h-full transition-colors", mode === 'Presupuestado' ? "bg-sky-50/30" : "bg-slate-50")}>
       <header className="h-14 border-b px-6 flex items-center justify-between shrink-0 bg-white border-slate-200">
@@ -42,7 +55,7 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
           <p className="text-[10px] uppercase tracking-wider font-medium text-slate-500">Matriz de control de Ingresos y Egresos</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 border p-1 rounded-lg bg-slate-100 border-slate-200">
+          <div className="flex items-center gap-1.5 border p-1 rounded-lg bg-slate-100 border-slate-200">
             <button onClick={() => setTimeView('year')} className={clsx("p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors", timeView === 'year' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700')}>
               <Calendar size={14} /> Año
             </button>
@@ -56,6 +69,11 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
               </div>
             )}
           </div>
+          <div className="flex items-center gap-1 border p-1 rounded-lg bg-slate-100 border-slate-200">
+            <button onClick={() => setSelectedYear(y => y - 1)} className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-white transition-colors"><ChevronLeft size={14}/></button>
+            <span className="px-2 text-xs font-bold text-slate-700 min-w-[48px] text-center select-none">{selectedYear}</span>
+            <button onClick={() => setSelectedYear(y => y + 1)} className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-white transition-colors"><ChevronRight size={14}/></button>
+          </div>
           <div className="p-1 rounded-lg flex border bg-slate-100 border-slate-200">
             <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Presupuestado' ? "bg-sky-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Presupuestado')}>Presupuestado</button>
             <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Ejecutado' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Ejecutado')}>Ejecutado</button>
@@ -64,8 +82,8 @@ export function Dashboard({ onCellClick, budgets, ejecuciones }: DashboardProps)
       </header>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={budgets} ejecuciones={ejecuciones} />
-        <Matrix tipo="egreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={budgets} ejecuciones={ejecuciones} />
+        <Matrix tipo="ingreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
+        <Matrix tipo="egreso" mode={mode} onCellClick={onCellClick} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} />
       </div>
     </div>
   );

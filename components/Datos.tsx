@@ -52,9 +52,9 @@ export function Datos({
 
   useEffect(() => {
     const unsubs = [
-      subscribeClients(companyId, setClients, (err) => console.error('Error loading clients:', err)),
+      subscribeClients(setClients, (err) => console.error('Error loading clients:', err)),
       subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
-      subscribeProviders(companyId, setProviders, (err) => console.error('Error loading providers:', err)),
+      subscribeProviders(setProviders, (err) => console.error('Error loading providers:', err)),
       subscribeStateProjects(setStateProjects, (err) => console.error('Error loading states:', err)),
     ];
     return () => unsubs.forEach((u) => u());

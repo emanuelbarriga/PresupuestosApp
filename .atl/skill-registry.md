@@ -4,7 +4,19 @@
 
 ## Project Skills
 
-_None detected._
+| Skill | Trigger | Path | Scope |
+|-------|---------|------|-------|
+| firebase-firestore | Working with Firestore, Firestore security rules, Firestore emulator, or Firestore data modeling | `.agents/skills/firebase-firestore/SKILL.md` | project |
+| firebase-basics | Firebase project setup, Firebase CLI, Firebase init | `.agents/skills/firebase-basics/SKILL.md` | project |
+| firebase-auth-basics | Firebase Authentication, auth setup, auth state management | `.agents/skills/firebase-auth-basics/SKILL.md` | project |
+| firebase-app-hosting-basics | Firebase App Hosting deployment | `.agents/skills/firebase-app-hosting-basics/SKILL.md` | project |
+| firebase-hosting-basics | Firebase Hosting deployment | `.agents/skills/firebase-hosting-basics/SKILL.md` | project |
+| firebase-security-rules-auditor | Audit Firebase security rules | `.agents/skills/firebase-security-rules-auditor/SKILL.md` | project |
+| firebase-data-connect | Firebase Data Connect | `.agents/skills/firebase-data-connect/SKILL.md` | project |
+| firebase-crashlytics | Firebase Crashlytics | `.agents/skills/firebase-crashlytics/SKILL.md` | project |
+| firebase-remote-config-basics | Firebase Remote Config | `.agents/skills/firebase-remote-config-basics/SKILL.md` | project |
+| firebase-ai-logic-basics | Firebase AI Logic | `.agents/skills/firebase-ai-logic-basics/SKILL.md` | project |
+| xcode-project-setup | Xcode project setup for Firebase | `.agents/skills/xcode-project-setup/SKILL.md` | project |
 
 ## User Skills
 
@@ -20,7 +32,7 @@ _None detected._
 | judgment-day | judgment day, dual review, adversarial review, juzgar | `~/.config/opencode/skills/judgment-day/SKILL.md` | user |
 | sdd-onboard | orchestrator launches onboarding for the full SDD cycle | `~/.config/opencode/skills/sdd-onboard/SKILL.md` | user |
 | skill-creator | new skills, agent instructions, documenting AI usage patterns | `~/.config/opencode/skills/skill-creator/SKILL.md` | user |
-| skill-improver | improve skills, audit skills, refactor skills, skill quality | `~/.config/opencode/skills/skill-improver/SKILL.md` | user |
+| skill-improver | improve skills, audit skills, refine skills, skill quality | `~/.config/opencode/skills/skill-improver/SKILL.md` | user |
 | work-unit-commits | implementation, commit splitting, chained PRs | `~/.config/opencode/skills/work-unit-commits/SKILL.md` | user |
 
 ## Project Conventions

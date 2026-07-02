@@ -183,10 +183,10 @@ export default function CompanyPage({ params }: Props) {
           await addProject(companyId, data as Omit<Project, 'id'>);
           break;
         case 'client':
-          await addClient(companyId, data as Omit<Client, 'id'>);
+          await addClient(data as Omit<Client, 'id'>);
           break;
         case 'provider':
-          await addProvider(companyId, data as Omit<Provider, 'id'>);
+          await addProvider(data as Omit<Provider, 'id'>);
           break;
       }
     } else {
@@ -201,10 +201,10 @@ export default function CompanyPage({ params }: Props) {
           await updateProject(companyId, form.record.id, data as Partial<Project>);
           break;
         case 'client':
-          await updateClient(companyId, form.record.id, data as Partial<Client>);
+          await updateClient(form.record.id, data as Partial<Client>);
           break;
         case 'provider':
-          await updateProvider(companyId, form.record.id, data as Partial<Provider>);
+          await updateProvider(form.record.id, data as Partial<Provider>);
           break;
       }
     }

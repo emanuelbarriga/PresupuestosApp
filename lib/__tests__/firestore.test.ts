@@ -80,6 +80,7 @@ describe('addBudget', () => {
       clienteOProveedor: 'client-1',
       tipo: 'ingreso' as const,
       mesPresupuestado: 'Enero' as const,
+      fechaPresupuestado: '2026-01',
       estadoProyecto: 'Activo' as const,
     };
 
@@ -140,13 +141,13 @@ describe('subscribeProviders', () => {
   });
 
   // Task 2.4a — Subscription lifecycle: correct path
-  it('registers listener with correct path', () => {
+  it('registers listener with correct top-level path', () => {
     const onData = vi.fn();
     const onError = vi.fn();
 
-    subscribeProviders('empresa-1', onData, onError);
+    subscribeProviders(onData, onError);
 
-    expect(collection).toHaveBeenCalledWith({}, 'companies', 'empresa-1', 'providers');
+    expect(collection).toHaveBeenCalledWith({}, 'providers');
   });
 
   // Task 2.4b — Snapshot delivers mapped documents to onData
@@ -154,9 +155,8 @@ describe('subscribeProviders', () => {
     const onData = vi.fn();
     const onError = vi.fn();
 
-    subscribeProviders('empresa-1', onData, onError);
+    subscribeProviders(onData, onError);
 
-    // Capture the snapshot callback (2nd argument to onSnapshot)
     const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
     const mockSnapshot = makeMockSnapshot([
       { id: 'p1', name: 'Proveedor A' },
@@ -176,7 +176,7 @@ describe('subscribeProviders', () => {
     const onData = vi.fn();
     const onError = vi.fn();
 
-    const cleanup = subscribeProviders('empresa-1', onData, onError);
+    const cleanup = subscribeProviders(onData, onError);
 
     cleanup();
     expect(mockUnsub).toHaveBeenCalledTimes(1);
@@ -187,7 +187,7 @@ describe('subscribeProviders', () => {
     const onData = vi.fn();
     const onError = vi.fn();
 
-    subscribeProviders('empresa-1', onData, onError);
+    subscribeProviders(onData, onError);
 
     const errorCallback = (onSnapshot as Mock).mock.calls[0][2];
     const testError = new Error('snapshot error');

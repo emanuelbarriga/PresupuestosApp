@@ -717,4 +717,427 @@ describe('Sidepanel', () => {
       expect(data.proyectoAsignado).toBe('Proyecto Beta');
     });
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Phase 4: Composite component behaviour
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('R3 — FormPanel conditional rendering per type', () => {
+    it('type=budget muestra date picker, tipo, proyecto, cliente, descripcion y monto', async () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'budget' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      await emitProjects([makeProject()]);
+      await emitClients([makeClient()]);
+
+      expect(screen.getByText('Nuevo Presupuesto')).toBeInTheDocument();
+      expect(screen.getByText('Ingreso')).toBeInTheDocument();
+      expect(screen.getByText('Egreso')).toBeInTheDocument();
+      expect(screen.getByText('Proyecto')).toBeInTheDocument();
+      expect(screen.getByText('Cliente / Proveedor')).toBeInTheDocument();
+      expect(screen.getByText('Descripción')).toBeInTheDocument();
+      expect(screen.getByText('Monto Presupuestado')).toBeInTheDocument();
+      expect(screen.getByText('Fecha del presupuesto')).toBeInTheDocument();
+      expect(screen.getByText('Crear')).toBeInTheDocument();
+    });
+
+    it('type=ejecucion muestra date, monto y budget linking', async () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Nuevo Ejecución')).toBeInTheDocument();
+      expect(screen.getByText('Monto Ejecutado')).toBeInTheDocument();
+      expect(screen.getByText('Fecha de ejecución')).toBeInTheDocument();
+      expect(screen.getByText('Vincular presupuesto (opcional)')).toBeInTheDocument();
+      expect(screen.getByText('Crear')).toBeInTheDocument();
+    });
+
+    it('type=project muestra SimpleForm con nombre y cliente', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'project' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Nuevo Proyecto')).toBeInTheDocument();
+      expect(screen.getByText('Nombre')).toBeInTheDocument();
+      expect(screen.getByText('Cliente')).toBeInTheDocument();
+    });
+  });
+
+  describe('R7 — BudgetView with linked ejecuciones + inline add', () => {
+    it('muestra campos del budget y ejecuciones vinculadas', () => {
+      const budget = makeBudget({
+        descripcion: 'Anticipo Obra',
+        proyectoAsignado: 'Edificio A',
+        clienteOProveedor: 'Constructora X',
+        tipo: 'ingreso',
+        montoPresupuestado: 100000000,
+        mesPresupuestado: 'Julio',
+        estadoProyecto: 'Activo',
+      });
+      const ejecuciones = [
+        makeEjecucion({ id: 'ej1', descripcion: 'Pago parcial 1', montoEjecutado: 40000000, fechaEjecutado: '2026-07-15' }),
+        makeEjecucion({ id: 'ej2', descripcion: 'Pago parcial 2', montoEjecutado: 60000000, fechaEjecutado: '2026-07-30' }),
+      ];
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget, ejecuciones }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Presupuesto')).toBeInTheDocument();
+      expect(screen.getByText('Anticipo Obra')).toBeInTheDocument();
+      expect(screen.getByText('Edificio A')).toBeInTheDocument();
+      expect(screen.getByText('Constructora X')).toBeInTheDocument();
+      expect(screen.getByText('$ 100.000.000', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('Julio')).toBeInTheDocument();
+      expect(screen.getByText('Activo')).toBeInTheDocument();
+
+      // Linked ejecuciones (text is combined with date in same element)
+      expect(screen.getByText(/Pago parcial 1/)).toBeInTheDocument();
+      expect(screen.getByText(/Pago parcial 2/)).toBeInTheDocument();
+
+      // "Agregar" button
+      expect(screen.getByText('Agregar')).toBeInTheDocument();
+    });
+
+    it('click Agregar muestra inline form, Cancelar lo oculta', async () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Agregar'));
+      expect(screen.getByText('Nueva ejecución vinculada')).toBeInTheDocument();
+      expect(screen.getByText('Cancelar')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Cancelar'));
+      expect(screen.queryByText('Nueva ejecución vinculada')).not.toBeInTheDocument();
+    });
+
+    it('muestra "Sin ejecuciones" cuando no hay ninguna', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Sin ejecuciones')).toBeInTheDocument();
+    });
+  });
+
+  describe('R8 — EjecucionView with budget linking', () => {
+    it('muestra campos de la ejecucion y "Sin presupuesto vinculado"', () => {
+      const ejecucion = makeEjecucion({
+        descripcion: 'Pago proveedor',
+        proyectoAsignado: 'Obra A',
+        clienteOProveedor: 'Proveedor X',
+        tipo: 'egreso',
+        montoEjecutado: 5000000,
+        fechaEjecutado: '2026-08-10',
+        budgetId: '',
+      });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Ejecución')).toBeInTheDocument();
+      expect(screen.getByText('Pago proveedor')).toBeInTheDocument();
+      expect(screen.getByText('Obra A')).toBeInTheDocument();
+      expect(screen.getByText('Proveedor X')).toBeInTheDocument();
+      expect(screen.getByText('$ 5.000.000', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('2026-08-10')).toBeInTheDocument();
+      expect(screen.getByText('Sin presupuesto vinculado')).toBeInTheDocument();
+    });
+
+    it('click "Buscar presupuesto" muestra input de búsqueda', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: '' }) }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Buscar presupuesto'));
+      const searchInput = screen.getByPlaceholderText('Buscar por descripción o proyecto...');
+      expect(searchInput).toBeInTheDocument();
+    });
+
+    it('muestra presupuesto vinculado cuando budgetId está presente', async () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: 'b1' }) }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // Emit budgets AFTER render so the subscription callback is captured
+      await emitBudgets([makeBudget({ id: 'b1', descripcion: 'Anticipo Obra' })]);
+
+      expect(screen.getByText('Anticipo Obra')).toBeInTheDocument();
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Phase 5: Top-level dispatch + integration
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('R9 — ViewPanel record dispatch', () => {
+    it('type=budget muestra BudgetView con descripcion del budget', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget({ descripcion: 'Presupuesto Test' }), ejecuciones: [] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Presupuesto Test')).toBeInTheDocument();
+    });
+
+    it('type=ejecucion muestra EjecucionView con descripcion', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ descripcion: 'Ejecucion Test' }) }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Ejecucion Test')).toBeInTheDocument();
+    });
+
+    it('type=project muestra proyecto con nombre y cliente', () => {
+      const project = makeProject({ name: 'Proyecto X', clientName: 'Cliente Y' });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'project', project, budgets: [], ejecuciones: [] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Proyecto X')).toBeInTheDocument();
+      expect(screen.getByText('Cliente Y')).toBeInTheDocument();
+    });
+
+    it('type=client muestra cliente con proyectos relacionados', () => {
+      const client = makeClient({ name: 'Cliente Z' });
+      const projects = [makeProject({ name: 'Proyecto Z1', clientName: 'Cliente Z' })];
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'client', client, projects }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Cliente Z')).toBeInTheDocument();
+      expect(screen.getByText('Proyecto Z1')).toBeInTheDocument();
+    });
+
+    it('type=provider muestra nombre del proveedor', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'provider', provider: { id: 'prov-1', name: 'Proveedor XYZ' } }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Proveedor XYZ')).toBeInTheDocument();
+    });
+  });
+
+  describe('R10 — DataPanel rendering', () => {
+    it('muestra budgets, ejecuciones, formula y diferencia', () => {
+      const data: SidepanelData = {
+        title: 'Proyecto X / Julio',
+        subtitle: 'Presupuestado de ingresos',
+        formula: 'Suma de todas las transacciones',
+        budgets: [
+          makeBudget({ descripcion: 'Anticipo A', montoPresupuestado: 100000, mesPresupuestado: 'Julio' }),
+          makeBudget({ descripcion: 'Anticipo B', montoPresupuestado: 200000, mesPresupuestado: 'Julio' }),
+        ],
+        ejecuciones: [
+          makeEjecucion({ descripcion: 'Pago A', montoEjecutado: 50000, fechaEjecutado: '2026-07-15' }),
+        ],
+        value: 300000,
+        presupuestado: 300000,
+        ejecutado: 50000,
+        diferencia: -250000,
+        mode: 'Presupuestado',
+        tipo: 'ingreso',
+      };
+
+      render(
+        <Sidepanel
+          data={data}
+          recordDetail={null}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Anticipo A')).toBeInTheDocument();
+      expect(screen.getByText('Anticipo B')).toBeInTheDocument();
+      expect(screen.getByText('Pago A')).toBeInTheDocument();
+      expect(screen.getByText('$ 300.000', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('-$ 250.000', { exact: false })).toBeInTheDocument();
+    });
+  });
+
+  describe('R11 — Sidepanel collapsed/expanded dispatch', () => {
+    it('todo null muestra sidebar colapsado (w-16, sin panel de texto)', () => {
+      const { container } = render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      // Collapsed sidebar has w-16 class
+      const aside = container.querySelector('aside');
+      expect(aside?.className).toContain('w-16');
+      // No title panel should be visible
+      expect(screen.queryByText('Detalle de Celda')).not.toBeInTheDocument();
+      expect(screen.queryByText('Nuevo Presupuesto')).not.toBeInTheDocument();
+    });
+
+    it('activeForm set muestra FormPanel con titulo del formulario', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'budget' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Nuevo Presupuesto')).toBeInTheDocument();
+    });
+
+    it('recordDetail set muestra ViewPanel con titulo del tipo de registro', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Presupuesto')).toBeInTheDocument();
+    });
+
+    it('data set muestra DataPanel con titulo de la celda', () => {
+      const data: SidepanelData = {
+        title: 'Proyecto X / Julio',
+        subtitle: 'Presupuestado de ingresos',
+        formula: 'Suma',
+        budgets: [],
+        ejecuciones: [],
+        value: 0,
+        presupuestado: 0,
+        ejecutado: 0,
+        diferencia: 0,
+        mode: 'Presupuestado',
+        tipo: 'ingreso',
+      };
+
+      render(
+        <Sidepanel
+          data={data}
+          recordDetail={null}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.getByText('Proyecto X / Julio')).toBeInTheDocument();
+    });
+  });
 });

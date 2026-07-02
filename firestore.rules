@@ -12,6 +12,8 @@ service cloud.firestore {
     // Colecciones globales compartidas
     match /companies/{doc} { allow read: if true; }
     match /stateProject/{doc} { allow read: if true; }
+    match /clients/{doc} { allow read, write: if true; }
+    match /providers/{doc} { allow read, write: if true; }
     // Bloquear todo acceso no declarado explícitamente
     match /{document=**} {
       allow read, write: if false;

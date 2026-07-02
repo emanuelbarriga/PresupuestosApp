@@ -40,6 +40,7 @@ export interface Budget {
   tipo: TransactionType;
   montoPresupuestado: number;
   mesPresupuestado: Month;
+  fechaPresupuestado: string;
   estadoProyecto: ProjectState;
 }
 

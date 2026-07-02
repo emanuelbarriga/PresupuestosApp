@@ -39,12 +39,11 @@ export function subscribeCompanies(
 }
 
 export function subscribeClients(
-  companyId: string,
   onData: (clients: Client[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION),
+    collection(db, CLIENTS_COLLECTION),
     (snapshot) => {
       onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Client));
     },
@@ -67,12 +66,11 @@ export function subscribeProjects(
 }
 
 export function subscribeProviders(
-  companyId: string,
   onData: (providers: Provider[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION),
+    collection(db, PROVIDERS_COLLECTION),
     (snapshot) => {
       onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Provider));
     },
@@ -144,22 +142,20 @@ export async function addEjecucion(
 }
 
 export async function addClient(
-  companyId: string,
   client: Omit<Client, 'id'>,
 ): Promise<string> {
   const docRef = await addDoc(
-    collection(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION),
+    collection(db, CLIENTS_COLLECTION),
     { ...client, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }
 
 export async function addProvider(
-  companyId: string,
   provider: Omit<Provider, 'id'>,
 ): Promise<string> {
   const docRef = await addDoc(
-    collection(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION),
+    collection(db, PROVIDERS_COLLECTION),
     { ...provider, createdAt: serverTimestamp() },
   );
   return docRef.id;
@@ -186,17 +182,15 @@ export async function updateProject(companyId: string, projectId: string, data: 
 }
 
 export async function updateClient(
-  companyId: string,
   clientId: string,
   data: Partial<Client>,
 ): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, CLIENTS_COLLECTION, clientId), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, CLIENTS_COLLECTION, clientId), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function updateProvider(
-  companyId: string,
   providerId: string,
   data: Partial<Provider>,
 ): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, PROVIDERS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, PROVIDERS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
 }
