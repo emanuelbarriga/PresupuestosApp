@@ -606,6 +606,11 @@ describe('Sidepanel', () => {
   describe('R4 — SearchableSelect filtering and interaction', () => {
     it('focus abre dropdown y muestra todas las opciones de proyectos', async () => {
       const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      const testProjects = [
+        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
+        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
+        makeProject({ id: 'p3', name: 'Proyecto Gamma' }),
+      ];
       render(
         <Sidepanel
           data={null}
@@ -614,15 +619,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          projects={testProjects}
         />,
       );
-
-      // Emit projects so SearchableSelect has options
-      await emitProjects([
-        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
-        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
-        makeProject({ id: 'p3', name: 'Proyecto Gamma' }),
-      ]);
 
       // Focus on the project search input
       const projectInput = getInputByLabel('Proyecto');
@@ -636,6 +635,11 @@ describe('Sidepanel', () => {
 
     it('typing filtra opciones en SearchableSelect', async () => {
       const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      const testProjects = [
+        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
+        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
+        makeProject({ id: 'p3', name: 'Proyecto Gamma' }),
+      ];
       render(
         <Sidepanel
           data={null}
@@ -644,14 +648,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          projects={testProjects}
         />,
       );
-
-      await emitProjects([
-        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
-        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
-        makeProject({ id: 'p3', name: 'Proyecto Gamma' }),
-      ]);
 
       const projectInput = getInputByLabel('Proyecto');
       // Typing opens the dropdown and sets search
@@ -688,6 +687,10 @@ describe('Sidepanel', () => {
 
     it('seleccionar opción cierra dropdown y llama onChange', async () => {
       const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      const testProjects = [
+        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
+        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
+      ];
       render(
         <Sidepanel
           data={null}
@@ -696,13 +699,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          projects={testProjects}
         />,
       );
-
-      await emitProjects([
-        makeProject({ id: 'p1', name: 'Proyecto Alpha' }),
-        makeProject({ id: 'p2', name: 'Proyecto Beta' }),
-      ]);
 
       const projectInput = getInputByLabel('Proyecto');
       fireEvent.focus(projectInput);
@@ -1144,6 +1143,213 @@ describe('Sidepanel', () => {
       );
 
       expect(screen.getByText('Proyecto X / Julio')).toBeInTheDocument();
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Phase 3: Click proyecto y celda vacía en matriz (SDD click-proyecto-matriz)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('R13 — FormPanel add-mode with defaults merge', () => {
+    it('3.1 mergea defaults en add mode para budget', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'budget', defaults: { proyectoAsignado: 'Proyecto X', tipo: 'egreso', mesPresupuestado: 'Julio' } }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+        />,
+      );
+
+      // Verificar que los defaults se precargaron
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(data.proyectoAsignado).toBe('Proyecto X');
+      expect(data.tipo).toBe('egreso');
+      expect(data.mesPresupuestado).toBe('Julio');
+    });
+
+    it('3.1 mergea defaults en add mode para ejecucion', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion', defaults: { proyectoAsignado: 'Proyecto Y', tipo: 'ingreso' } }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(data.proyectoAsignado).toBe('Proyecto Y');
+      expect(data.tipo).toBe('ingreso');
+    });
+  });
+
+  describe('R14 — ProjectView/ViewPanel project state select', () => {
+    it('3.2 detecta proyecto inferido cuando no está en projects[]', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{
+            type: 'project',
+            project: { id: '', name: 'Proyecto Inferido', clientId: '', clientName: 'Cliente X', estado: 'Activo' },
+            budgets: [],
+            ejecuciones: [],
+          }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          projects={[{ id: 'p1', name: 'Otro Proyecto', clientId: '', clientName: '', estado: 'Activo' }]}
+        />,
+      );
+
+      // Debe mostrar el mensaje de proyecto inferido
+      expect(screen.getByText(/Proyecto inferido/)).toBeInTheDocument();
+      expect(screen.getByText('Crear proyecto')).toBeInTheDocument();
+      // El select debe estar deshabilitado
+      const select = screen.getByRole('combobox');
+      expect(select).toBeDisabled();
+    });
+
+    it('3.2 detecta proyecto existente (no inferido) y habilita select', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{
+            type: 'project',
+            project: { id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' },
+            budgets: [],
+            ejecuciones: [],
+          }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          projects={[{ id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' }]}
+        />,
+      );
+
+      // No debe mostrar mensaje de inferido
+      expect(screen.queryByText(/Proyecto inferido/)).not.toBeInTheDocument();
+      // Select debe estar habilitado
+      const select = screen.getByRole('combobox');
+      expect(select).not.toBeDisabled();
+    });
+
+    it('3.5 cambiar estado en select llama onFormSubmit con nuevo estado', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{
+            type: 'project',
+            project: { id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' },
+            budgets: [],
+            ejecuciones: [],
+          }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+          projects={[{ id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' }]}
+        />,
+      );
+
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'Cerrado' } });
+
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+      const form = onFormSubmit.mock.calls[0][0] as ActiveForm;
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(form.mode).toBe('edit');
+      expect(form.type).toBe('project');
+      expect(data.estado).toBe('Cerrado');
+    });
+  });
+
+  describe('R15 — Dashboard project click and empty cell click integration', () => {
+    it('3.3 click en nombre de proyecto llama onProjectClick con el nombre correcto', () => {
+      const budgets = [
+        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
+      ];
+      const onProjectClick = vi.fn();
+      const onCellClick = vi.fn();
+      const { container } = render(
+        <Dashboard onCellClick={onCellClick} onProjectClick={onProjectClick} budgets={budgets} ejecuciones={[]} />,
+      );
+
+      // El nombre del proyecto está en el DOM — buscamos el span clickeable
+      const projectSpan = screen.getByText('Proyecto Alpha');
+      fireEvent.click(projectSpan);
+
+      expect(onProjectClick).toHaveBeenCalledTimes(1);
+      expect(onProjectClick).toHaveBeenCalledWith('Proyecto Alpha');
+      // onCellClick NO debe llamarse
+      expect(onCellClick).not.toHaveBeenCalled();
+    });
+
+    it('3.4 click en celda vacía llama onEmptyCellClick con proyecto, mes y tipo', () => {
+      // Un proyecto con presupuesto en otro mes, dejando vacío Julio
+      const budgets = [
+        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Agosto', montoPresupuestado: 500000 }),
+      ];
+      const onEmptyCellClick = vi.fn();
+      const onCellClick = vi.fn();
+      const { container } = render(
+        <Dashboard onCellClick={onCellClick} onEmptyCellClick={onEmptyCellClick} budgets={budgets} ejecuciones={[]} />,
+      );
+
+      // Click en la primera celda vacía del primer tbody (primera matriz, ingreso)
+      // La primer celda del mes visible (Enero) está vacía — usamos getAllByText('-')[0] dentro del tbody
+      const firstTbody = container.querySelector('tbody')!;
+      const emptyCells = within(firstTbody).getAllByText('-');
+      // La primera celda vacía es Enero para Proyecto Alpha en modo Presupuestado
+      fireEvent.click(emptyCells[0]);
+
+      expect(onEmptyCellClick).toHaveBeenCalledTimes(1);
+      expect(onEmptyCellClick).toHaveBeenCalledWith('Proyecto Alpha', 'Enero', 'ingreso', 'Presupuestado');
+      // onCellClick NO debe llamarse
+      expect(onCellClick).not.toHaveBeenCalled();
+    });
+
+    it('3.6 celda con valor > 0 llama onCellClick (no onEmptyCellClick)', () => {
+      const budgets = [
+        makeBudget({ proyectoAsignado: 'Proyecto Alpha', mesPresupuestado: 'Julio', montoPresupuestado: 500000 }),
+      ];
+      const onCellClick = vi.fn();
+      const onEmptyCellClick = vi.fn();
+      const { container } = render(
+        <Dashboard onCellClick={onCellClick} onEmptyCellClick={onEmptyCellClick} budgets={budgets} ejecuciones={[]} />,
+      );
+
+      // Click en celda con valor > 0 — usamos getAllByText para obtener la celda del mes (no la del total)
+      const firstTbody = container.querySelector('tbody')!;
+      const allMatches = within(firstTbody).getAllByText(/500\.000/);
+      // allMatches[0] es la celda del mes, allMatches[1] es el total del período
+      fireEvent.click(allMatches[0]);
+
+      expect(onCellClick).toHaveBeenCalledTimes(1);
+      expect(onEmptyCellClick).not.toHaveBeenCalled();
+      // Verificar que los datos son correctos
+      const data = onCellClick.mock.calls[0][0] as SidepanelData;
+      expect(data.title).toBe('Proyecto Alpha / Julio');
+      expect(data.value).toBe(500000);
     });
   });
 });
