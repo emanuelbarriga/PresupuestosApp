@@ -267,8 +267,8 @@ export default function CompanyPage({ params }: Props) {
                   type: pf.type,
                   size: pf.size,
                   uploadedAt: new Date().toISOString(),
-                  descripcion: pf.descripcion || undefined,
-                  tipo: pf.tipo || undefined,
+                  ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
+                  ...(pf.tipo ? { tipo: pf.tipo } : {}),
                 };
               }),
             );

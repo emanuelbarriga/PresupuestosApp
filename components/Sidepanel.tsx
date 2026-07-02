@@ -1203,8 +1203,8 @@ function ComprobanteUploader({
           type: file.type,
           size: file.size,
           uploadedAt: new Date().toISOString(),
-          descripcion: newDesc || undefined,
-          tipo: newTipo || undefined,
+          ...(newDesc ? { descripcion: newDesc } : {}),
+          ...(newTipo ? { tipo: newTipo } : {}),
         };
         const updated = [...comprobantes, newComp];
         onComprobantesChange(updated);
