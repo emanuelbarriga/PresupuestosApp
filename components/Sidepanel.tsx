@@ -1714,113 +1714,163 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
       {/* BODY — scrollable, cambia según modo */}
       <div className="flex-1 overflow-y-auto p-6">
         {data.mode === 'Presupuestado' && (
-          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => {
-            const ejbs = data.ejecuciones.filter(e => e.budgetId === b.id);
-            return (
-            <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex-1 min-w-0 mr-2">
-                  <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
-                  <p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.entityName}</p>
-                </div>
-                <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
-              </div>
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: ejbs } })}
-                  className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
-                  <FileText size={11} /> Ver
-                </button>
-                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'budget', record: b } })}
-                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-                  <Save size={11} /> Editar
-                </button>
-                <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'ejecucion', defaults: {
-                  projectId: b.projectId || '',
-                  projectName: b.projectName || '',
-                  entityId: b.entityId || '',
-                  entityName: b.entityName || '',
-                  entityType: b.entityType || 'client',
-                  tipo: b.tipo,
-                  budgetId: b.id,
-                } } })}
-                  className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
-                  <Plus size={11} /> Ejecutar
-                </button>
-                {archiveConfirm?.id === b.id && archiveConfirm?.type === 'budget' ? (
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleArchive('budget', b.id)}
-                      className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
-                      Confirmar
-                    </button>
-                    <button onClick={() => setArchiveConfirm(null)}
-                      className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
-                      Cancelar
-                    </button>
+          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>
+          {(() => {
+            const grouped = data.budgets.reduce((acc, b) => {
+              const key = b.entityId || b.entityName || 'Sin entidad';
+              if (!acc[key]) acc[key] = { entityName: b.entityName || 'Sin entidad', entityType: b.entityType, items: [], total: 0 };
+              acc[key].items.push(b);
+              acc[key].total += b.montoPresupuestado;
+              return acc;
+            }, {} as Record<string, { entityName: string; entityType: string; items: Budget[]; total: number }>);
+            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            return sorted.map(group => (
+              <div key={group.entityName} className="mb-3 last:mb-0">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                    </span>
                   </div>
-                ) : (
-                  <button onClick={() => setArchiveConfirm({ type: 'budget', id: b.id })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
-                    <Trash2 size={11} /> Archivar
-                  </button>
-                )}
+                  <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+                </div>
+                <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                  {group.items.map(b => {
+                    const ejbs = data.ejecuciones.filter(e => e.budgetId === b.id);
+                    return (
+                    <div key={b.id} className="px-2 py-1.5">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
+                          <p className="text-[10px] text-slate-400">{b.mesPresupuestado}</p>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: ejbs } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                          <FileText size={11} /> Ver
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'budget', record: b } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                          <Save size={11} /> Editar
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'ejecucion', defaults: {
+                          projectId: b.projectId || '',
+                          projectName: b.projectName || '',
+                          entityId: b.entityId || '',
+                          entityName: b.entityName || '',
+                          entityType: b.entityType || 'client',
+                          tipo: b.tipo,
+                          budgetId: b.id,
+                        } } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
+                          <Plus size={11} /> Ejecutar
+                        </button>
+                        {archiveConfirm?.id === b.id && archiveConfirm?.type === 'budget' ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleArchive('budget', b.id)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                              Confirmar
+                            </button>
+                            <button onClick={() => setArchiveConfirm(null)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setArchiveConfirm({ type: 'budget', id: b.id })}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                            <Trash2 size={11} /> Archivar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )})}
+                </div>
               </div>
-            </div>
-          )})}</div>
+            ));
+          })()}</div>
         )}
 
         {data.mode === 'Ejecutado' && (
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>
-          {data.ejecuciones.map(e => {
-            const cCount = e.comprobantes?.length || 0;
-            return (
-              <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
-                <div className="flex items-start justify-between mb-1">
-                  <div className="flex-1 min-w-0 mr-2">
-                    <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
-                    <p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.entityName}</p>
+          {(() => {
+            const grouped = data.ejecuciones.reduce((acc, e) => {
+              const key = e.entityId || e.entityName || 'Sin entidad';
+              if (!acc[key]) acc[key] = { entityName: e.entityName || 'Sin entidad', entityType: e.entityType, items: [], total: 0 };
+              acc[key].items.push(e);
+              acc[key].total += e.montoEjecutado;
+              return acc;
+            }, {} as Record<string, { entityName: string; entityType: string; items: Ejecucion[]; total: number }>);
+            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            return sorted.map(group => (
+              <div key={group.entityName} className="mb-3 last:mb-0">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                    </span>
                   </div>
-                  <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
+                  <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
-                    <FileText size={11} /> Ver
-                  </button>
-                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-                    <Save size={11} /> Editar
-                  </button>
-                  <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
-                    <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
-                  </button>
-                  {archiveConfirm?.id === e.id && archiveConfirm?.type === 'ejecucion' ? (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => handleArchive('ejecucion', e.id)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
-                        Confirmar
-                      </button>
-                      <button onClick={() => setArchiveConfirm(null)}
-                        className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
-                        Cancelar
-                      </button>
+                <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                  {group.items.map(e => {
+                    const cCount = e.comprobantes?.length || 0;
+                    return (
+                    <div key={e.id} className="px-2 py-1.5">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
+                          <p className="text-[10px] text-slate-400">{e.fechaEjecutado}</p>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                          <FileText size={11} /> Ver
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                          <Save size={11} /> Editar
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
+                          <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
+                        </button>
+                        {archiveConfirm?.id === e.id && archiveConfirm?.type === 'ejecucion' ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleArchive('ejecucion', e.id)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                              Confirmar
+                            </button>
+                            <button onClick={() => setArchiveConfirm(null)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setArchiveConfirm({ type: 'ejecucion', id: e.id })}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                            <Trash2 size={11} /> Archivar
+                          </button>
+                        )}
+                      </div>
+                      {/* Siempre mostrar comprobantes si existen */}
+                      {cCount > 0 && (
+                        <div className="mt-2">
+                          <ComprobantesViewer comprobantes={e.comprobantes} />
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <button onClick={() => setArchiveConfirm({ type: 'ejecucion', id: e.id })}
-                      className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
-                      <Trash2 size={11} /> Archivar
-                    </button>
-                  )}
+                  )})}
                 </div>
-                {/* Siempre mostrar comprobantes si existen */}
-                {cCount > 0 && (
-                  <div className="mt-2">
-                    <ComprobantesViewer comprobantes={e.comprobantes} />
-                  </div>
-                )}
               </div>
-            );
-          })}</div>
+            ));
+          })()}</div>
         )}
       </div>
 

@@ -1289,8 +1289,8 @@ describe('Sidepanel', () => {
       expect(screen.getByText('Anticipo A')).toBeInTheDocument();
       expect(screen.getByText('Anticipo B')).toBeInTheDocument();
       expect(screen.queryByText('Pago A')).not.toBeInTheDocument();
-      // El footer con totales siempre visible
-      expect(screen.getByText('$ 300.000', { exact: false })).toBeInTheDocument();
+      // El footer con totales siempre visible (puede aparecer también en headers de grupo)
+      expect(screen.getAllByText('$ 300.000', { exact: false }).length).toBeGreaterThan(0);
       expect(screen.getByText('-$ 250.000', { exact: false })).toBeInTheDocument();
     });
   });
