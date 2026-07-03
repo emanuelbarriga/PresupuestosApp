@@ -106,9 +106,6 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
 }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const isProjectSelected = (key: string) => selectedProjects.has(key);
-  const activeCount = selectedProjects.size > 0 ? selectedProjects.size : projects.length;
-
   const filtered = [...projects]
     .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -125,7 +122,6 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
     onProjectsChange?.(next);
   };
 
-  // Selected projects as sorted array for tag display
   const selectedList = projects
     .filter(p => selectedProjects.has(p.id || p.name))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -135,14 +131,12 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
       <PanelHeader title="Configuración de Dashboard" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto">
 
-        {/* Search input */}
         <div className="px-5 pt-4 pb-3">
           <div className="relative">
             <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
               onChange={e => { onSearchChange?.(e.target.value); setShowDropdown(true); }}
               onFocus={() => setShowDropdown(true)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none" />
-            {/* Dropdown */}
             {showDropdown && projectSearch && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
                 {filtered.length === 0 ? (
@@ -150,16 +144,12 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
                 ) : (
                   filtered.map(p => {
                     const key = p.id || p.name;
-                    const selected = isProjectSelected(key);
                     return (
                       <button key={key}
-                        onClick={() => { toggleProject(key); }}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 flex items-center gap-2 transition-colors">
-                        <span className={clsx("w-4 h-4 rounded border flex items-center justify-center shrink-0", selected ? "bg-indigo-600 border-indigo-600" : "border-slate-300")}>
-                          {selected && <span className="text-white text-[10px]">✓</span>}
-                        </span>
+                        onClick={() => toggleProject(key)}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 transition-colors">
                         <span className="truncate">{p.name}</span>
-                        {p.descripcion && <span className="text-[10px] text-slate-400 truncate">— {p.descripcion}</span>}
+                        {p.descripcion && <span className="text-[10px] text-slate-400 ml-1">— {p.descripcion}</span>}
                       </button>
                     );
                   })
@@ -169,7 +159,6 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
           </div>
         </div>
 
-        {/* Selected projects as tags */}
         {selectedList.length > 0 && (
           <div className="px-5 mb-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">
@@ -192,7 +181,6 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
           </div>
         )}
 
-        {/* Show all when empty */}
         {selectedProjects.size === 0 && (
           <div className="px-5 py-3">
             <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">
@@ -201,7 +189,6 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
           </div>
         )}
 
-        {/* Quick actions */}
         <div className="px-5 pb-4 border-t border-slate-100 mt-3 pt-3">
           <button onClick={() => { onProjectsChange?.(new Set()); onSearchChange?.(''); }}
             className="w-full text-[10px] font-bold text-indigo-600 hover:text-indigo-700 px-3 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors">
