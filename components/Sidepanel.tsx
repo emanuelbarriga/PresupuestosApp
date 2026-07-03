@@ -105,6 +105,7 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
   onClose: () => void;
 }) {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const filtered = [...projects]
     .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
@@ -115,6 +116,7 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
     if (next.has(key)) next.delete(key); else next.add(key);
     onProjectsChange?.(next);
     setShowDropdown(false);
+    setActiveIndex(-1);
     onSearchChange?.('');
   };
 
@@ -122,6 +124,26 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
     const next = new Set(selectedProjects);
     next.delete(key);
     onProjectsChange?.(next);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < filtered.length) {
+        const p = filtered[activeIndex];
+        toggleProject(p.id || p.name);
+      }
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setActiveIndex(-1);
+    }
   };
 
   const selectedList = projects
@@ -136,20 +158,21 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
         <div className="px-5 pt-4 pb-3">
           <div className="relative">
             <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
-              onChange={e => { onSearchChange?.(e.target.value); setShowDropdown(true); }}
+              onChange={e => { onSearchChange?.(e.target.value); setShowDropdown(true); setActiveIndex(-1); }}
               onFocus={() => setShowDropdown(true)}
+              onKeyDown={handleKeyDown}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none" />
             {showDropdown && projectSearch && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
                 {filtered.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-slate-400">Sin resultados</p>
                 ) : (
-                  filtered.map(p => {
+                  filtered.map((p, idx) => {
                     const key = p.id || p.name;
                     return (
                       <button key={key}
                         onClick={() => toggleProject(key)}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 transition-colors">
+                        className={clsx("w-full text-left px-3 py-2 text-xs transition-colors", idx === activeIndex ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50")}>
                         <span className="truncate">{p.name}</span>
                         {p.descripcion && <span className="text-[10px] text-slate-400 ml-1">— {p.descripcion}</span>}
                       </button>
