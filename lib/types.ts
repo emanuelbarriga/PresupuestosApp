@@ -119,7 +119,7 @@ export interface Ejecucion {
   archivado?: boolean;
 }
 
-export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración';
+export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
 
 export interface SidepanelData {
   title: string;
@@ -172,4 +172,5 @@ export type ActiveForm =
 export type NavScreen =
   | { id: string; type: 'data'; data: SidepanelData }
   | { id: string; type: 'view'; detail: RecordDetail }
-  | { id: string; type: 'form'; form: ActiveForm };
+  | { id: string; type: 'form'; form: ActiveForm }
+  | { id: string; type: 'customize' };
