@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { SidepanelData, MONTHS, Month, ProjectState, Budget, Ejecucion, TransactionType, Project, DetalleTerceroGroup, RecordDetail } from '@/lib/types';
-import { ChevronLeft, ChevronRight, ChevronDown, Calendar, CalendarRange } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Settings } from 'lucide-react';
 import clsx from 'clsx';
 
 const currentYear = new Date().getFullYear();
@@ -139,24 +139,16 @@ const getMonthFromDateStr = (dateString: string): Month => {
 
 export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, budgets, ejecuciones, projects }: DashboardProps) {
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
-  const [timeView, setTimeView] = useState<'year' | '5months'>('year');
-  const [centerMonthIdx, setCenterMonthIdx] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
   const [showArchivados, setShowArchivados] = useState(false);
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [projectOrder, setProjectOrder] = useState<Record<string, number>>({});
   const [ingresoTotals, setIngresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
   const [egresoTotals, setEgresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
 
-  const visibleMonths = useMemo(() => {
-    if (timeView === 'year') return MONTHS;
-    let start = Math.max(0, centerMonthIdx - 2);
-    let end = Math.min(11, start + 4);
-    if (end - start < 4) start = Math.max(0, end - 4);
-    return MONTHS.slice(start, end + 1);
-  }, [timeView, centerMonthIdx]);
-
-  const handlePrevMonth = () => setCenterMonthIdx(prev => Math.max(2, prev - 1));
-  const handleNextMonth = () => setCenterMonthIdx(prev => Math.min(9, prev + 1));
+  const visibleMonths = MONTHS; // Siempre vista anual — 12 meses
 
   // Resolve live project name from projects list, fallback to snapshot
   const projectNameMap = useMemo(() => {
@@ -215,20 +207,6 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           <p className="text-[10px] uppercase tracking-wider font-medium text-slate-500">Matriz de control de Ingresos y Egresos</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 border p-1 rounded-lg bg-slate-100 border-slate-200">
-            <button onClick={() => setTimeView('year')} className={clsx("p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors", timeView === 'year' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700')}>
-              <Calendar size={14} /> Año
-            </button>
-            <button onClick={() => setTimeView('5months')} className={clsx("p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors", timeView === '5months' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700')}>
-              <CalendarRange size={14} /> 5 Meses
-            </button>
-            {timeView === '5months' && (
-              <div className="flex items-center ml-1 border-l pl-1 border-slate-200">
-                <button onClick={handlePrevMonth} disabled={centerMonthIdx <= 2} className="p-1 disabled:opacity-30 text-slate-400 hover:text-slate-600"><ChevronLeft size={16}/></button>
-                <button onClick={handleNextMonth} disabled={centerMonthIdx >= 9} className="p-1 disabled:opacity-30 text-slate-400 hover:text-slate-600"><ChevronRight size={16}/></button>
-              </div>
-            )}
-          </div>
           <div className="flex items-center gap-1 border p-1 rounded-lg bg-slate-100 border-slate-200">
             <button onClick={() => setSelectedYear(y => y - 1)} className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-white transition-colors"><ChevronLeft size={14}/></button>
             <span className="px-2 text-xs font-bold text-slate-700 min-w-[48px] text-center select-none">{selectedYear}</span>
@@ -250,8 +228,58 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
             {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
           </button>
+          <button onClick={() => setShowCustomize(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5", showCustomize ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600")}>
+            <Settings size={13} /> Personalizar
+          </button>
         </div>
       </header>
+
+      {showCustomize && (
+        <div className="px-6 py-3 border-b bg-white border-slate-200">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Personalizar tabla</p>
+            <div className="flex gap-2">
+              <button onClick={() => { setSelectedProjects(new Set()); setProjectOrder({}); }}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors">
+                Limpiar filtros
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-x-4 gap-y-1 max-h-48 overflow-y-auto">
+            {[...(projects || [])].sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+              const key = p.id || p.name;
+              const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
+              const order = projectOrder[key];
+              return (
+                <div key={key} className="flex items-center gap-2 py-0.5">
+                  <input type="checkbox" checked={isSelected}
+                    onChange={() => {
+                      setSelectedProjects(prev => {
+                        const next = new Set(prev);
+                        if (next.has(key)) next.delete(key); else next.add(key);
+                        return next;
+                      });
+                    }}
+                    className="shrink-0 w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                  <span className="text-[11px] text-slate-700 truncate flex-1">{p.name}</span>
+                  <input type="number" min="1" max="999" placeholder="—" value={order ?? ''}
+                    onChange={e => {
+                      const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                      setProjectOrder(prev => {
+                        if (val == null) { const { [key]: _, ...rest } = prev; return rest; }
+                        return { ...prev, [key]: val };
+                      });
+                    }}
+                    className="w-12 text-[10px] border border-slate-200 rounded px-1.5 py-0.5 text-center focus:border-indigo-500 outline-none" />
+                </div>
+              );
+            })}
+          </div>
+          {selectedProjects.size > 0 && (
+            <p className="text-[10px] text-indigo-600 font-medium mt-1.5">{selectedProjects.size} de {(projects || []).length} proyectos visibles</p>
+          )}
+        </div>
+      )}
 
       <div className="px-4 pt-4 flex gap-4 shrink-0">
         <KpiCard label="Total Ingresos" value={mode === 'Presupuestado' ? ingresoTotals.presupuestado : ingresoTotals.ejecutado} color="emerald" />
@@ -271,8 +299,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       </div>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} />
-        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} />
+        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} projectOrder={projectOrder} />
+        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} projectOrder={projectOrder} />
       </div>
     </div>
   );
@@ -291,9 +319,11 @@ interface MatrixProps {
   ejecuciones: Ejecucion[];
   resolveProjectName: (projectId: string, snapshotName: string) => string;
   allProjects?: Project[];
+  selectedProjects: Set<string>;
+  projectOrder: Record<string, number>;
 }
 
-function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects }: MatrixProps) {
+function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects, projectOrder }: MatrixProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -501,8 +531,29 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
   const title = `${tipo.toUpperCase()}S ${mode.toUpperCase()}S`;
 
   const visibleRows = useMemo(
-    () => matrixData.rows.filter(row => showNegociacion || row.estado !== 'Negociación'),
-    [matrixData.rows, showNegociacion],
+    () => {
+      let rows = matrixData.rows.filter(row => showNegociacion || row.estado !== 'Negociación');
+
+      // Filtrar por proyectos seleccionados (si hay alguno seleccionado)
+      if (selectedProjects.size > 0) {
+        rows = rows.filter(r => selectedProjects.has(r.projectId || r.proyecto));
+      }
+
+      // Ordenar por número manual (menor primero), luego alfabético
+      rows = [...rows].sort((a, b) => {
+        const keyA = a.projectId || a.proyecto;
+        const keyB = b.projectId || b.proyecto;
+        const orderA = projectOrder[keyA];
+        const orderB = projectOrder[keyB];
+        if (orderA != null && orderB != null) return orderA - orderB;
+        if (orderA != null) return -1;
+        if (orderB != null) return 1;
+        return (a.proyecto || '').localeCompare(b.proyecto || '');
+      });
+
+      return rows;
+    },
+    [matrixData.rows, showNegociacion, selectedProjects, projectOrder],
   );
 
   const expandAll = () => {

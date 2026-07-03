@@ -71,6 +71,7 @@ export interface Project {
   clientName: string;
   estado: string;
   soloEgresos?: boolean;      // Si true, solo aparece en EGRESOS del Dashboard
+  orden?: number;             // Orden manual definido por el usuario (menor primero)
 }
 
 export const MONTHS: Month[] = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
