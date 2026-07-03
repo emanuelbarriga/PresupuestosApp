@@ -1249,7 +1249,7 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onN
 function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
   const [modal, setModal] = useState<Comprobante | null>(null);
 
-  if (comprobantes.length === 0) return null;
+  if (!Array.isArray(comprobantes) || comprobantes.length === 0) return null;
 
   return (
     <>

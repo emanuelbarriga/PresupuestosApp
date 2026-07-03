@@ -189,7 +189,7 @@ export function subscribeEjecuciones(
           montoEjecutado: data.montoEjecutado ?? 0,
           fechaEjecutado: data.fechaEjecutado ?? '',
           budgetId: data.budgetId ?? undefined,
-          comprobantes: data.comprobantes ?? [],
+          comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
           archivado: data.archivado ?? false,
         } as Ejecucion;
       }));
