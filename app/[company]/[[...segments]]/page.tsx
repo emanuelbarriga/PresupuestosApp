@@ -6,7 +6,7 @@ import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Clien
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { ref, listAll, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
@@ -153,7 +153,7 @@ export default function CompanyPage({ params }: Props) {
       for (const d of snap.docs) {
         const data = d.data();
         const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
-        results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name) });
+        results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name), sizes: comprobantes.map((c: any) => c.size) });
       }
       console.table(results.filter(r => r.comprobantes > 0));
       console.log(`Total ejecuciones: ${results.length}, con comprobantes: ${results.filter(r => r.comprobantes > 0).length}`);
@@ -197,39 +197,36 @@ export default function CompanyPage({ params }: Props) {
         if (!data) { results.push(`⚠️ ${ejecucionId}: carpeta sin ejecucion`); continue; }
 
         const existing = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        const existingNames = new Set(existing.map((c: any) => c.name));
         
         // Detect duplicates by filename pattern (same name = duplicate)
-        const seen = new Map<string, typeof files.items[0]>();
-        const toDelete: typeof files.items[0][] = [];
+        const seen = new Map<string, { item: typeof files.items[0]; keep: boolean }>();
         for (const item of files.items) {
-          const baseName = item.name.replace(/^[a-f0-9-]+-/, ''); // strip UUID prefix
+          const baseName = item.name.replace(/^[a-f0-9-]+-/, '');
           if (seen.has(baseName)) {
-            toDelete.push(item);
+            // Delete duplicate
+            console.log(`🗑️ Eliminando duplicado: ${ejecucionId}/${item.name}`);
+            await deleteObject(item);
+            results.push(`🗑️ ${ejecucionId}: duplicado ${item.name} eliminado`);
           } else {
-            seen.set(baseName, item);
+            seen.set(baseName, { item, keep: true });
           }
         }
 
-        // Delete duplicate files from Storage
-        for (const item of toDelete) {
-          console.log(`🗑️ Eliminando duplicado: ${ejecucionId}/${item.name}`);
-          await deleteObject(item);
-          results.push(`🗑️ ${ejecucionId}: duplicado ${item.name} eliminado`);
-        }
-
-        // Build comprobantes array from remaining files
+        // Build comprobantes array from remaining files (only those not already existing)
         const newComprobantes: Comprobante[] = [];
-        for (const item of seen.values()) {
-          if (existing.some((c: any) => c.name === item.name.replace(/^[a-f0-9-]+-/, ''))) continue;
+        for (const [baseName, { item }] of seen) {
+          if (existingNames.has(baseName)) continue; // already in Firestore
+          const meta = await getMetadata(item);
           const url = await getDownloadURL(item);
           newComprobantes.push({
             id: crypto.randomUUID(),
-            name: item.name.replace(/^[a-f0-9-]+-/, ''),
+            name: baseName,
             url,
             path: item.fullPath,
-            type: 'application/pdf',
-            size: 0,
-            uploadedAt: new Date().toISOString(),
+            type: meta.contentType || 'application/pdf',
+            size: meta.size || 0,
+            uploadedAt: new Date(meta.updated || meta.timeCreated || Date.now()).toISOString(),
           });
         }
 
@@ -246,7 +243,38 @@ export default function CompanyPage({ params }: Props) {
       results.forEach(r => console.log(r));
     };
 
-    return () => { delete (window as any).$$scan; delete (window as any).$$fix; };
+    // Fix comprobantes with 0B size by fetching real metadata from Storage
+    (window as any).$$fixSizes = async () => {
+      console.log('🔧 Reparando tamaños de comprobantes...');
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      let fixed = 0;
+      for (const d of snap.docs) {
+        const data = d.data();
+        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        let changed = false;
+        for (const c of comprobantes) {
+          if (c.size === 0 && c.path) {
+            try {
+              const fileRef = ref(storage, c.path);
+              const meta = await getMetadata(fileRef);
+              c.size = meta.size || 0;
+              c.type = meta.contentType || c.type;
+              console.log(`✅ ${d.id}: ${c.name} → ${(c.size / 1024).toFixed(0)}KB`);
+              changed = true;
+            } catch (e) {
+              console.warn(`⚠️ ${d.id}: ${c.name} no encontrado en Storage`, c.path);
+            }
+          }
+        }
+        if (changed) {
+          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', d.id), { comprobantes });
+          fixed++;
+        }
+      }
+      console.log(`🔧 ${fixed} ejecuciones con tamaños reparados`);
+    };
+
+    return () => { delete (window as any).$$scan; delete (window as any).$$fix; delete (window as any).$$fixSizes; };
   }, [companyId]);
 
   const pushScreen = useCallback((screen: NavScreen) => {
