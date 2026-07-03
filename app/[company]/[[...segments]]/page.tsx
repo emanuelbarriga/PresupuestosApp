@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
-import { ref, listAll, getDownloadURL } from 'firebase/storage';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { ref, listAll, getDownloadURL, deleteObject } from 'firebase/storage';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
@@ -144,7 +144,7 @@ export default function CompanyPage({ params }: Props) {
 
   const projectsForCompany = isConjunto ? [] : projects;
 
-  // Diagnostic tool — run `window.$$scan()` from browser console
+  // Diagnostic & repair tools — run from browser console
   useEffect(() => {
     (window as any).$$scan = async () => {
       console.log('🔍 Escaneando comprobantes...');
@@ -155,10 +155,9 @@ export default function CompanyPage({ params }: Props) {
         const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
         results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name) });
       }
-      console.table(results.filter(r => r.comprobantes > 0 || r.desc?.includes('267')));
+      console.table(results.filter(r => r.comprobantes > 0));
       console.log(`Total ejecuciones: ${results.length}, con comprobantes: ${results.filter(r => r.comprobantes > 0).length}`);
 
-      // Scan storage
       console.log('📁 Escaneando Storage...');
       const storageRef = ref(storage, `${companyId}/ejecuciones`);
       try {
@@ -170,18 +169,84 @@ export default function CompanyPage({ params }: Props) {
           const fileNames = files.items.map(f => f.name);
           const ejecucion = results.find(r => r.id === folder.name);
           if (!ejecucion) {
-            console.log(`⚠️ Storage folder sin ejecucion: ${folder.name}`, fileNames);
+            console.log(`⚠️ Sin ejecucion: ${folder.name}`, fileNames);
           } else if (fileNames.length !== ejecucion.comprobantes) {
-            console.log(`❌ Mismatch ${folder.name}: ${fileNames.length} files en storage vs ${ejecucion.comprobantes} comprobantes`, { storage: fileNames, firestore: ejecucion.names });
+            console.log(`❌ ${folder.name}: ${fileNames.length} files vs ${ejecucion.comprobantes} comprobantes`, { storage: fileNames, firestore: ejecucion.names });
           } else {
-            console.log(`✅ OK ${folder.name}: ${fileNames.length} files`);
+            console.log(`✅ ${folder.name}: ${fileNames.length} files`);
           }
         }
       } catch (e) {
         console.error('Storage scan error:', e);
       }
     };
-    return () => { delete (window as any).$$scan; };
+
+    (window as any).$$fix = async () => {
+      console.log('🔧 Reparando comprobantes...');
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      const ejecuciones = new Map(snap.docs.map(d => [d.id, d.data()]));
+
+      const storageRef = ref(storage, `${companyId}/ejecuciones`);
+      const listResult = await listAll(storageRef);
+      const results: string[] = [];
+
+      for (const folder of listResult.prefixes) {
+        const ejecucionId = folder.name;
+        const files = await listAll(folder);
+        const data = ejecuciones.get(ejecucionId);
+        if (!data) { results.push(`⚠️ ${ejecucionId}: carpeta sin ejecucion`); continue; }
+
+        const existing = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        
+        // Detect duplicates by filename pattern (same name = duplicate)
+        const seen = new Map<string, typeof files.items[0]>();
+        const toDelete: typeof files.items[0][] = [];
+        for (const item of files.items) {
+          const baseName = item.name.replace(/^[a-f0-9-]+-/, ''); // strip UUID prefix
+          if (seen.has(baseName)) {
+            toDelete.push(item);
+          } else {
+            seen.set(baseName, item);
+          }
+        }
+
+        // Delete duplicate files from Storage
+        for (const item of toDelete) {
+          console.log(`🗑️ Eliminando duplicado: ${ejecucionId}/${item.name}`);
+          await deleteObject(item);
+          results.push(`🗑️ ${ejecucionId}: duplicado ${item.name} eliminado`);
+        }
+
+        // Build comprobantes array from remaining files
+        const newComprobantes: Comprobante[] = [];
+        for (const item of seen.values()) {
+          if (existing.some((c: any) => c.name === item.name.replace(/^[a-f0-9-]+-/, ''))) continue;
+          const url = await getDownloadURL(item);
+          newComprobantes.push({
+            id: crypto.randomUUID(),
+            name: item.name.replace(/^[a-f0-9-]+-/, ''),
+            url,
+            path: item.fullPath,
+            type: 'application/pdf',
+            size: 0,
+            uploadedAt: new Date().toISOString(),
+          });
+        }
+
+        if (newComprobantes.length > 0) {
+          const merged = [...existing, ...newComprobantes];
+          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', ejecucionId), { comprobantes: merged });
+          results.push(`✅ ${ejecucionId}: +${newComprobantes.length} comprobantes (total: ${merged.length})`);
+          console.log(`✅ ${ejecucionId}: agregados ${newComprobantes.length} comprobantes`);
+        } else {
+          results.push(`✅ ${ejecucionId}: sin cambios (${existing.length} comprobantes)`);
+        }
+      }
+      console.log('🔧 Reparación completa');
+      results.forEach(r => console.log(r));
+    };
+
+    return () => { delete (window as any).$$scan; delete (window as any).$$fix; };
   }, [companyId]);
 
   const pushScreen = useCallback((screen: NavScreen) => {
