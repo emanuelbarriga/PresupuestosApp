@@ -285,8 +285,8 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
   };
 
   const isP = mode === 'Presupuestado';
-  const textColor = isP ? 'text-slate-400' : (tipo === 'ingreso' ? 'text-emerald-600' : 'text-rose-600');
-  const hoverBgTheme = tipo === 'ingreso' ? (isP ? 'hover:bg-sky-50' : 'hover:bg-emerald-50/50 hover:text-emerald-700') : (isP ? 'hover:bg-sky-50' : 'hover:bg-rose-50/50 hover:text-rose-700');
+  const colorTheme = tipo === 'ingreso' ? 'text-emerald-600' : 'text-rose-600';
+  const hoverBgTheme = tipo === 'ingreso' ? (isP ? 'hover:bg-emerald-50 hover:text-emerald-700' : 'hover:bg-emerald-50/50 hover:text-emerald-700') : (isP ? 'hover:bg-rose-50 hover:text-rose-700' : 'hover:bg-rose-50/50 hover:text-rose-700');
   const currentMonthIdx = new Date().getMonth();
   const currentMonthStr = MONTHS[currentMonthIdx];
 
@@ -689,15 +689,34 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                       const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                       const isZero = val === 0;
                       return (
-                        <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && `font-bold ${hoverBgTheme} ${textColor}`, isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
-                          onClick={() => {
-                            if (isZero) {
-                              onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode);
-                            } else {
-                              handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || []);
-                            }
-                          }}>
-                          {isZero ? '-' : formatCurrency(val)}
+                        <td key={m} className={clsx("p-2 text-center border-r transition-colors", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"))}>
+                          {isP ? (
+                            <div className="flex justify-center">
+                              <span className={clsx(!isZero && `font-bold ${hoverBgTheme} ${colorTheme} cursor-pointer`, isZero && "text-slate-300 cursor-pointer hover:text-slate-500")}
+                                onClick={() => {
+                                  if (isZero) {
+                                    onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode);
+                                  } else {
+                                    handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || []);
+                                  }
+                                }}>
+                                {isZero ? '-' : formatCurrency(presupuestado)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className={clsx(ejecutado > 0 ? `font-bold ${hoverBgTheme} ${colorTheme} cursor-pointer` : "text-slate-300")}
+                                onClick={() => ejecutado > 0 && handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || [])}>
+                                {ejecutado > 0 ? formatCurrency(ejecutado) : '-'}
+                              </span>
+                              {presupuestado > 0 && (
+                                <button onClick={e => { e.stopPropagation(); onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado'); }}
+                                  className="text-[9px] text-slate-400 hover:text-slate-600 leading-tight">
+                                  {formatCurrency(presupuestado)}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                       );
                     })}
@@ -728,33 +747,68 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                           const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                           const isZero = val === 0;
                           return (
-                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${textColor} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300 cursor-pointer hover:bg-slate-50")}
-                              onClick={() => {
-                                if (!isZero) {
-                                  const bs = t.budgetsPorMes[m] || [];
-                                  const ejs = t.ejecucionesPorMes[m] || [];
-                                  onCellClick({
-                                    title: `${row.proyecto} / ${m}`,
-                                    subtitle: `${t.entityName} / ${mode} de ${tipo}s`,
-                                    formula: `${t.entityName} en ${m} para ${row.proyecto}`,
-                                    budgets: bs,
-                                    ejecuciones: ejs,
-                                    value: val,
-                                    presupuestado,
-                                    ejecutado,
-                                    diferencia: ejecutado - presupuestado,
-                                    mode,
-                                    tipo,
-                                  });
-                                } else {
-                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
-                                }
-                              }}>
-                              {isZero ? '-' : formatCurrency(val)}
+                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100")}>
+                              {isP ? (
+                                <span className={clsx(!isZero && `font-semibold ${colorTheme} cursor-pointer hover:bg-sky-100/50`, isZero && "text-slate-300 cursor-pointer hover:bg-slate-50")}
+                                  onClick={() => {
+                                    if (!isZero) {
+                                      const bs = t.budgetsPorMes[m] || [];
+                                      const ejs = t.ejecucionesPorMes[m] || [];
+                                      onCellClick({
+                                        title: `${row.proyecto} / ${m}`,
+                                        subtitle: `${t.entityName} / ${mode} de ${tipo}s`,
+                                        formula: `${t.entityName} en ${m} para ${row.proyecto}`,
+                                        budgets: bs,
+                                        ejecuciones: ejs,
+                                        value: val,
+                                        presupuestado,
+                                        ejecutado,
+                                        diferencia: ejecutado - presupuestado,
+                                        mode,
+                                        tipo,
+                                      });
+                                    } else {
+                                      onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
+                                    }
+                                  }}>
+                                  {isZero ? '-' : formatCurrency(presupuestado)}
+                                </span>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className={clsx(ejecutado > 0 ? `font-semibold ${colorTheme} cursor-pointer hover:bg-slate-100` : "text-slate-300")}
+                                    onClick={() => {
+                                      if (ejecutado > 0) {
+                                        const bs = t.budgetsPorMes[m] || [];
+                                        const ejs = t.ejecucionesPorMes[m] || [];
+                                        onCellClick({
+                                          title: `${row.proyecto} / ${m}`,
+                                          subtitle: `${t.entityName} / ${mode} de ${tipo}s`,
+                                          formula: `${t.entityName} en ${m} para ${row.proyecto}`,
+                                          budgets: bs,
+                                          ejecuciones: ejs,
+                                          value: val,
+                                          presupuestado,
+                                          ejecutado,
+                                          diferencia: ejecutado - presupuestado,
+                                          mode,
+                                          tipo,
+                                        });
+                                      }
+                                    }}>
+                                    {ejecutado > 0 ? formatCurrency(ejecutado) : '-'}
+                                  </span>
+                                  {presupuestado > 0 && (
+                                    <button onClick={e => { e.stopPropagation(); onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType); }}
+                                      className="text-[8px] text-slate-400 hover:text-slate-600 leading-tight">
+                                      {formatCurrency(presupuestado)}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           );
                         })}
-                        <td className={clsx("p-2 text-right border-l text-[10px] font-semibold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado) > 0 ? `${textColor} cursor-pointer hover:bg-slate-50` : "text-slate-400")}
+                        <td className={clsx("p-2 text-right border-l text-[10px] font-semibold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado) > 0 ? `${colorTheme} cursor-pointer hover:bg-slate-50` : "text-slate-400")}
                           onClick={() => {
                             const p = t.totalPresupuestado;
                             const e = t.totalEjecutado;
