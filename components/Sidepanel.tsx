@@ -114,6 +114,8 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
     const next = new Set(selectedProjects);
     if (next.has(key)) next.delete(key); else next.add(key);
     onProjectsChange?.(next);
+    setShowDropdown(false);
+    onSearchChange?.('');
   };
 
   const removeProject = (key: string) => {
