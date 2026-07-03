@@ -12,7 +12,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
@@ -20,6 +20,8 @@ const EJECUCIONES_COLLECTION = 'ejecuciones';
 const TERCEROS_COLLECTION = 'terceros';
 const PROJECTS_COLLECTION = 'projects';
 const STATE_PROJECTS_COLLECTION = 'stateProject';
+const CUENTAS_BANCARIAS_COLLECTION = 'cuentasBancarias';
+const EXTRACTOS_COLLECTION = 'extractos';
 
 export async function getCompanies(): Promise<Company[]> {
   const snapshot = await getDocs(collection(db, COMPANIES_COLLECTION));
@@ -287,4 +289,72 @@ export async function updateTercero(
   data: Record<string, any>,
 ): Promise<void> {
   await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { ...data, updatedAt: serverTimestamp() });
+}
+
+// ── Cuentas Bancarias ──
+
+export function subscribeCuentasBancarias(
+  companyId: string,
+  onData: (cuentas: CuentaBancaria[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as CuentaBancaria));
+    },
+    onError,
+  );
+}
+
+export function subscribeExtractos(
+  companyId: string,
+  onData: (extractos: ExtractoBancario[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as ExtractoBancario));
+    },
+    onError,
+  );
+}
+
+export async function addCuentaBancaria(
+  companyId: string,
+  data: Omit<CuentaBancaria, 'id'>,
+): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION),
+    { ...data, createdAt: serverTimestamp() },
+  );
+  return docRef.id;
+}
+
+export async function addExtracto(
+  companyId: string,
+  data: Omit<ExtractoBancario, 'id'>,
+): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION),
+    { ...data, createdAt: serverTimestamp() },
+  );
+  return docRef.id;
+}
+
+export async function updateCuentaBancaria(
+  companyId: string,
+  cuentaId: string,
+  data: Partial<CuentaBancaria>,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, cuentaId), { ...data, updatedAt: serverTimestamp() });
+}
+
+export async function updateExtracto(
+  companyId: string,
+  extractoId: string,
+  data: Partial<ExtractoBancario>,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION, extractoId), { ...data, updatedAt: serverTimestamp() });
 }

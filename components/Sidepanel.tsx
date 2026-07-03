@@ -450,7 +450,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     return true;
   });
 
-  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'tercero' ? 'Tercero' : ft === 'client' ? 'Cliente' : 'Proveedor'}`;
+  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'tercero' ? 'Tercero' : ft === 'client' ? 'Cliente' : ft === 'cuenta' ? 'Cuenta Bancaria' : ft === 'extracto' ? 'Extracto Bancario' : 'Proveedor'}`;
 
   if (ft === 'project') {
     const clientOptions = terceros
@@ -543,6 +543,64 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
             <span className="text-xs font-medium text-slate-600 select-none">Solo egresos</span>
             <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Ingresos)</span>
           </label>
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (ft === 'cuenta') {
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormInput label="Nombre" value={f('nombre')} onChange={v => set('nombre', v)} />
+          <FormInput label="Banco" value={f('banco')} onChange={v => set('banco', v)} />
+          <FormSelect label="Tipo" value={f('tipo')} onChange={v => set('tipo', v)}
+            options={[
+              { value: 'Ahorros', label: 'Ahorros' },
+              { value: 'Corriente', label: 'Corriente' },
+              { value: 'Tarjeta de Crédito', label: 'Tarjeta de Crédito' },
+              { value: 'Caja Menor / Efectivo', label: 'Caja Menor / Efectivo' },
+            ]} />
+          <FormInput label="Número de cuenta" value={f('numero')} onChange={v => set('numero', v)} />
+          <FormSelect label="Moneda" value={f('moneda')} onChange={v => set('moneda', v)}
+            options={[
+              { value: 'COP', label: 'COP' },
+              { value: 'USD', label: 'USD' },
+              { value: 'EUR', label: 'EUR' },
+            ]} />
+          <FormInput label="Saldo inicial" value={f('saldoInicial')} onChange={v => set('saldoInicial', v)} type="number" />
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (ft === 'extracto') {
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormSelect label="Mes" value={f('mes')} onChange={v => set('mes', v)}
+            options={MONTHS.map(m => ({ value: m, label: m }))} />
+          <FormInput label="Año" value={f('anio')} onChange={v => set('anio', v)} type="number" />
+          <FormInput label="Saldo inicial" value={f('saldoInicial')} onChange={v => set('saldoInicial', v)} type="number" />
+          <FormInput label="Saldo final" value={f('saldoFinal')} onChange={v => set('saldoFinal', v)} type="number" />
+          <FormSelect label="Estado" value={f('estado')} onChange={v => set('estado', v)}
+            options={[
+              { value: 'Pendiente', label: 'Pendiente' },
+              { value: 'En revisión', label: 'En revisión' },
+              { value: 'Conciliado', label: 'Conciliado' },
+            ]} />
         </div>
         <div className="p-6 border-t border-slate-100 shrink-0">
           <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
@@ -775,6 +833,19 @@ function FormInput({ label, value, onChange, type = 'text' }: { label: string; v
     <div>
       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
+    </div>
+  );
+}
+
+function FormSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+        <option value="">Seleccionar...</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   );
 }

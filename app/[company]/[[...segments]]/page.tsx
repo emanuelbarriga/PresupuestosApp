@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
@@ -22,6 +22,10 @@ import {
   updateProject,
   updateTercero,
   subscribeCompanies,
+  addCuentaBancaria,
+  updateCuentaBancaria,
+  addExtracto,
+  updateExtracto,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
@@ -310,6 +314,12 @@ export default function CompanyPage({ params }: Props) {
         case 'tercero':
           await addTercero(data);
           break;
+        case 'cuenta':
+          await addCuentaBancaria(companyId, data as Omit<CuentaBancaria, 'id'>);
+          break;
+        case 'extracto':
+          await addExtracto(companyId, data as Omit<ExtractoBancario, 'id'>);
+          break;
       }
     } else {
       switch (form.type) {
@@ -336,6 +346,12 @@ export default function CompanyPage({ params }: Props) {
           break;
         case 'tercero':
           await updateTercero(form.record.id, data);
+          break;
+        case 'cuenta':
+          await updateCuentaBancaria(companyId, (form as any).record.id, data as Partial<CuentaBancaria>);
+          break;
+        case 'extracto':
+          await updateExtracto(companyId, (form as any).record.id, data as Partial<ExtractoBancario>);
           break;
       }
     }

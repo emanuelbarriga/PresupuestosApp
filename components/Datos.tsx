@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings } from '@/lib/firestore';
+import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario } from '@/lib/types';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeExtractos } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
-type TabType = 'Presupuestos' | 'Ejecuciones' | 'Proyectos' | 'Terceros' | 'Settings';
+type TabType = 'Presupuestos' | 'Ejecuciones' | 'Proyectos' | 'Terceros' | 'Settings' | 'Bancos';
 
 const PAGE_SIZES = [20, 50, 100, 200];
 
@@ -25,7 +25,7 @@ export function Datos({
   onEditRecord?: (form: any) => void;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Terceros', 'Settings'];
+  const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Terceros', 'Settings', 'Bancos'];
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (initialTab) {
       const formatted = initialTab.charAt(0).toUpperCase() + initialTab.slice(1) as TabType;
@@ -36,6 +36,8 @@ export function Datos({
   const [projects, setProjects] = useState<Project[]>([]);
   const [terceros, setTerceros] = useState<Tercero[]>([]);
   const [settingsData, setSettingsData] = useState<SettingsCategorias | null>(null);
+  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
+  const [extractos, setExtractos] = useState<ExtractoBancario[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,6 +54,8 @@ export function Datos({
       subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
       subscribeTerceros(setTerceros, (err) => console.error('Error loading terceros:', err)),
       subscribeSettings(setSettingsData, (err) => console.error('Error loading settings:', err)),
+      subscribeCuentasBancarias(companyId, setCuentas, (err) => console.error('Error loading cuentas:', err)),
+      subscribeExtractos(companyId, setExtractos, (err) => console.error('Error loading extractos:', err)),
     ];
     return () => unsubs.forEach((u) => u());
   }, [companyId]);
@@ -158,6 +162,12 @@ export function Datos({
       [t.name, t.apodo, t.lugar, t.tipo, t.documento].some(f => f?.toLowerCase().includes(q))
     );
   }, [terceros, searchQuery]);
+
+  const filteredCuentas = useMemo(() => {
+    let data = cuentas;
+    if (searchQuery) data = searchText(data, ['nombre', 'banco']);
+    return data;
+  }, [cuentas, searchQuery]);
 
   const stateColorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -266,6 +276,7 @@ export function Datos({
                 {activeTab === 'Ejecuciones' && `${filteredEjecuciones.length} resultados`}
                 {activeTab === 'Proyectos' && `${filteredProyectos.length} resultados`}
                 {activeTab === 'Terceros' && `${filteredTerceros.length} resultados`}
+                {activeTab === 'Bancos' && `${filteredCuentas.length} resultados`}
               </span>
             )}
             {(activeTab === 'Presupuestos' || activeTab === 'Ejecuciones' || activeTab === 'Proyectos') && (
@@ -535,6 +546,131 @@ export function Datos({
           )}
 
 
+
+          {activeTab === 'Bancos' && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Banco</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Número</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Saldo Actual</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[11px] divide-y divide-slate-100">
+                    {paginate(filteredCuentas).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-xs text-slate-400 italic">No hay cuentas bancarias registradas</td>
+                      </tr>
+                    ) : (
+                      paginate(filteredCuentas).map((cuenta) => {
+                        const isExpanded = expandedRows.has(cuenta.id);
+                        const cuentaExtractos = extractos.filter(e => e.accountId === cuenta.id);
+                        return (
+                          <React.Fragment key={cuenta.id}>
+                            <tr
+                              className="hover:bg-slate-50 cursor-pointer transition-colors"
+                              onClick={() => {
+                                setExpandedRows(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(cuenta.id)) next.delete(cuenta.id);
+                                  else next.add(cuenta.id);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <td className="p-3 font-semibold text-slate-700">
+                                <span className="inline-block mr-2 text-slate-400 text-[10px]">{isExpanded ? '▼' : '▶'}</span>
+                                {cuenta.nombre}
+                              </td>
+                              <td className="p-3 text-slate-600">{cuenta.banco}</td>
+                              <td className="p-3">
+                                <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
+                                  cuenta.tipo === 'Ahorros' ? 'bg-emerald-100 text-emerald-700' :
+                                  cuenta.tipo === 'Corriente' ? 'bg-blue-100 text-blue-700' :
+                                  cuenta.tipo === 'Tarjeta de Crédito' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-amber-100 text-amber-700'
+                                )}>
+                                  {cuenta.tipo}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-600">{cuenta.numero}</td>
+                              <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(cuenta.saldoActual)}</td>
+                              <ActionCell>
+                                <EditBtn onClick={() => edit('cuenta', cuenta)} />
+                              </ActionCell>
+                            </tr>
+                            {isExpanded && (
+                              <tr key={`${cuenta.id}-extractos`}>
+                                <td colSpan={6} className="p-0 bg-slate-50">
+                                  <div className="border-t border-b border-slate-200 mx-3">
+                                    <table className="w-full text-left border-collapse">
+                                      <thead>
+                                        <tr className="bg-slate-100">
+                                          <th className="p-2 pl-4 text-[9px] font-bold text-slate-400 uppercase">Mes</th>
+                                          <th className="p-2 text-[9px] font-bold text-slate-400 uppercase">Año</th>
+                                          <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-right">Saldo Inicial</th>
+                                          <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-right">Saldo Final</th>
+                                          <th className="p-2 text-[9px] font-bold text-slate-400 uppercase">Estado</th>
+                                          <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="text-[11px] divide-y divide-slate-200">
+                                        {cuentaExtractos.length === 0 ? (
+                                          <tr>
+                                            <td colSpan={6} className="p-4 text-center text-[10px] text-slate-400 italic">Sin extractos para esta cuenta</td>
+                                          </tr>
+                                        ) : (
+                                          cuentaExtractos.map((ext) => (
+                                            <tr key={ext.id} className="hover:bg-slate-100 transition-colors">
+                                              <td className="p-2 pl-4 text-slate-700 font-medium">{ext.mes}</td>
+                                              <td className="p-2 text-slate-600">{ext.anio}</td>
+                                              <td className="p-2 text-right text-slate-700">{formatCurrency(ext.saldoInicial)}</td>
+                                              <td className="p-2 text-right text-slate-700 font-semibold">{formatCurrency(ext.saldoFinal)}</td>
+                                              <td className="p-2">
+                                                <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
+                                                  ext.estado === 'Conciliado' ? 'bg-emerald-100 text-emerald-700' :
+                                                  ext.estado === 'En revisión' ? 'bg-blue-100 text-blue-700' :
+                                                  'bg-amber-100 text-amber-700'
+                                                )}>
+                                                  {ext.estado}
+                                                </span>
+                                              </td>
+                                              <td className="p-2 text-center">
+                                                <EditBtn onClick={() => edit('extracto', ext)} />
+                                              </td>
+                                            </tr>
+                                          ))
+                                        )}
+                                      </tbody>
+                                    </table>
+                                    <div className="p-2 flex justify-center border-t border-slate-200">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); onAddNew?.('extracto'); }}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                                      >
+                                        <Plus size={12} /> Agregar extracto
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <AddBtn onClick={() => onAddNew?.('cuenta')} label="Agregar cuenta" />
+              <PaginationControls totalItems={filteredCuentas.length} />
+            </>
+          )}
 
           {activeTab === 'Settings' && (
             <div className="p-6 space-y-6">

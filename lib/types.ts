@@ -119,6 +119,32 @@ export interface Ejecucion {
   archivado?: boolean;
 }
 
+export type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';
+export type ExtractoEstado = 'Pendiente' | 'En revisión' | 'Conciliado';
+
+export interface CuentaBancaria {
+  id: string;
+  nombre: string;
+  banco: string;
+  tipo: AccountType;
+  numero: string;
+  moneda: string;
+  saldoInicial: number;
+  saldoActual: number;
+}
+
+export interface ExtractoBancario {
+  id: string;
+  accountId: string;
+  mes: Month;
+  anio: number;
+  saldoInicial: number;
+  saldoFinal: number;
+  archivo?: { url: string; name: string; uploadedAt: string };
+  estado: ExtractoEstado;
+  uploadedAt: string;
+}
+
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
 
 export interface SidepanelData {
@@ -158,7 +184,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }
@@ -167,7 +193,9 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'project'; record: Project }
   | { mode: 'edit'; type: 'client'; record: Client }
   | { mode: 'edit'; type: 'provider'; record: Provider }
-  | { mode: 'edit'; type: 'tercero'; record: Tercero };
+  | { mode: 'edit'; type: 'tercero'; record: Tercero }
+  | { mode: 'edit'; type: 'cuenta'; record: CuentaBancaria }
+  | { mode: 'edit'; type: 'extracto'; record: ExtractoBancario };
 
 export type NavScreen =
   | { id: string; type: 'data'; data: SidepanelData }
