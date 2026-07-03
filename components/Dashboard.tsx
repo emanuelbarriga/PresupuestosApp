@@ -132,7 +132,6 @@ interface DashboardProps {
   ejecuciones: Ejecucion[];
   projects?: Project[];
   selectedProjects?: Set<string>;
-  projectOrder?: string[];
 }
 
 const getMonthFromDateStr = (dateString: string): Month => {
@@ -140,7 +139,7 @@ const getMonthFromDateStr = (dateString: string): Month => {
   return MONTHS[monthIndex];
 };
 
-export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, onCustomizeClick, budgets, ejecuciones, projects, selectedProjects = new Set(), projectOrder = [] }: DashboardProps) {
+export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, onCustomizeClick, budgets, ejecuciones, projects, selectedProjects = new Set() }: DashboardProps) {
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
@@ -229,7 +228,7 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
             {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
           </button>
           <button onClick={() => onCustomizeClick?.()} className="px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5 bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600">
-            <Settings size={13} /> Personalizar
+            <Settings size={13} /> Configuración de Dashboard
           </button>
         </div>
       </header>
@@ -252,8 +251,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       </div>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} projectOrder={projectOrder} />
-        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} projectOrder={projectOrder} />
+        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
       </div>
     </div>
   );
@@ -273,10 +272,9 @@ interface MatrixProps {
   resolveProjectName: (projectId: string, snapshotName: string) => string;
   allProjects?: Project[];
   selectedProjects: Set<string>;
-  projectOrder: string[];
 }
 
-function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects, projectOrder }: MatrixProps) {
+function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -485,28 +483,36 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
 
   const visibleRows = useMemo(
     () => {
-      let rows = matrixData.rows.filter(row => showNegociacion || row.estado !== 'Negociación');
+      // Estado sort order (lower = first)
+      const estadoOrder: Record<string, number> = {
+        'En ejecución': 0,
+        'Aprobado': 1,
+        'Finalizado': 2,
+        'Negociación': 3,
+      };
+
+      let rows = matrixData.rows
+        // Exclude Cancelado projects
+        .filter(row => row.estado !== 'Cancelado')
+        // Apply Negociación filter
+        .filter(row => showNegociacion || row.estado !== 'Negociación');
 
       // Filtrar por proyectos seleccionados (si hay alguno seleccionado)
       if (selectedProjects.size > 0) {
         rows = rows.filter(r => selectedProjects.has(r.projectId || r.proyecto));
       }
 
-      // Ordenar por array de orden (posiciones iniciales primero), luego alfabético
+      // Ordenar: primero por estado (según el orden definido), luego alfabético
       rows = [...rows].sort((a, b) => {
-        const keyA = a.projectId || a.proyecto;
-        const keyB = b.projectId || b.proyecto;
-        const idxA = projectOrder.indexOf(keyA);
-        const idxB = projectOrder.indexOf(keyB);
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-        if (idxA !== -1) return -1;
-        if (idxB !== -1) return 1;
+        const orderA = estadoOrder[a.estado] ?? 99;
+        const orderB = estadoOrder[b.estado] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
         return (a.proyecto || '').localeCompare(b.proyecto || '');
       });
 
       return rows;
     },
-    [matrixData.rows, showNegociacion, selectedProjects, projectOrder],
+    [matrixData.rows, showNegociacion, selectedProjects],
   );
 
   const expandAll = () => {

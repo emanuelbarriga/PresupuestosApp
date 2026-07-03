@@ -39,10 +39,8 @@ interface SidepanelProps {
 
   // Customization state (optional for backward compat)
   selectedProjects?: Set<string>;
-  projectOrder?: string[];
   projectSearch?: string;
   onProjectsChange?: (selected: Set<string>) => void;
-  onOrderChange?: (order: string[]) => void;
   onSearchChange?: (search: string) => void;
 
   // Navigation stack props
@@ -69,7 +67,7 @@ function PanelHeader({ title, canGoBack, onBack, onClose }: { title: string; can
   );
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = false, companyId, onClose, onFormSubmit, onCellClick, projects, selectedProjects = new Set(), projectOrder = [], projectSearch = '', onProjectsChange, onOrderChange, onSearchChange, canGoBack, onBack, onNavigate }: SidepanelProps) {
+export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = false, companyId, onClose, onFormSubmit, onCellClick, projects, selectedProjects = new Set(), projectSearch = '', onProjectsChange, onSearchChange, canGoBack, onBack, onNavigate }: SidepanelProps) {
   const visible = data || recordDetail || activeForm || customizeOpen;
 
   return (
@@ -86,8 +84,8 @@ export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = fals
       ) : recordDetail ? (
         <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : customizeOpen ? (
-        <CustomizePanel projects={projects || []} selectedProjects={selectedProjects} projectOrder={projectOrder} projectSearch={projectSearch}
-          onProjectsChange={onProjectsChange} onOrderChange={onOrderChange} onSearchChange={onSearchChange}
+        <CustomizePanel projects={projects || []} selectedProjects={selectedProjects} projectSearch={projectSearch}
+          onProjectsChange={onProjectsChange} onSearchChange={onSearchChange}
           canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       ) : data ? (
         <DataPanel data={data} companyId={companyId} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
@@ -96,63 +94,20 @@ export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = fals
   );
 }
 
-function CustomizePanel({ projects, selectedProjects, projectOrder, projectSearch, onProjectsChange, onOrderChange, onSearchChange, canGoBack, onBack, onClose }: {
+function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsChange, onSearchChange, canGoBack, onBack, onClose }: {
   projects: Project[];
   selectedProjects: Set<string>;
-  projectOrder: string[];
   projectSearch: string;
   onProjectsChange?: (selected: Set<string>) => void;
-  onOrderChange?: (order: string[]) => void;
   onSearchChange?: (search: string) => void;
   canGoBack: boolean;
   onBack: () => void;
   onClose: () => void;
 }) {
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  // Projects in order section: only those that are visible
-  const visibleProjectKeys = projects.map(p => p.id || p.name);
-  const orderedProjects = projectOrder
-    .filter(k => visibleProjectKeys.includes(k))
-    .map(k => projects.find(p => (p.id || p.name) === k)!)
-    .filter(Boolean);
-  // Add visible projects not yet in the order list
-  const unorderedProjects = projects.filter(p => {
-    const k = p.id || p.name;
-    return !projectOrder.includes(k);
-  });
-
-  const allOrderable = [...orderedProjects, ...unorderedProjects];
-
-  const handleDragStart = (key: string) => {
-    setDragKey(key);
-  };
-
-  const handleDragOver = (e: React.DragEvent, key: string) => {
-    e.preventDefault();
-    setDragOverKey(key);
-  };
-
-  const handleDrop = (key: string) => {
-    if (!dragKey || dragKey === key) return;
-    const newOrder = [...projectOrder];
-    // Ensure both are in the array
-    if (!newOrder.includes(dragKey)) newOrder.push(dragKey);
-    if (!newOrder.includes(key)) newOrder.push(key);
-    const dragIdx = newOrder.indexOf(dragKey);
-    const dropIdx = newOrder.indexOf(key);
-    newOrder.splice(dragIdx, 1);
-    newOrder.splice(dropIdx, 0, dragKey);
-    onOrderChange?.(newOrder);
-    setDragKey(null);
-    setDragOverKey(null);
-  };
-
-  const handleDragEnd = () => {
-    setDragKey(null);
-    setDragOverKey(null);
-  };
+  const isProjectSelected = (key: string) => selectedProjects.has(key);
+  const activeCount = selectedProjects.size > 0 ? selectedProjects.size : projects.length;
 
   const filtered = [...projects]
     .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
@@ -164,76 +119,94 @@ function CustomizePanel({ projects, selectedProjects, projectOrder, projectSearc
     onProjectsChange?.(next);
   };
 
-  const activeCount = selectedProjects.size > 0 ? selectedProjects.size : projects.length;
+  const removeProject = (key: string) => {
+    const next = new Set(selectedProjects);
+    next.delete(key);
+    onProjectsChange?.(next);
+  };
+
+  // Selected projects as sorted array for tag display
+  const selectedList = projects
+    .filter(p => selectedProjects.has(p.id || p.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <PanelHeader title="Personalizar tabla" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
+      <PanelHeader title="Configuración de Dashboard" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto">
 
-        {/* Sección 1: Filtrar proyectos */}
-        <div className="px-5 pt-4 pb-3 border-b border-slate-100">
-          <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Filtrar proyectos</p>
-          <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
-            onChange={e => onSearchChange?.(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none mb-2" />
-          <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
-            {filtered.map(p => {
-              const key = p.id || p.name;
-              const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
-              return (
-                <label key={key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors">
-                  <input type="checkbox" checked={isSelected}
-                    onChange={() => toggleProject(key)}
-                    className="shrink-0 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium text-slate-700 truncate block">{p.name}</span>
-                    {p.descripcion && <span className="text-[10px] text-slate-400 truncate block">{p.descripcion}</span>}
-                  </div>
-                </label>
-              );
-            })}
+        {/* Search input */}
+        <div className="px-5 pt-4 pb-3">
+          <div className="relative">
+            <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
+              onChange={e => { onSearchChange?.(e.target.value); setShowDropdown(true); }}
+              onFocus={() => setShowDropdown(true)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none" />
+            {/* Dropdown */}
+            {showDropdown && projectSearch && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-slate-400">Sin resultados</p>
+                ) : (
+                  filtered.map(p => {
+                    const key = p.id || p.name;
+                    const selected = isProjectSelected(key);
+                    return (
+                      <button key={key}
+                        onClick={() => { toggleProject(key); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 flex items-center gap-2 transition-colors">
+                        <span className={clsx("w-4 h-4 rounded border flex items-center justify-center shrink-0", selected ? "bg-indigo-600 border-indigo-600" : "border-slate-300")}>
+                          {selected && <span className="text-white text-[10px]">✓</span>}
+                        </span>
+                        <span className="truncate">{p.name}</span>
+                        {p.descripcion && <span className="text-[10px] text-slate-400 truncate">— {p.descripcion}</span>}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
-          <p className="text-[10px] text-indigo-600 font-medium mt-1.5">{activeCount} de {projects.length} visibles</p>
         </div>
 
-        {/* Sección 2: Ordenar proyectos (drag & drop) */}
-        <div className="px-5 pt-4 pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Ordenar proyectos</p>
-            <button onClick={() => { onOrderChange?.([]); }}
-              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-colors">
-              Reiniciar orden
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-2">Arrastrá para reordenar. Los primeros aparecen al inicio de la tabla.</p>
-          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
-            {allOrderable.map((p, idx) => {
-              const key = p.id || p.name;
-              const isDragging = dragKey === key;
-              const isOver = dragOverKey === key;
-              return (
-                <div key={key}
-                  draggable
-                  onDragStart={() => handleDragStart(key)}
-                  onDragOver={(e) => handleDragOver(e, key)}
-                  onDrop={() => handleDrop(key)}
-                  onDragEnd={handleDragEnd}
-                  className={clsx(
-                    "flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing transition-all select-none",
-                    isDragging && "opacity-50 bg-indigo-50",
-                    isOver && "border-t-2 border-indigo-400 bg-indigo-50/50",
-                    !isDragging && "hover:bg-slate-50"
-                  )}>
-                  <span className="text-[10px] font-bold text-slate-300 w-4 text-center shrink-0">
-                    {idx + 1}
+        {/* Selected projects as tags */}
+        {selectedList.length > 0 && (
+          <div className="px-5 mb-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">
+              {selectedList.length} de {projects.length} proyectos
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {selectedList.map(p => {
+                const key = p.id || p.name;
+                return (
+                  <span key={key}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    {p.name}
+                    <button onClick={() => removeProject(key)} className="hover:text-indigo-900 ml-0.5">
+                      <X size={11} />
+                    </button>
                   </span>
-                  <span className="text-xs text-slate-700 truncate flex-1">{p.name}</span>
-                  <span className="text-[10px] text-slate-300">⠿</span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+        )}
+
+        {/* Show all when empty */}
+        {selectedProjects.size === 0 && (
+          <div className="px-5 py-3">
+            <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">
+              Mostrando todos los proyectos. Buscá y seleccioná para filtrar.
+            </p>
+          </div>
+        )}
+
+        {/* Quick actions */}
+        <div className="px-5 pb-4 border-t border-slate-100 mt-3 pt-3">
+          <button onClick={() => { onProjectsChange?.(new Set()); onSearchChange?.(''); }}
+            className="w-full text-[10px] font-bold text-indigo-600 hover:text-indigo-700 px-3 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors">
+            Mostrar todos los proyectos
+          </button>
         </div>
 
       </div>

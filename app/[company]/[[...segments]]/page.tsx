@@ -61,7 +61,6 @@ export default function CompanyPage({ params }: Props) {
 
   // Dashboard customization state
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
-  const [projectOrder, setProjectOrder] = useState<string[]>([]);
   const [projectSearch, setProjectSearch] = useState('');
 
   const current = navStack[navStack.length - 1];
@@ -350,7 +349,7 @@ export default function CompanyPage({ params }: Props) {
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeView === 'Dashboard' && (
-              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} onCustomizeClick={handleCustomizeClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} selectedProjects={selectedProjects} projectOrder={projectOrder} />
+              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} onCustomizeClick={handleCustomizeClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} selectedProjects={selectedProjects} />
             )}
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
@@ -373,10 +372,8 @@ export default function CompanyPage({ params }: Props) {
             onNavigate={pushScreen}
             projects={projectsForCompany}
             selectedProjects={selectedProjects}
-            projectOrder={projectOrder}
             projectSearch={projectSearch}
             onProjectsChange={setSelectedProjects}
-            onOrderChange={setProjectOrder}
             onSearchChange={setProjectSearch} />
         </main>
       </div>
