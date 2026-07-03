@@ -27,6 +27,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
 import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
+import { EstadoResultados } from '@/components/EstadoResultados';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
 
@@ -43,6 +44,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'proveedores') return { view: 'Proveedores' };
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
+  if (main === 'estado-resultados') return { view: 'EstadoResultados' };
   return { view: 'Dashboard' };
 }
 
@@ -57,10 +59,16 @@ export default function CompanyPage({ params }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
+  // Dashboard customization state
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [projectOrder, setProjectOrder] = useState<string[]>([]);
+  const [projectSearch, setProjectSearch] = useState('');
+
   const current = navStack[navStack.length - 1];
   const sidepanelData = current?.type === 'data' ? current.data : null;
   const recordDetail = current?.type === 'view' ? current.detail : null;
   const activeForm = current?.type === 'form' ? current.form : null;
+  const customizeOpen = current?.type === 'customize';
   const canGoBack = navStack.length > 1;
 
   const isConjunto = companyId === 'all';
@@ -153,6 +161,7 @@ export default function CompanyPage({ params }: Props) {
     let path = `/${companyId}`;
     if (view === 'Dashboard') path += '/dashboard';
     else if (view === 'Datos') path += `/datos${tab ? `/${tab.toLowerCase()}` : ''}`;
+    else if (view === 'EstadoResultados') path += '/estado-resultados';
     else path += `/${view.toLowerCase()}`;
     router.push(path);
   };
@@ -186,6 +195,14 @@ export default function CompanyPage({ params }: Props) {
       ejecuciones: relatedEjecuciones,
     };
     pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+  };
+
+  const handleCustomizeClick = () => {
+    if (current?.type === 'customize') {
+      popScreen();
+    } else {
+      pushScreen({ id: crypto.randomUUID(), type: 'customize' });
+    }
   };
 
   const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
@@ -333,25 +350,34 @@ export default function CompanyPage({ params }: Props) {
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeView === 'Dashboard' && (
-              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
+              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} onCustomizeClick={handleCustomizeClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} selectedProjects={selectedProjects} projectOrder={projectOrder} />
             )}
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
             )}
+            {activeView === 'EstadoResultados' && (
+              <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} />
+            )}
             {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
               <Construction view={activeView} />
             )}
           </div>
 
-          <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
+          <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm} customizeOpen={customizeOpen}
             companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
             onCellClick={handleCellClick}
             canGoBack={canGoBack}
             onBack={handleSidepanelBack}
             onNavigate={pushScreen}
-            projects={projectsForCompany} />
+            projects={projectsForCompany}
+            selectedProjects={selectedProjects}
+            projectOrder={projectOrder}
+            projectSearch={projectSearch}
+            onProjectsChange={setSelectedProjects}
+            onOrderChange={setProjectOrder}
+            onSearchChange={setProjectSearch} />
         </main>
       </div>
     </CompanyProvider>

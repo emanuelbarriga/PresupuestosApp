@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { ViewType } from '@/lib/types';
-import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, Layers, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 import { useCompany } from '@/context/CompanyContext';
 
@@ -41,6 +41,7 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
     { id: 'Clientes', label: 'Clientes', icon: Users, path: `${basePath}/clientes` },
     { id: 'Extractos', label: 'Extractos', icon: FileText, path: `${basePath}/extractos` },
     { id: 'Datos', label: 'Datos', icon: Database, path: `${basePath}/datos` },
+    { id: 'EstadoResultados', label: 'Estado de Resultados', icon: TrendingUp, path: `${basePath}/estado-resultados` },
   ];
 
   return (
