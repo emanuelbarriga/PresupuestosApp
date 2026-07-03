@@ -231,6 +231,12 @@ export default function CompanyPage({ params }: Props) {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+      // Auto-link to matching budget
+      const matchBudget = entityId
+        ? budgets.find(b => b.projectId === projectId && b.entityId === entityId && b.mesPresupuestado === month && b.tipo === tipo)
+        : budgets.filter(b => b.projectId === projectId && b.mesPresupuestado === month && b.tipo === tipo);
+      const matched = Array.isArray(matchBudget) ? (matchBudget.length === 1 ? matchBudget[0] : null) : matchBudget;
+      if (matched) defaults.budgetId = matched.id;
     }
     pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
