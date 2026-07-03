@@ -323,7 +323,9 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
 
   useEffect(() => {
     if (form.mode === 'edit' && form.type === 'ejecucion') {
-      setComprobantes(form.record.comprobantes || []);
+      const c = form.record.comprobantes || [];
+      console.log('[COMPROBANTES] Form edit ejecucion', { ejecucionId: form.record.id, comprobantesCount: c.length });
+      setComprobantes(c);
     } else {
       setComprobantes([]);
       setPendingComprobantes([]);
@@ -1454,7 +1456,11 @@ function ComprobanteUploader({
   };
 
   const uploadAll = async () => {
-    if (!ejecucionId || selectedFiles.length === 0) return;
+    if (!ejecucionId || selectedFiles.length === 0) {
+      console.log('[COMPROBANTES] uploadAll skipped', { ejecucionId, files: selectedFiles.length });
+      return;
+    }
+    console.log('[COMPROBANTES] uploadAll start', { ejecucionId, filesCount: selectedFiles.length, existingComprobantes: comprobantes.length });
     setUploading(true);
     setUploadProgress(0);
     let uploaded = 0;
@@ -1464,7 +1470,9 @@ function ComprobanteUploader({
     for (const pf of selectedFiles) {
       try {
         const path = generateFilePath(companyId, ejecucionId, pf.name);
+        console.log('[COMPROBANTES] uploading file', { name: pf.name, path });
         const result = await uploadFile(pf.file, path, (p) => setUploadProgress(((uploaded + p / 100) / total) * 100));
+        console.log('[COMPROBANTES] upload success', { name: pf.name, url: result.url });
         newComprobantes.push({
           id: crypto.randomUUID(),
           name: pf.name,
@@ -1479,15 +1487,21 @@ function ComprobanteUploader({
         uploaded++;
         setUploadProgress((uploaded / total) * 100);
       } catch (err) {
-        console.error(`Upload failed for ${pf.name}:`, err);
+        console.error(`[COMPROBANTES] Upload failed for ${pf.name}:`, err);
         setValidationError(prev => prev ? `${prev}; Error en ${pf.name}` : `Error en ${pf.name}`);
       }
     }
 
     if (newComprobantes.length > 0) {
       const updated = [...comprobantes, ...newComprobantes];
+      console.log('[COMPROBANTES] updating firestore', { ejecucionId, totalComprobantes: updated.length, newComprobantes: newComprobantes.length });
       onComprobantesChange(updated);
-      await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+      try {
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+        console.log('[COMPROBANTES] firestore update success');
+      } catch (err) {
+        console.error('[COMPROBANTES] firestore update failed:', err);
+      }
     }
     setSelectedFiles([]);
     setUploading(false);
@@ -1627,6 +1641,7 @@ function ComprobanteUploader({
 }
 
 function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecucion; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void }) {
+  console.log('[COMPROBANTES] EjecucionView render', { ejecucionId: ejecucion.id, comprobantes: ejecucion.comprobantes?.length });
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [linking, setLinking] = useState(false);
   const [search, setSearch] = useState('');
@@ -2033,6 +2048,7 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                 <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
                   {group.items.map(e => {
                     const cCount = e.comprobantes?.length || 0;
+                    if (e.id === 'ncoAgRDxY7Tx1ftrvpv0' || cCount > 0) console.log('[COMPROBANTES] DataPanel item', { id: e.id, desc: e.descripcion, cCount, comprobantes: e.comprobantes?.length });
                     return (
                     <div key={e.id} className="px-2 py-1.5">
                       <div className="flex items-start justify-between mb-1">
