@@ -184,11 +184,11 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
 
   const yearStr = String(selectedYear);
   const filteredBudgets = useMemo(
-    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) && (showArchivados || !b.archivado)),
+    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) && (showArchivados || b.archivado !== true)),
     [budgets, yearStr, showArchivados],
   );
   const filteredEjecuciones = useMemo(
-    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr) && (showArchivados || !e.archivado)),
+    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr) && (showArchivados || e.archivado !== true)),
     [ejecuciones, yearStr, showArchivados],
   );
 

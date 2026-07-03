@@ -158,7 +158,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     if (form.mode === 'edit') {
       const init: Record<string, string> = {};
       const r = form.record as any;
-      Object.keys(r).forEach(k => { if (k !== 'id') init[k] = String(r[k] ?? ''); });
+      Object.keys(r).forEach(k => { if (k !== 'id' && k !== 'archivado') init[k] = String(r[k] ?? ''); });
       setFields(init);
     } else {
       const init: Record<string, string> = {};
