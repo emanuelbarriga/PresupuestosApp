@@ -4,6 +4,9 @@ import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
+import { db, storage } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { ref, listAll, getDownloadURL } from 'firebase/storage';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
@@ -140,6 +143,46 @@ export default function CompanyPage({ params }: Props) {
   }, [companyId, isConjunto]);
 
   const projectsForCompany = isConjunto ? [] : projects;
+
+  // Diagnostic tool — run `window.$$scan()` from browser console
+  useEffect(() => {
+    (window as any).$$scan = async () => {
+      console.log('🔍 Escaneando comprobantes...');
+      const results: any[] = [];
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      for (const d of snap.docs) {
+        const data = d.data();
+        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name) });
+      }
+      console.table(results.filter(r => r.comprobantes > 0 || r.desc?.includes('267')));
+      console.log(`Total ejecuciones: ${results.length}, con comprobantes: ${results.filter(r => r.comprobantes > 0).length}`);
+
+      // Scan storage
+      console.log('📁 Escaneando Storage...');
+      const storageRef = ref(storage, `${companyId}/ejecuciones`);
+      try {
+        const listResult = await listAll(storageRef);
+        const folders = listResult.prefixes;
+        console.log(`Carpetas en Storage: ${folders.length}`);
+        for (const folder of folders) {
+          const files = await listAll(folder);
+          const fileNames = files.items.map(f => f.name);
+          const ejecucion = results.find(r => r.id === folder.name);
+          if (!ejecucion) {
+            console.log(`⚠️ Storage folder sin ejecucion: ${folder.name}`, fileNames);
+          } else if (fileNames.length !== ejecucion.comprobantes) {
+            console.log(`❌ Mismatch ${folder.name}: ${fileNames.length} files en storage vs ${ejecucion.comprobantes} comprobantes`, { storage: fileNames, firestore: ejecucion.names });
+          } else {
+            console.log(`✅ OK ${folder.name}: ${fileNames.length} files`);
+          }
+        }
+      } catch (e) {
+        console.error('Storage scan error:', e);
+      }
+    };
+    return () => { delete (window as any).$$scan; };
+  }, [companyId]);
 
   const pushScreen = useCallback((screen: NavScreen) => {
     setNavStack(prev => [...prev, screen]);
