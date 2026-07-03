@@ -145,6 +145,7 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
   const [showCustomize, setShowCustomize] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [projectOrder, setProjectOrder] = useState<Record<string, number>>({});
+  const [projectSearch, setProjectSearch] = useState('');
   const [ingresoTotals, setIngresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
   const [egresoTotals, setEgresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
 
@@ -238,42 +239,50 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
         <div className="px-6 py-3 border-b bg-white border-slate-200">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase">Personalizar tabla</p>
-            <div className="flex gap-2">
-              <button onClick={() => { setSelectedProjects(new Set()); setProjectOrder({}); }}
-                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors">
-                Limpiar filtros
-              </button>
-            </div>
+            <button onClick={() => { setSelectedProjects(new Set()); setProjectOrder({}); setProjectSearch(''); }}
+              className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors">
+              Limpiar filtros
+            </button>
           </div>
-          <div className="grid grid-cols-4 gap-x-4 gap-y-1 max-h-48 overflow-y-auto">
-            {[...(projects || [])].sort((a, b) => a.name.localeCompare(b.name)).map(p => {
-              const key = p.id || p.name;
-              const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
-              const order = projectOrder[key];
-              return (
-                <div key={key} className="flex items-center gap-2 py-0.5">
-                  <input type="checkbox" checked={isSelected}
-                    onChange={() => {
-                      setSelectedProjects(prev => {
-                        const next = new Set(prev);
-                        if (next.has(key)) next.delete(key); else next.add(key);
-                        return next;
-                      });
-                    }}
-                    className="shrink-0 w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                  <span className="text-[11px] text-slate-700 truncate flex-1">{p.name}</span>
-                  <input type="number" min="1" max="999" placeholder="—" value={order ?? ''}
-                    onChange={e => {
-                      const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
-                      setProjectOrder(prev => {
-                        if (val == null) { const { [key]: _, ...rest } = prev; return rest; }
-                        return { ...prev, [key]: val };
-                      });
-                    }}
-                    className="w-12 text-[10px] border border-slate-200 rounded px-1.5 py-0.5 text-center focus:border-indigo-500 outline-none" />
-                </div>
-              );
-            })}
+          <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
+            onChange={e => setProjectSearch(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none mb-2" />
+          <div className="max-h-52 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
+            {[...(projects || [])]
+              .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(p => {
+                const key = p.id || p.name;
+                const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
+                const order = projectOrder[key];
+                return (
+                  <label key={key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" checked={isSelected}
+                      onChange={() => {
+                        setSelectedProjects(prev => {
+                          const next = new Set(prev);
+                          if (next.has(key)) next.delete(key); else next.add(key);
+                          return next;
+                        });
+                      }}
+                      className="shrink-0 w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-medium text-slate-700 truncate block">{p.name}</span>
+                      {p.descripcion && <span className="text-[9px] text-slate-400 truncate block">{p.descripcion}</span>}
+                    </div>
+                    <input type="number" min="1" max="999" placeholder="Orden" value={order ?? ''}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => {
+                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                        setProjectOrder(prev => {
+                          if (val == null) { const { [key]: _, ...rest } = prev; return rest; }
+                          return { ...prev, [key]: val };
+                        });
+                      }}
+                      className="w-14 text-[10px] border border-slate-200 rounded px-1.5 py-1 text-center focus:border-indigo-500 outline-none shrink-0" />
+                  </label>
+                );
+              })}
           </div>
           {selectedProjects.size > 0 && (
             <p className="text-[10px] text-indigo-600 font-medium mt-1.5">{selectedProjects.size} de {(projects || []).length} proyectos visibles</p>
