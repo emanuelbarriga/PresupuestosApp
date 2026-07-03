@@ -336,9 +336,17 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                           <span className={clsx(
                             'text-sm',
                             row.bold ? 'font-bold' : 'font-semibold',
-                            row.value > 0 && (row.id === 'F1' || row.id === 'F3' ? 'text-emerald-600' : 'text-slate-800'),
-                            row.value < 0 && 'text-rose-600',
+                            // Income rows (F1, F3, F11) → green
+                            (row.id === 'F1' || row.id === 'F3' || row.id === 'F11') && row.value !== 0 && 'text-emerald-600',
+                            // Expense rows (F4, F6, F7, F8, F10) → red
+                            (row.id === 'F4' || row.id === 'F6' || row.id === 'F7' || row.id === 'F8' || row.id === 'F10') && row.value !== 0 && 'text-rose-600',
+                            // Profit rows (F5, F9, F12) → green if positive, red if negative
+                            (row.id === 'F5' || row.id === 'F9' || row.id === 'F12') && row.value > 0 && 'text-emerald-600',
+                            (row.id === 'F5' || row.id === 'F9' || row.id === 'F12') && row.value < 0 && 'text-rose-600',
+                            // Fallback for unclassified rows
                             row.value === 0 && 'text-slate-400',
+                            // Negative unclassified
+                            row.value < 0 && !['F1','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'].includes(row.id) && 'text-rose-600',
                           )}>
                             {formatCurrency(row.value)}
                           </span>
