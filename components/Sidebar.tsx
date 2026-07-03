@@ -36,12 +36,12 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
 
   const menuItems: { id: ViewType; label: string; icon: any; path: string }[] = [
     { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard, path: `${basePath}/dashboard` },
+    { id: 'EstadoResultados', label: 'Estado de Resultados', icon: TrendingUp, path: `${basePath}/estado-resultados` },
     { id: 'Proyectos', label: 'Proyectos', icon: FolderKanban, path: `${basePath}/proyectos` },
     { id: 'Proveedores', label: 'Proveedores', icon: Building2, path: `${basePath}/proveedores` },
     { id: 'Clientes', label: 'Clientes', icon: Users, path: `${basePath}/clientes` },
     { id: 'Extractos', label: 'Extractos', icon: FileText, path: `${basePath}/extractos` },
     { id: 'Datos', label: 'Datos', icon: Database, path: `${basePath}/datos` },
-    { id: 'EstadoResultados', label: 'Estado de Resultados', icon: TrendingUp, path: `${basePath}/estado-resultados` },
   ];
 
   return (

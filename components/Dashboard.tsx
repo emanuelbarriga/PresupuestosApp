@@ -127,9 +127,12 @@ interface DashboardProps {
   onProjectClick?: (projectId: string, projectName: string) => void;
   onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onTerceroClick?: (detail: RecordDetail) => void;
+  onCustomizeClick?: () => void;
   budgets: Budget[];
   ejecuciones: Ejecucion[];
   projects?: Project[];
+  selectedProjects?: Set<string>;
+  projectOrder?: string[];
 }
 
 const getMonthFromDateStr = (dateString: string): Month => {
@@ -137,15 +140,11 @@ const getMonthFromDateStr = (dateString: string): Month => {
   return MONTHS[monthIndex];
 };
 
-export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, budgets, ejecuciones, projects }: DashboardProps) {
+export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, onCustomizeClick, budgets, ejecuciones, projects, selectedProjects = new Set(), projectOrder = [] }: DashboardProps) {
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
   const [showArchivados, setShowArchivados] = useState(false);
-  const [showCustomize, setShowCustomize] = useState(false);
-  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
-  const [projectOrder, setProjectOrder] = useState<Record<string, number>>({});
-  const [projectSearch, setProjectSearch] = useState('');
   const [ingresoTotals, setIngresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
   const [egresoTotals, setEgresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
 
@@ -229,66 +228,11 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
             {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
           </button>
-          <button onClick={() => setShowCustomize(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5", showCustomize ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600")}>
+          <button onClick={() => onCustomizeClick?.()} className="px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5 bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600">
             <Settings size={13} /> Personalizar
           </button>
         </div>
       </header>
-
-      {showCustomize && (
-        <div className="px-6 py-3 border-b bg-white border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Personalizar tabla</p>
-            <button onClick={() => { setSelectedProjects(new Set()); setProjectOrder({}); setProjectSearch(''); }}
-              className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors">
-              Limpiar filtros
-            </button>
-          </div>
-          <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
-            onChange={e => setProjectSearch(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none mb-2" />
-          <div className="max-h-52 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
-            {[...(projects || [])]
-              .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map(p => {
-                const key = p.id || p.name;
-                const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
-                const order = projectOrder[key];
-                return (
-                  <label key={key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors">
-                    <input type="checkbox" checked={isSelected}
-                      onChange={() => {
-                        setSelectedProjects(prev => {
-                          const next = new Set(prev);
-                          if (next.has(key)) next.delete(key); else next.add(key);
-                          return next;
-                        });
-                      }}
-                      className="shrink-0 w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[11px] font-medium text-slate-700 truncate block">{p.name}</span>
-                      {p.descripcion && <span className="text-[9px] text-slate-400 truncate block">{p.descripcion}</span>}
-                    </div>
-                    <input type="number" min="1" max="999" placeholder="Orden" value={order ?? ''}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => {
-                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
-                        setProjectOrder(prev => {
-                          if (val == null) { const { [key]: _, ...rest } = prev; return rest; }
-                          return { ...prev, [key]: val };
-                        });
-                      }}
-                      className="w-14 text-[10px] border border-slate-200 rounded px-1.5 py-1 text-center focus:border-indigo-500 outline-none shrink-0" />
-                  </label>
-                );
-              })}
-          </div>
-          {selectedProjects.size > 0 && (
-            <p className="text-[10px] text-indigo-600 font-medium mt-1.5">{selectedProjects.size} de {(projects || []).length} proyectos visibles</p>
-          )}
-        </div>
-      )}
 
       <div className="px-4 pt-4 flex gap-4 shrink-0">
         <KpiCard label="Total Ingresos" value={mode === 'Presupuestado' ? ingresoTotals.presupuestado : ingresoTotals.ejecutado} color="emerald" />
@@ -329,7 +273,7 @@ interface MatrixProps {
   resolveProjectName: (projectId: string, snapshotName: string) => string;
   allProjects?: Project[];
   selectedProjects: Set<string>;
-  projectOrder: Record<string, number>;
+  projectOrder: string[];
 }
 
 function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects, projectOrder }: MatrixProps) {
@@ -548,15 +492,15 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
         rows = rows.filter(r => selectedProjects.has(r.projectId || r.proyecto));
       }
 
-      // Ordenar por número manual (menor primero), luego alfabético
+      // Ordenar por array de orden (posiciones iniciales primero), luego alfabético
       rows = [...rows].sort((a, b) => {
         const keyA = a.projectId || a.proyecto;
         const keyB = b.projectId || b.proyecto;
-        const orderA = projectOrder[keyA];
-        const orderB = projectOrder[keyB];
-        if (orderA != null && orderB != null) return orderA - orderB;
-        if (orderA != null) return -1;
-        if (orderB != null) return 1;
+        const idxA = projectOrder.indexOf(keyA);
+        const idxB = projectOrder.indexOf(keyB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
         return (a.proyecto || '').localeCompare(b.proyecto || '');
       });
 

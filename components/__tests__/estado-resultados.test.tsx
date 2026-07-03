@@ -77,18 +77,18 @@ describe('EstadoResultados component', () => {
     expect(screen.getByText('Estado de Resultados')).toBeInTheDocument();
 
     // All 12 row labels should be present
-    expect(screen.getByText('Ingresos Brutos')).toBeInTheDocument();
-    expect(screen.getByText('Devoluciones, rebajas y desc.')).toBeInTheDocument();
-    expect(screen.getByText('Ingresos Netos')).toBeInTheDocument();
+    expect(screen.getByText('Ingresos Brutos Operacionales')).toBeInTheDocument();
+    expect(screen.getByText('Devoluciones, rebajas y descuentos')).toBeInTheDocument();
+    expect(screen.getAllByText('Ingresos Netos').length).toBeGreaterThan(0);
     expect(screen.getByText('Costos de Operación')).toBeInTheDocument();
-    expect(screen.getByText('Utilidad Bruta')).toBeInTheDocument();
+    expect(screen.getAllByText('Utilidad Bruta').length).toBeGreaterThan(0);
     expect(screen.getByText('Gastos Administrativos')).toBeInTheDocument();
     expect(screen.getByText('Gastos Financieros')).toBeInTheDocument();
     expect(screen.getByText('GMF (4×1000)')).toBeInTheDocument();
     expect(screen.getByText('Utilidad Operacional')).toBeInTheDocument();
     expect(screen.getByText('Impuesto SIMPLE (8.1%)')).toBeInTheDocument();
     expect(screen.getByText('Descuento Tributario GMF')).toBeInTheDocument();
-    expect(screen.getByText('Utilidad Neta')).toBeInTheDocument();
+    expect(screen.getByText('Utilidad Neta del Ejercicio')).toBeInTheDocument();
   });
 
   it('shows correct F1 value from budget data', () => {

@@ -358,7 +358,7 @@ export default function CompanyPage({ params }: Props) {
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
             )}
             {activeView === 'EstadoResultados' && (
-              <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} />
+              <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
             )}
             {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
               <Construction view={activeView} />

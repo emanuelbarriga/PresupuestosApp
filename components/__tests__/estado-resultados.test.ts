@@ -141,8 +141,8 @@ describe('computePnL', () => {
     const result = computePnL([], 'Presupuestado', 0, 0);
 
     const rows: Record<string, { label: string; editable: boolean; bold: boolean }> = {
-      F1:  { label: 'Ingresos Brutos',             editable: false, bold: false },
-      F2:  { label: 'Devoluciones, rebajas y desc.', editable: true,  bold: false },
+      F1:  { label: 'Ingresos Brutos Operacionales',  editable: false, bold: false },
+      F2:  { label: 'Devoluciones, rebajas y descuentos', editable: true,  bold: false },
       F3:  { label: 'Ingresos Netos',               editable: false, bold: true  },
       F4:  { label: 'Costos de Operación',          editable: false, bold: false },
       F5:  { label: 'Utilidad Bruta',               editable: false, bold: true  },
@@ -152,7 +152,7 @@ describe('computePnL', () => {
       F9:  { label: 'Utilidad Operacional',         editable: false, bold: true  },
       F10: { label: 'Impuesto SIMPLE (8.1%)',       editable: false, bold: false },
       F11: { label: 'Descuento Tributario GMF',     editable: false, bold: false },
-      F12: { label: 'Utilidad Neta',                editable: false, bold: true  },
+      F12: { label: 'Utilidad Neta del Ejercicio',     editable: false, bold: true  },
     };
 
     for (const row of result) {

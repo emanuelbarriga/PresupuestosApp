@@ -30,11 +30,20 @@ interface SidepanelProps {
   data: SidepanelData | null;
   recordDetail: RecordDetail | null;
   activeForm: ActiveForm | null;
+  customizeOpen?: boolean;
   companyId: string;
   onClose: () => void;
   onFormSubmit: (form: ActiveForm, data: Record<string, any>) => Promise<void>;
   onCellClick?: (data: SidepanelData) => void;
   projects?: Project[];
+
+  // Customization state (optional for backward compat)
+  selectedProjects?: Set<string>;
+  projectOrder?: string[];
+  projectSearch?: string;
+  onProjectsChange?: (selected: Set<string>) => void;
+  onOrderChange?: (order: string[]) => void;
+  onSearchChange?: (search: string) => void;
 
   // Navigation stack props
   canGoBack: boolean;
@@ -60,8 +69,8 @@ function PanelHeader({ title, canGoBack, onBack, onClose }: { title: string; can
   );
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onCellClick, projects, canGoBack, onBack, onNavigate }: SidepanelProps) {
-  const visible = data || recordDetail || activeForm;
+export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = false, companyId, onClose, onFormSubmit, onCellClick, projects, selectedProjects = new Set(), projectOrder = [], projectSearch = '', onProjectsChange, onOrderChange, onSearchChange, canGoBack, onBack, onNavigate }: SidepanelProps) {
+  const visible = data || recordDetail || activeForm || customizeOpen;
 
   return (
     <aside className={clsx("bg-white border-l border-slate-200 flex flex-col h-full transition-all duration-300 ease-out shrink-0 overflow-hidden relative", visible ? "w-[360px]" : "w-16 items-center py-4")}>
@@ -76,10 +85,159 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
         <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} onBack={onBack} canGoBack={canGoBack} />
       ) : recordDetail ? (
         <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
+      ) : customizeOpen ? (
+        <CustomizePanel projects={projects || []} selectedProjects={selectedProjects} projectOrder={projectOrder} projectSearch={projectSearch}
+          onProjectsChange={onProjectsChange} onOrderChange={onOrderChange} onSearchChange={onSearchChange}
+          canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       ) : data ? (
         <DataPanel data={data} companyId={companyId} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : null}
     </aside>
+  );
+}
+
+function CustomizePanel({ projects, selectedProjects, projectOrder, projectSearch, onProjectsChange, onOrderChange, onSearchChange, canGoBack, onBack, onClose }: {
+  projects: Project[];
+  selectedProjects: Set<string>;
+  projectOrder: string[];
+  projectSearch: string;
+  onProjectsChange?: (selected: Set<string>) => void;
+  onOrderChange?: (order: string[]) => void;
+  onSearchChange?: (search: string) => void;
+  canGoBack: boolean;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  // Projects in order section: only those that are visible
+  const visibleProjectKeys = projects.map(p => p.id || p.name);
+  const orderedProjects = projectOrder
+    .filter(k => visibleProjectKeys.includes(k))
+    .map(k => projects.find(p => (p.id || p.name) === k)!)
+    .filter(Boolean);
+  // Add visible projects not yet in the order list
+  const unorderedProjects = projects.filter(p => {
+    const k = p.id || p.name;
+    return !projectOrder.includes(k);
+  });
+
+  const allOrderable = [...orderedProjects, ...unorderedProjects];
+
+  const handleDragStart = (key: string) => {
+    setDragKey(key);
+  };
+
+  const handleDragOver = (e: React.DragEvent, key: string) => {
+    e.preventDefault();
+    setDragOverKey(key);
+  };
+
+  const handleDrop = (key: string) => {
+    if (!dragKey || dragKey === key) return;
+    const newOrder = [...projectOrder];
+    // Ensure both are in the array
+    if (!newOrder.includes(dragKey)) newOrder.push(dragKey);
+    if (!newOrder.includes(key)) newOrder.push(key);
+    const dragIdx = newOrder.indexOf(dragKey);
+    const dropIdx = newOrder.indexOf(key);
+    newOrder.splice(dragIdx, 1);
+    newOrder.splice(dropIdx, 0, dragKey);
+    onOrderChange?.(newOrder);
+    setDragKey(null);
+    setDragOverKey(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragKey(null);
+    setDragOverKey(null);
+  };
+
+  const filtered = [...projects]
+    .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const toggleProject = (key: string) => {
+    const next = new Set(selectedProjects);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onProjectsChange?.(next);
+  };
+
+  const activeCount = selectedProjects.size > 0 ? selectedProjects.size : projects.length;
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <PanelHeader title="Personalizar tabla" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
+      <div className="flex-1 overflow-y-auto">
+
+        {/* Sección 1: Filtrar proyectos */}
+        <div className="px-5 pt-4 pb-3 border-b border-slate-100">
+          <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Filtrar proyectos</p>
+          <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
+            onChange={e => onSearchChange?.(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none mb-2" />
+          <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
+            {filtered.map(p => {
+              const key = p.id || p.name;
+              const isSelected = selectedProjects.size === 0 || selectedProjects.has(key);
+              return (
+                <label key={key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input type="checkbox" checked={isSelected}
+                    onChange={() => toggleProject(key)}
+                    className="shrink-0 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-slate-700 truncate block">{p.name}</span>
+                    {p.descripcion && <span className="text-[10px] text-slate-400 truncate block">{p.descripcion}</span>}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-indigo-600 font-medium mt-1.5">{activeCount} de {projects.length} visibles</p>
+        </div>
+
+        {/* Sección 2: Ordenar proyectos (drag & drop) */}
+        <div className="px-5 pt-4 pb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Ordenar proyectos</p>
+            <button onClick={() => { onOrderChange?.([]); }}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-colors">
+              Reiniciar orden
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 mb-2">Arrastrá para reordenar. Los primeros aparecen al inicio de la tabla.</p>
+          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
+            {allOrderable.map((p, idx) => {
+              const key = p.id || p.name;
+              const isDragging = dragKey === key;
+              const isOver = dragOverKey === key;
+              return (
+                <div key={key}
+                  draggable
+                  onDragStart={() => handleDragStart(key)}
+                  onDragOver={(e) => handleDragOver(e, key)}
+                  onDrop={() => handleDrop(key)}
+                  onDragEnd={handleDragEnd}
+                  className={clsx(
+                    "flex items-center gap-2 px-3 py-2 cursor-grab active:cursor-grabbing transition-all select-none",
+                    isDragging && "opacity-50 bg-indigo-50",
+                    isOver && "border-t-2 border-indigo-400 bg-indigo-50/50",
+                    !isDragging && "hover:bg-slate-50"
+                  )}>
+                  <span className="text-[10px] font-bold text-slate-300 w-4 text-center shrink-0">
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs text-slate-700 truncate flex-1">{p.name}</span>
+                  <span className="text-[10px] text-slate-300">⠿</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+    </div>
   );
 }
 
