@@ -140,7 +140,7 @@ const getMonthFromDateStr = (dateString: string): Month => {
 };
 
 export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, onCustomizeClick, budgets, ejecuciones, projects, selectedProjects = new Set() }: DashboardProps) {
-  const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
+  const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Ejecutado');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
   const [showArchivados, setShowArchivados] = useState(false);
@@ -285,8 +285,8 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
   };
 
   const isP = mode === 'Presupuestado';
-  const colorTheme = tipo === 'ingreso' ? 'text-emerald-600' : 'text-rose-600';
-  const hoverBgTheme = tipo === 'ingreso' ? (isP ? 'hover:bg-emerald-50 hover:text-emerald-700' : 'hover:bg-emerald-50/50 hover:text-emerald-700') : (isP ? 'hover:bg-rose-50 hover:text-rose-700' : 'hover:bg-rose-50/50 hover:text-rose-700');
+  const textColor = isP ? 'text-slate-400' : (tipo === 'ingreso' ? 'text-emerald-600' : 'text-rose-600');
+  const hoverBgTheme = tipo === 'ingreso' ? (isP ? 'hover:bg-sky-50' : 'hover:bg-emerald-50/50 hover:text-emerald-700') : (isP ? 'hover:bg-sky-50' : 'hover:bg-rose-50/50 hover:text-rose-700');
   const currentMonthIdx = new Date().getMonth();
   const currentMonthStr = MONTHS[currentMonthIdx];
 
@@ -515,6 +515,14 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
     [matrixData.rows, showNegociacion, selectedProjects],
   );
 
+  useEffect(() => {
+    if (selectedProjects.size > 0) {
+      setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
+    } else {
+      setExpandedProjects(new Set());
+    }
+  }, [selectedProjects, visibleRows]);
+
   const expandAll = () => {
     setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
   };
@@ -681,7 +689,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                       const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                       const isZero = val === 0;
                       return (
-                        <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && `font-bold ${hoverBgTheme} ${colorTheme}`, isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
+                        <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && `font-bold ${hoverBgTheme} ${textColor}`, isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
                           onClick={() => {
                             if (isZero) {
                               onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode);
@@ -720,7 +728,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                           const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                           const isZero = val === 0;
                           return (
-                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300 cursor-pointer hover:bg-slate-50")}
+                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${textColor} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300 cursor-pointer hover:bg-slate-50")}
                               onClick={() => {
                                 if (!isZero) {
                                   const bs = t.budgetsPorMes[m] || [];
@@ -746,7 +754,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                             </td>
                           );
                         })}
-                        <td className={clsx("p-2 text-right border-l text-[10px] font-semibold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado) > 0 ? `${colorTheme} cursor-pointer hover:bg-slate-50` : "text-slate-400")}
+                        <td className={clsx("p-2 text-right border-l text-[10px] font-semibold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado) > 0 ? `${textColor} cursor-pointer hover:bg-slate-50` : "text-slate-400")}
                           onClick={() => {
                             const p = t.totalPresupuestado;
                             const e = t.totalEjecutado;
