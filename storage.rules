@@ -9,6 +9,11 @@ service firebase.storage {
       allow delete: if true;
     }
 
+    // Allow listing ejecuciones folders and files (for diagnostic/fix tools)
+    match /{companyId}/ejecuciones/{allPaths=**} {
+      allow list: if true;
+    }
+
     // Deny everything else
     match /{allPaths=**} {
       allow read, write: if false;
