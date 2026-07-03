@@ -125,7 +125,7 @@ export function buildTerceroGroups(
 interface DashboardProps {
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
+  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onTerceroClick?: (detail: RecordDetail) => void;
   budgets: Budget[];
   ejecuciones: Ejecucion[];
@@ -284,7 +284,7 @@ interface MatrixProps {
   mode: 'Presupuestado' | 'Ejecutado';
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
+  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onReportTotals?: (totals: { presupuestado: number; ejecutado: number }) => void;
   visibleMonths: Month[];
   budgets: Budget[];
@@ -709,7 +709,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                           const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                           const isZero = val === 0;
                           return (
-                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300")}
+                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300 cursor-pointer hover:bg-slate-50")}
                               onClick={() => {
                                 if (!isZero) {
                                   const bs = t.budgetsPorMes[m] || [];
@@ -727,6 +727,8 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                                     mode,
                                     tipo,
                                   });
+                                } else {
+                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
                                 }
                               }}>
                               {isZero ? '-' : formatCurrency(val)}

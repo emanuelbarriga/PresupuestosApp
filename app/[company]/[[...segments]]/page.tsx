@@ -188,7 +188,7 @@ export default function CompanyPage({ params }: Props) {
     pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
-  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
+  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
     if (isConjunto) return;
     const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
     const monthIndex = MONTHS.indexOf(month);
@@ -198,11 +198,17 @@ export default function CompanyPage({ params }: Props) {
       tipo,
     };
     if (projectId) defaults.projectId = projectId;
-    // Resolve client from project
-    const project = projects.find(p => p.id === projectId || p.name === projectName);
-    if (project?.clientName) {
-      defaults.entityName = project.clientName;
-      defaults.entityType = 'client';
+    // Use entity info from tercero cell if provided, otherwise resolve from project
+    if (entityName) {
+      defaults.entityName = entityName;
+      defaults.entityType = entityType || 'client';
+      if (entityId) defaults.entityId = entityId;
+    } else {
+      const project = projects.find(p => p.id === projectId || p.name === projectName);
+      if (project?.clientName) {
+        defaults.entityName = project.clientName;
+        defaults.entityType = 'client';
+      }
     }
     if (formType === 'budget') {
       defaults.mesPresupuestado = month;
