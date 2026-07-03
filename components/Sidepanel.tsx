@@ -1319,7 +1319,7 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onN
   );
 }
 
-function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
+function ComprobantesViewer({ comprobantes, onDelete }: { comprobantes: Comprobante[]; onDelete?: (c: Comprobante) => void }) {
   const [modal, setModal] = useState<Comprobante | null>(null);
 
   if (!Array.isArray(comprobantes) || comprobantes.length === 0) return null;
@@ -1358,6 +1358,12 @@ function ComprobantesViewer({ comprobantes }: { comprobantes: Comprobante[] }) {
               className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" title="Abrir en nueva pestaña">
               <Download size={16} />
             </a>
+            {onDelete && (
+              <button onClick={() => onDelete(c)}
+                className="text-slate-300 hover:text-rose-500 transition-colors shrink-0" title="Eliminar comprobante">
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -1645,11 +1651,16 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [linking, setLinking] = useState(false);
   const [search, setSearch] = useState('');
+  const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
 
   useEffect(() => {
     const unsub = subscribeBudgets(companyId, setBudgets);
     return () => unsub();
   }, [companyId]);
+
+  useEffect(() => {
+    setComprobantes(ejecucion.comprobantes || []);
+  }, [ejecucion.comprobantes]);
 
   const filtered = search ? budgets.filter(b => b.descripcion.toLowerCase().includes(search.toLowerCase()) || b.projectName.toLowerCase().includes(search.toLowerCase())) : budgets;
   const linkedBudget = budgets.find(b => b.id === ejecucion.budgetId);
@@ -1659,6 +1670,17 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
   };
   const handleUnlink = async () => {
     await updateEjecucion(companyId, ejecucion.id, { budgetId: '' });
+  };
+
+  const handleDeleteComprobante = async (comp: Comprobante) => {
+    try {
+      if (comp.path) await deleteFile(comp.path);
+      const updated = comprobantes.filter(c => c.id !== comp.id);
+      setComprobantes(updated);
+      await updateEjecucion(companyId, ejecucion.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+    } catch (err) {
+      console.error('Error deleting comprobante:', err);
+    }
   };
 
   return (
@@ -1714,9 +1736,9 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
         )}
       </div>
 
-      {ejecucion.comprobantes && ejecucion.comprobantes.length > 0 && (
+      {comprobantes.length > 0 && (
         <div className="border-t border-slate-100 pt-4">
-          <ComprobantesViewer comprobantes={ejecucion.comprobantes} />
+          <ComprobantesViewer comprobantes={comprobantes} onDelete={handleDeleteComprobante} />
         </div>
       )}
     </>
@@ -2092,7 +2114,13 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                       {/* Siempre mostrar comprobantes si existen */}
                       {cCount > 0 && (
                         <div className="mt-2">
-                          <ComprobantesViewer comprobantes={e.comprobantes} />
+                          <ComprobantesViewer comprobantes={e.comprobantes} onDelete={async (comp) => {
+                            try {
+                              if (comp.path) await deleteFile(comp.path);
+                              const updated = e.comprobantes.filter((c: any) => c.id !== comp.id);
+                              await updateEjecucion(companyId, e.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+                            } catch (err) { console.error('Error deleting comprobante:', err); }
+                          }} />
                         </div>
                       )}
                     </div>
