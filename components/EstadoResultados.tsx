@@ -139,7 +139,7 @@ function KpiCard({ label, value, isPercent = false, color, mode }: {
   return (
     <div className={clsx("rounded-xl p-4 border flex-1", colorMap[color])}>
       <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</p>
-      <p className="text-lg font-bold mt-1 font-mono">
+      <p className="text-lg font-bold mt-1">
         {isPercent ? formatPercent(value) : formatCurrency(value)}
       </p>
     </div>
@@ -309,7 +309,7 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                             </span>
                           )}
                           <span className={clsx(
-                            'text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded',
+                            'text-[11px] font-semibold px-1.5 py-0.5 rounded',
                             row.bold ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500',
                           )}>{row.id}</span>
                         </div>
@@ -329,11 +329,17 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                             value={row.id === 'F2' ? (devoluciones || '') : (gastosFinancieros || '')}
                             onChange={e => row.id === 'F2' ? handleF2Change(e.target.value) : handleF7Change(e.target.value)}
                             onClick={e => e.stopPropagation()}
-                            className="w-full text-right text-sm font-mono px-2 py-1 rounded border bg-yellow-50 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 text-slate-700"
+                            className="w-full text-right text-sm px-2 py-1 rounded border bg-yellow-50 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 text-slate-700"
                             placeholder="0"
                           />
                         ) : (
-                          <span className={clsx('text-sm font-mono', row.bold ? 'font-bold text-slate-800' : 'text-slate-600')}>
+                          <span className={clsx(
+                            'text-sm',
+                            row.bold ? 'font-bold' : 'font-semibold',
+                            row.value > 0 && (row.id === 'F1' || row.id === 'F3' ? 'text-emerald-600' : 'text-slate-800'),
+                            row.value < 0 && 'text-rose-600',
+                            row.value === 0 && 'text-slate-400',
+                          )}>
                             {formatCurrency(row.value)}
                           </span>
                         )}
@@ -354,7 +360,7 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                           </div>
                         </td>
                         <td className="py-1.5 px-4 text-right">
-                          <span className="text-xs font-mono text-slate-500">{formatCurrency(child.value)}</span>
+                          <span className={clsx("text-xs font-semibold", child.value > 0 ? 'text-emerald-600' : child.value < 0 ? 'text-rose-600' : 'text-slate-400')}>{formatCurrency(child.value)}</span>
                         </td>
                       </tr>
                     ))}
