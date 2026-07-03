@@ -653,13 +653,14 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                 const isExpanded = expandedProjects.has(rowKey);
                 rows.push(
                   <tr key={rowKey} className={clsx("transition-colors group", isP ? "hover:bg-sky-50/40" : "hover:bg-slate-50")}>
-                    <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors cursor-pointer", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
+                    <td onClick={() => onProjectClick?.(row.projectId, row.proyecto)}
+                      className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors cursor-pointer", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={(e) => { e.stopPropagation(); toggleProject(rowKey); }}
                           className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors">
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
-                        <span className="font-semibold truncate text-slate-800 hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => onProjectClick?.(row.projectId, row.proyecto)}>{row.proyecto}</span>
+                        <span className="font-semibold truncate text-slate-800">{row.proyecto}</span>
                         <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span>
                       </div>
                     </td>
@@ -682,8 +683,8 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                         </td>
                       );
                     })}
-                    <td className={clsx("p-3 text-right border-l transition-colors font-bold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 && `cursor-pointer ${isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800"}`, (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) === 0 && "text-slate-400")}
-                      onClick={() => handleRowTotalClick(row.proyecto, row.totalPresupuestado, row.totalEjecutado, row.allBudgets, row.allEjecuciones)}>
+                    <td className={clsx("p-3 text-right border-l transition-colors font-bold cursor-pointer", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 ? (isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800") : "text-slate-400")}
+                      onClick={() => onProjectClick?.(row.projectId, row.proyecto)}>
                       {formatCurrency(mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado)}
                     </td>
                   </tr>

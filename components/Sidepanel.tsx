@@ -964,11 +964,71 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
       )}
       <div className="border-t border-slate-100 pt-3 mt-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>
-        {budgets.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin presupuestos</p> : budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}
+        {budgets.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin presupuestos</p> : (() => {
+          const groupedBudgets = budgets.reduce((acc, b) => {
+            const key = b.entityId || b.entityName || 'Sin entidad';
+            if (!acc[key]) acc[key] = { entityName: b.entityName || 'Sin entidad', entityType: b.entityType, items: [], total: 0 };
+            acc[key].items.push(b);
+            acc[key].total += b.montoPresupuestado;
+            return acc;
+          }, {} as Record<string, { entityName: string; entityType: string; items: Budget[]; total: number }>);
+          const sortedGroups = Object.values(groupedBudgets).sort((a, b) => a.entityName.localeCompare(b.entityName));
+          return sortedGroups.map(group => (
+            <div key={group.entityName} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                  <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                    {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+              </div>
+              <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                {group.items.map(b => (
+                  <div key={b.id} className="flex justify-between text-xs px-2 py-1.5 hover:bg-slate-50">
+                    <span className="text-slate-600 truncate mr-2">{b.descripcion}</span>
+                    <span className="font-semibold text-slate-700 shrink-0">{formatCurrency(b.montoPresupuestado)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
       <div className="border-t border-slate-100 pt-3 mt-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({ejecuciones.length})</p>
-        {ejecuciones.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin ejecuciones</p> : ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}
+        {ejecuciones.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin ejecuciones</p> : (() => {
+          const groupedEjs = ejecuciones.reduce((acc, e) => {
+            const key = e.entityId || e.entityName || 'Sin entidad';
+            if (!acc[key]) acc[key] = { entityName: e.entityName || 'Sin entidad', entityType: e.entityType, items: [], total: 0 };
+            acc[key].items.push(e);
+            acc[key].total += e.montoEjecutado;
+            return acc;
+          }, {} as Record<string, { entityName: string; entityType: string; items: Ejecucion[]; total: number }>);
+          const sortedGroups = Object.values(groupedEjs).sort((a, b) => a.entityName.localeCompare(b.entityName));
+          return sortedGroups.map(group => (
+            <div key={group.entityName} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                  <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                    {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+              </div>
+              <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                {group.items.map(e => (
+                  <div key={e.id} className="flex justify-between text-xs px-2 py-1.5 hover:bg-slate-50">
+                    <span className="text-slate-600 truncate mr-2">{e.fechaEjecutado} {e.descripcion ? `· ${e.descripcion}` : ''}</span>
+                    <span className="font-semibold text-slate-700 shrink-0">{formatCurrency(e.montoEjecutado)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
     </>
   );
