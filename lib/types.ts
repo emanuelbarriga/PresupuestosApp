@@ -145,6 +145,26 @@ export interface ExtractoBancario {
   uploadedAt: string;
 }
 
+export type UserRole = 'admin' | 'colaborador';
+
+export interface UsuarioEmpresa {
+  id: string;          // Firebase Auth UID
+  email: string;
+  role: UserRole;
+  joinedAt: string;    // serverTimestamp ISO string
+}
+
+export interface Invitacion {
+  id?: string;         // Firestore doc ID
+  companyId: string;
+  companyName: string;
+  email: string;       // invited user's email
+  role: UserRole;
+  status: 'pendiente' | 'aceptada';
+  invitedBy: string;   // UID of admin who invited
+  createdAt: string;
+}
+
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
 
 export interface SidepanelData {

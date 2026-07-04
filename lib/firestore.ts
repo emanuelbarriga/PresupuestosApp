@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   getDocs,
   addDoc,
   setDoc,
@@ -8,11 +9,12 @@ import {
   onSnapshot,
   query,
   where,
+  documentId,
   serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, UsuarioEmpresa, Invitacion } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
@@ -22,6 +24,7 @@ const PROJECTS_COLLECTION = 'projects';
 const STATE_PROJECTS_COLLECTION = 'stateProject';
 const CUENTAS_BANCARIAS_COLLECTION = 'cuentasBancarias';
 const EXTRACTOS_COLLECTION = 'extractos';
+const INVITATIONS_COLLECTION = 'invitations';
 
 export async function getCompanies(): Promise<Company[]> {
   const snapshot = await getDocs(collection(db, COMPANIES_COLLECTION));
@@ -357,4 +360,107 @@ export async function updateExtracto(
   data: Partial<ExtractoBancario>,
 ): Promise<void> {
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION, extractoId), { ...data, updatedAt: serverTimestamp() });
+}
+
+// ── User Companies (Membership) ──
+
+export function subscribeUserCompanies(
+  userId: string,
+  onData: (companies: Company[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(
+    collectionGroup(db, 'users'),
+    where(documentId(), '==', userId),
+  );
+
+  return onSnapshot(
+    q,
+    async (snapshot) => {
+      const companyIds = snapshot.docs.map((docSnap) => {
+        const segments = docSnap.ref.path.split('/');
+        return segments[1]; // companies/{companyId}/users/{userId}
+      });
+
+      if (companyIds.length === 0) {
+        onData([]);
+        return;
+      }
+
+      try {
+        const companiesSnap = await getDocs(collection(db, COMPANIES_COLLECTION));
+        const companies = companiesSnap.docs
+          .filter((d) => companyIds.includes(d.id))
+          .map((d) => ({ id: d.id, ...d.data() }) as Company);
+        onData(companies);
+      } catch (err) {
+        onError?.(err as Error);
+      }
+    },
+    onError,
+  );
+}
+
+export async function getUserCompaniesSnapshot(userId: string): Promise<Company[]> {
+  const q = query(
+    collectionGroup(db, 'users'),
+    where(documentId(), '==', userId),
+  );
+  const snapshot = await getDocs(q);
+
+  const companyIds = snapshot.docs.map((docSnap) => {
+    const segments = docSnap.ref.path.split('/');
+    return segments[1];
+  });
+
+  if (companyIds.length === 0) return [];
+
+  const companiesSnap = await getDocs(collection(db, COMPANIES_COLLECTION));
+  return companiesSnap.docs
+    .filter((d) => companyIds.includes(d.id))
+    .map((d) => ({ id: d.id, ...d.data() }) as Company);
+}
+
+export function subscribeCompanyUsers(
+  companyId: string,
+  onData: (users: UsuarioEmpresa[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, COMPANIES_COLLECTION, companyId, 'users'),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as UsuarioEmpresa));
+    },
+    onError,
+  );
+}
+
+// ── Invitations ──
+
+export function subscribeInvitations(
+  email: string,
+  onData: (invitations: Invitacion[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, INVITATIONS_COLLECTION),
+    where('email', '==', email),
+    where('status', '==', 'pendiente'),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Invitacion));
+    },
+    onError,
+  );
+}
+
+export async function createInvitation(invitation: Omit<Invitacion, 'id'>): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, INVITATIONS_COLLECTION),
+    { ...invitation, createdAt: serverTimestamp() },
+  );
+  return docRef.id;
 }

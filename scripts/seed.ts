@@ -3,6 +3,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Override with a real Firebase Auth UID for your admin user:
+//   npx tsx scripts/seed.ts --adminUid=abc123
+const ADMIN_UID = process.argv.find(a => a.startsWith('--adminUid='))?.split('=')[1] ?? 'placeholder-admin-uid';
+
 const serviceAccountPath = path.resolve(
   __dirname, '..',
   'planningsaman-3cf7e-firebase-adminsdk-fbsvc-2ddc38ebca.json',
@@ -52,35 +56,84 @@ const transactions = [
   { descripcion: 'Soporte TI Anual', proyectoAsignado: 'D+I', clienteOProveedor: 'Interno', tipo: 'egreso', montoPresupuestado: 5000000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo', ejecuciones: [{ fechaEjecutado: '2026-01-05', montoEjecutado: 5000000 }] },
 ];
 
+// ── Default settings per company ──
+const defaultSettings = {
+  stateProject: [
+    { name: 'Activo', color: '#22c55e', order: 0 },
+    { name: 'Cerrado', color: '#6b7280', order: 1 },
+    { name: 'Negociación', color: '#f59e0b', order: 2 },
+    { name: 'En ejecución', color: '#3b82f6', order: 3 },
+    { name: 'Cancelado', color: '#ef4444', order: 4 },
+  ],
+  tipoProyectos: [
+    { name: 'Fijo', color: '#8b5cf6', order: 0 },
+    { name: 'Por horas', color: '#ec4899', order: 1 },
+  ],
+  unidades: [
+    { name: 'Unidad', color: '#6366f1', order: 0 },
+    { name: 'Horas', color: '#14b8a6', order: 1 },
+    { name: 'Días', color: '#f97316', order: 2 },
+    { name: 'Meses', color: '#06b6d4', order: 3 },
+  ],
+  tipoComprobante: [
+    { name: 'Factura', color: '#6366f1', order: 0 },
+    { name: 'Recibo', color: '#22c55e', order: 1 },
+    { name: 'Transferencia', color: '#f59e0b', order: 2 },
+    { name: 'Efectivo', color: '#06b6d4', order: 3 },
+  ],
+};
+
 async function seed() {
   console.log('Seeding companies...');
   for (const c of companies) {
     await db.collection('companies').doc(c.id).set({ name: c.name, createdAt: new Date().toISOString() });
+    console.log(`  ✓ Company "${c.name}" created/updated`);
   }
 
   for (const cid of companyIds) {
     console.log(`\n${cid}:`);
 
+    // ── Clients ──
     for (const name of clients) {
       await db.collection('companies').doc(cid).collection('clients').doc(name.toLowerCase().replace(/[^a-z0-9]/g, '-')).set({ name });
     }
     console.log(`  ✓ ${clients.length} clients`);
 
+    // ── Projects ──
     for (const p of projects) {
       await db.collection('companies').doc(cid).collection('projects').doc(p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')).set({ name: p.name, clientName: p.client, estado: p.estado });
     }
     console.log(`  ✓ ${projects.length} projects`);
 
+    // ── Providers ──
     for (const name of providers) {
       await db.collection('companies').doc(cid).collection('providers').doc(name.toLowerCase().replace(/[^a-z0-9]/g, '-')).set({ name });
     }
     console.log(`  ✓ ${providers.length} providers`);
 
+    // ── Transactions ──
     for (const tx of transactions) {
       await db.collection('companies').doc(cid).collection('transactions').add({ ...tx, createdAt: new Date().toISOString() });
     }
     console.log(`  ✓ ${transactions.length} transactions`);
+
+    // ── Settings (company-scoped) ──
+    await db.collection('companies').doc(cid).collection('settings').doc('categorias').set(defaultSettings);
+    console.log(`  ✓ Settings categorias`);
+
+    // ── Admin user (placeholder) ──
+    await db.collection('companies').doc(cid).collection('users').doc(ADMIN_UID).set({
+      email: 'admin@example.com',
+      role: 'admin',
+      joinedAt: new Date().toISOString(),
+    });
+    console.log(`  ✓ Admin user (${ADMIN_UID})`);
   }
+
+  // ── Also keep global settings for backward compatibility during migration ──
+  // TODO: Remove after migration to company-scoped settings is complete
+  await db.collection('settings').doc('categorias').set(defaultSettings);
+  console.log('\n  ✓ Global settings (transitional)');
 
   console.log('\nSeed complete!');
   process.exit(0);
