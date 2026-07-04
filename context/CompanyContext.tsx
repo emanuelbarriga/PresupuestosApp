@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Company } from '@/lib/types';
+import { Company, UserRole } from '@/lib/types';
 import { subscribeCompanies } from '@/lib/firestore';
 import { Building2 } from 'lucide-react';
 
@@ -10,6 +10,8 @@ export type CompanyMode = 'individual' | 'conjunto';
 interface CompanyContextValue {
   selectedCompany: Company | null;
   companies: Company[];
+  userRole: UserRole | null;
+  roleLoading: boolean;
   mode: CompanyMode;
   setCompany: (id: string) => void;
   setMode: (mode: CompanyMode) => void;
@@ -21,14 +23,25 @@ const CompanyContext = createContext<CompanyContextValue | undefined>(undefined)
 export function CompanyProvider({
   children,
   companyId,
+  userRole,
 }: {
   children: ReactNode;
   companyId: string;
+  userRole: string | null;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [mode, setMode] = useState<CompanyMode>(companyId === 'all' ? 'conjunto' : 'individual');
   const [ready, setReady] = useState(false);
+
+  // Store userRole from prop, allowing future refinement from Firestore
+  const [effectiveRole, setEffectiveRole] = useState<UserRole | null>(
+    (userRole ?? null) as UserRole | null,
+  );
+
+  useEffect(() => {
+    setEffectiveRole((userRole ?? null) as UserRole | null);
+  }, [userRole]);
 
   useEffect(() => {
     const unsub = subscribeCompanies(
@@ -102,6 +115,8 @@ export function CompanyProvider({
       value={{ 
         selectedCompany, 
         companies, 
+        userRole: effectiveRole,
+        roleLoading: false,
         mode,
         setCompany: handleSetCompany, 
         setMode: handleSetMode,

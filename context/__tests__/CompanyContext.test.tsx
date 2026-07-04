@@ -69,7 +69,7 @@ describe('CompanyContext', () => {
 
   it('selecciona la empresa exacta cuando companyId coincide', async () => {
     render(
-      <CompanyProvider companyId="empresa-b">
+      <CompanyProvider companyId="empresa-b" userRole={null}>
         <TestConsumer />
       </CompanyProvider>,
     );
@@ -88,7 +88,7 @@ describe('CompanyContext', () => {
 
   it('selecciona la primera empresa cuando no hay coincidencia de companyId', async () => {
     render(
-      <CompanyProvider companyId="empresa-inexistente">
+      <CompanyProvider companyId="empresa-inexistente" userRole={null}>
         <TestConsumer />
       </CompanyProvider>,
     );
@@ -102,7 +102,7 @@ describe('CompanyContext', () => {
 
   it('muestra la pantalla de bienvenida cuando no hay empresas (evita el bloqueo)', async () => {
     render(
-      <CompanyProvider companyId="empresa-cualquiera">
+      <CompanyProvider companyId="empresa-cualquiera" userRole={null}>
         <TestConsumer />
       </CompanyProvider>,
     );
@@ -122,7 +122,7 @@ describe('CompanyContext', () => {
 
   it('setCompany cambia la empresa seleccionada y falla silenciosamente con IDs inválidos', async () => {
     render(
-      <CompanyProvider companyId="empresa-a">
+      <CompanyProvider companyId="empresa-a" userRole={null}>
         <TestConsumer />
       </CompanyProvider>,
     );
@@ -156,7 +156,7 @@ describe('CompanyContext', () => {
 
   it('se desuscribe de Firestore al desmontar el provider', async () => {
     const { unmount } = render(
-      <CompanyProvider companyId="empresa-a">
+      <CompanyProvider companyId="empresa-a" userRole={null}>
         <TestConsumer />
       </CompanyProvider>,
     );
