@@ -14,6 +14,7 @@ export default function SelectCompanyPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [invitations, setInvitations] = useState<Invitacion[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
@@ -36,7 +37,11 @@ export default function SelectCompanyPage() {
         setCompanies(data);
         setDataLoading(false);
       },
-      () => setDataLoading(false),
+      (err) => {
+        console.error('[subscribeUserCompanies]', err);
+        setLoadError(err.message || 'Error al cargar empresas');
+        setDataLoading(false);
+      },
     );
 
     const unsubInvitations = user.email
@@ -179,8 +184,22 @@ export default function SelectCompanyPage() {
               </p>
             )}
 
+            {/* Error state */}
+            {loadError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4">
+                <p className="text-sm font-bold text-red-700 mb-1">Error al cargar datos</p>
+                <p className="text-xs text-red-600 font-mono break-words">{loadError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-3 text-xs font-bold text-red-700 hover:text-red-800 underline"
+                >
+                  Recargar página
+                </button>
+              </div>
+            )}
+
             {/* Empty state */}
-            {!hasContent && (
+            {!loadError && !hasContent && (
               <div className="text-center py-12">
                 <p className="text-sm text-slate-500 mb-6">
                   Todavía no tenés empresas ni invitaciones pendientes.
