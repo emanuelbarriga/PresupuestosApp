@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { ViewType } from '@/lib/types';
-import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, Layers, TrendingUp, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, TrendingUp, Settings, LogOut } from 'lucide-react';
 import clsx from 'clsx';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/context/AuthContext';
@@ -17,18 +17,12 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePath }: SidebarProps) {
   const router = useRouter();
-  const { selectedCompany, companies, mode, setCompany, setMode, userRole } = useCompany();
+  const { selectedCompany, companies, setCompany, userRole } = useCompany();
   const { user, signOut } = useAuth();
 
   const handleCompanySelect = (id: string) => {
     setCompany(id);
     const currentPath = window.location.pathname.replace(/^\/[^/]+/, `/${id}`);
-    router.push(currentPath);
-  };
-
-  const handleConjuntoSelect = () => {
-    setMode('conjunto');
-    const currentPath = window.location.pathname.replace(/^\/[^/]+/, '/all');
     router.push(currentPath);
   };
 
@@ -67,14 +61,14 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
                   onClick={() => handleCompanySelect(c.id)}
                   className={clsx(
                     "w-full text-left px-3 py-2 text-sm rounded-md transition-all flex items-center gap-2",
-                    mode === 'individual' && selectedCompany?.id === c.id
+                    selectedCompany?.id === c.id
                       ? "bg-white text-indigo-600 font-semibold shadow-sm"
                       : "text-slate-600 hover:bg-white/50"
                   )}
                 >
                   <div className={clsx(
                     "w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0",
-                    mode === 'individual' && selectedCompany?.id === c.id
+                    selectedCompany?.id === c.id
                       ? "bg-indigo-100 text-indigo-600"
                       : "bg-slate-200 text-slate-500"
                   )}>
@@ -84,31 +78,18 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
                 </button>
               ))}
               
-              {/* Divider */}
-              {companies.length > 0 && (
-                <div className="border-t border-slate-200 my-1" />
+              {/* Create company — admin only */}
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => router.push('/onboarding')}
+                  className="w-full text-left px-3 py-2 text-sm rounded-md transition-all flex items-center gap-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+                >
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-100 text-indigo-600">
+                    +
+                  </div>
+                  <span className="truncate font-medium">Crear empresa</span>
+                </button>
               )}
-              
-              {/* Conjunto option */}
-              <button
-                onClick={handleConjuntoSelect}
-                className={clsx(
-                  "w-full text-left px-3 py-2 text-sm rounded-md transition-all flex items-center gap-2",
-                  mode === 'conjunto'
-                    ? "bg-white text-indigo-600 font-semibold shadow-sm"
-                    : "text-slate-600 hover:bg-white/50"
-                )}
-              >
-                <div className={clsx(
-                  "w-6 h-6 rounded-md flex items-center justify-center shrink-0",
-                  mode === 'conjunto'
-                    ? "bg-indigo-100 text-indigo-600"
-                    : "bg-slate-200 text-slate-500"
-                )}>
-                  <Layers size={14} />
-                </div>
-                <span className="truncate">Todas las empresas</span>
-              </button>
             </div>
           </div>
         ) : (
@@ -120,7 +101,7 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
                 onClick={() => handleCompanySelect(c.id)}
                 className={clsx(
                   "w-10 h-10 rounded-lg flex items-center justify-center font-bold transition-all",
-                  mode === 'individual' && selectedCompany?.id === c.id
+                  selectedCompany?.id === c.id
                     ? "bg-indigo-600 text-white shadow-md"
                     : "bg-slate-200 text-slate-500 hover:bg-slate-300"
                 )}
@@ -129,18 +110,15 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
                 {c.name[0]}
               </button>
             ))}
-            <button
-              onClick={handleConjuntoSelect}
-              className={clsx(
-                "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                mode === 'conjunto'
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-slate-200 text-slate-500 hover:bg-slate-300"
-              )}
-              title="Todas las empresas"
-            >
-              <Layers size={18} />
-            </button>
+            {userRole === 'admin' && (
+              <button
+                onClick={() => router.push('/onboarding')}
+                className="w-10 h-10 rounded-lg flex items-center justify-center transition-all bg-indigo-100 text-indigo-600 hover:bg-indigo-200"
+                title="Crear empresa"
+              >
+                <span className="font-bold text-lg">+</span>
+              </button>
+            )}
           </div>
         )}
       </div>
