@@ -5,7 +5,7 @@ import * as fs from 'fs';
 
 // Override with a real Firebase Auth UID for your admin user:
 //   npx tsx scripts/seed.ts --adminUid=abc123
-const ADMIN_UID = process.argv.find(a => a.startsWith('--adminUid='))?.split('=')[1] ?? 'placeholder-admin-uid';
+const ADMIN_UID = process.argv.find(a => a.startsWith('--adminUid='))?.split('=')[1] ?? 'W36WRxnI3CSOtBk6xQlKAMhjM2n1';
 
 const serviceAccountPath = path.resolve(
   __dirname, '..',
@@ -121,13 +121,21 @@ async function seed() {
     await db.collection('companies').doc(cid).collection('settings').doc('categorias').set(defaultSettings);
     console.log(`  ✓ Settings categorias`);
 
-    // ── Admin user (placeholder) ──
-    await db.collection('companies').doc(cid).collection('users').doc(ADMIN_UID).set({
-      email: 'admin@example.com',
+    // ── Global user profile (identity agnostic to companies) ──
+    await db.collection('users').doc(ADMIN_UID).set({
+      id: ADMIN_UID,
+      email: 'emanuel.barriga@pacoraproducciones.com',
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
+
+    // ── Company membership (admin) ──
+    await db.collection('companies').doc(cid).collection('members').doc(ADMIN_UID).set({
+      id: ADMIN_UID,
+      email: 'emanuel.barriga@pacoraproducciones.com',
       role: 'admin',
       joinedAt: new Date().toISOString(),
     });
-    console.log(`  ✓ Admin user (${ADMIN_UID})`);
+    console.log(`  ✓ Member admin for ${cid}`);
   }
 
   // ── Also keep global settings for backward compatibility during migration ──

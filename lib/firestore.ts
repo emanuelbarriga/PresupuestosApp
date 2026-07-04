@@ -13,7 +13,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, UsuarioEmpresa, Invitacion } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, CompanyMember, Invitacion } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
@@ -369,7 +369,7 @@ export function subscribeUserCompanies(
   onError?: (err: Error) => void,
 ): Unsubscribe {
   const q = query(
-    collectionGroup(db, 'users'),
+    collectionGroup(db, 'members'),
     where('id', '==', userId),
   );
 
@@ -378,7 +378,7 @@ export function subscribeUserCompanies(
     async (snapshot) => {
       const companyIds = snapshot.docs.map((docSnap) => {
         const segments = docSnap.ref.path.split('/');
-        return segments[1]; // companies/{companyId}/users/{userId}
+        return segments[1]; // companies/{companyId}/members/{userId}
       });
 
       if (companyIds.length === 0) {
@@ -402,7 +402,7 @@ export function subscribeUserCompanies(
 
 export async function getUserCompaniesSnapshot(userId: string): Promise<Company[]> {
   const q = query(
-    collectionGroup(db, 'users'),
+    collectionGroup(db, 'members'),
     where('id', '==', userId),
   );
   const snapshot = await getDocs(q);
@@ -420,15 +420,15 @@ export async function getUserCompaniesSnapshot(userId: string): Promise<Company[
     .map((d) => ({ id: d.id, ...d.data() }) as Company);
 }
 
-export function subscribeCompanyUsers(
+export function subscribeCompanyMembers(
   companyId: string,
-  onData: (users: UsuarioEmpresa[]) => void,
+  onData: (members: CompanyMember[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, COMPANIES_COLLECTION, companyId, 'users'),
+    collection(db, COMPANIES_COLLECTION, companyId, 'members'),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as UsuarioEmpresa));
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as CompanyMember));
     },
     onError,
   );

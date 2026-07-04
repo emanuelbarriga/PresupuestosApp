@@ -53,11 +53,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email mismatch — this invitation was sent to a different email' }, { status: 403 });
     }
 
-    // ── WriteBatch: create membership + update invitation ──
+    // ── WriteBatch: global user profile + membership + update invitation ──
     const batch = adminDb.batch();
 
+    // Global user profile (identity agnostic to companies)
     batch.set(
-      adminDb.collection('companies').doc(invitation.companyId).collection('users').doc(decoded.uid),
+      adminDb.collection('users').doc(decoded.uid),
+      {
+        id: decoded.uid,
+        email: userEmail,
+        createdAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    // Membership within this company
+    batch.set(
+      adminDb.collection('companies').doc(invitation.companyId).collection('members').doc(decoded.uid),
       {
         id: decoded.uid,
         email: userEmail,

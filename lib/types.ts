@@ -147,11 +147,20 @@ export interface ExtractoBancario {
 
 export type UserRole = 'admin' | 'colaborador';
 
-export interface UsuarioEmpresa {
+/** Perfil global del usuario — agnóstico a la empresa */
+export interface UserProfile {
+  id: string;          // Firebase Auth UID
+  email: string;
+  displayName?: string;
+  createdAt: string;
+}
+
+/** Membresía del usuario dentro de una empresa específica */
+export interface CompanyMember {
   id: string;          // Firebase Auth UID
   email: string;
   role: UserRole;
-  joinedAt: string;    // serverTimestamp ISO string
+  joinedAt: string;
 }
 
 export interface Invitacion {

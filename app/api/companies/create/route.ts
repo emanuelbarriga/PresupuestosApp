@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A company with this name already exists' }, { status: 409 });
     }
 
-    // ── WriteBatch: company doc + admin user doc ──
+    // ── WriteBatch: company doc + global user profile + member doc ──
     const batch = adminDb.batch();
 
     batch.set(adminDb.collection('companies').doc(companyId), {
@@ -64,8 +64,20 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
+    // Global user profile (identity agnostic to companies)
     batch.set(
-      adminDb.collection('companies').doc(companyId).collection('users').doc(decoded.uid),
+      adminDb.collection('users').doc(decoded.uid),
+      {
+        id: decoded.uid,
+        email: decoded.email ?? '',
+        createdAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    // Membership within this company
+    batch.set(
+      adminDb.collection('companies').doc(companyId).collection('members').doc(decoded.uid),
       {
         id: decoded.uid,
         email: decoded.email ?? '',
