@@ -198,13 +198,13 @@ export function Configuracion() {
                         <button
                           onClick={() => handleDeleteMember(company.id, m.id, m.email)}
                           disabled={deleting?.companyId === company.id && deleting?.uid === m.id}
-                          className="shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50"
+                          className="shrink-0 px-2 py-1 text-[11px] font-medium text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1 border border-red-200 hover:border-red-500"
                           title={`Eliminar de ${company.name}`}
                         >
                           {deleting?.companyId === company.id && deleting?.uid === m.id ? (
-                            <div className="animate-spin h-4 w-4 border-2 border-red-400 border-t-transparent rounded-full" />
+                            <div className="animate-spin h-3 w-3 border-2 border-red-400 border-t-transparent rounded-full" />
                           ) : (
-                            <Trash2 size={14} />
+                            <><Trash2 size={12} /> Eliminar</>
                           )}
                         </button>
                       )}

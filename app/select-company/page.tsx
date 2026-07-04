@@ -218,15 +218,17 @@ export default function SelectCompanyPage() {
               </div>
             )}
 
-            {/* Create company */}
-            <div className="pt-2">
-              <button
-                onClick={() => router.push('/onboarding')}
-                className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-4 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all"
-              >
-                + Crear nueva empresa
-              </button>
-            </div>
+            {/* Create company — only for users with no companies (new onboarding) */}
+            {companies.length === 0 && (
+              <div className="pt-2">
+                <button
+                  onClick={() => router.push('/onboarding')}
+                  className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-4 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all"
+                >
+                  + Crear nueva empresa
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
