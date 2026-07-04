@@ -9,7 +9,6 @@ import {
   onSnapshot,
   query,
   where,
-  documentId,
   serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
@@ -371,7 +370,7 @@ export function subscribeUserCompanies(
 ): Unsubscribe {
   const q = query(
     collectionGroup(db, 'users'),
-    where(documentId(), '==', userId),
+    where('id', '==', userId),
   );
 
   return onSnapshot(
@@ -404,7 +403,7 @@ export function subscribeUserCompanies(
 export async function getUserCompaniesSnapshot(userId: string): Promise<Company[]> {
   const q = query(
     collectionGroup(db, 'users'),
-    where(documentId(), '==', userId),
+    where('id', '==', userId),
   );
   const snapshot = await getDocs(q);
 

@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
     batch.set(
       adminDb.collection('companies').doc(invitation.companyId).collection('users').doc(decoded.uid),
       {
+        id: decoded.uid,
         email: userEmail,
         role: invitation.role ?? 'colaborador',
         joinedAt: new Date().toISOString(),
