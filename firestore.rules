@@ -11,6 +11,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // ── Collection group rule for members — allows users to find their own membership ──
+    // This is required by subscribeUserCompanies which uses collectionGroup('members') where id == uid
+    match /{path=**}/members/{doc} {
+      allow read: if request.auth != null && resource.data.id == request.auth.uid;
+    }
+
     // ── Global user profiles (identity agnostic to companies) ──
     match /users/{userId} {
       allow read: if request.auth != null;
