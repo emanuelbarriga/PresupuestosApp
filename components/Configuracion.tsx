@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { subscribeCompanyMembers, subscribeCompanyInvitations, subscribeUserCompanies, createInvitation } from '@/lib/firestore';
 import { CompanyMember, Invitacion, Company } from '@/lib/types';
-import { Shield, Mail, Copy, Check, UserPlus, Clock, Building2, ChevronDown } from 'lucide-react';
+import { Shield, Mail, Copy, Check, UserPlus, Clock, Building2, ChevronDown, Trash2, Calendar } from 'lucide-react';
 
 export function Configuracion() {
   const { user } = useAuth();
@@ -22,6 +24,10 @@ export function Configuracion() {
   const [inviteCompany, setInviteCompany] = useState<Company | null>(selectedCompany);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
+  const [inviteExpiryDate, setInviteExpiryDate] = useState(() => {
+    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+  });
   const [creating, setCreating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -65,13 +71,33 @@ export function Configuracion() {
         status: 'pendiente',
         invitedBy: user.uid,
         createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+        expiresAt: new Date(inviteExpiryDate + 'T23:59:59').toISOString(),
       });
-      setGeneratedLink(`${originUrl}/register?invite=${invitationId}`);
+      const link = `${originUrl}/register?invite=${invitationId}`;
+      setGeneratedLink(link);
       setInviteEmail('');
+      // Reset expiry back to 7 days for next invite
+      const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      setInviteExpiryDate(d.toISOString().split('T')[0]);
       // The invitations list updates automatically via subscription
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Delete member
+  const [deletingMember, setDeletingMember] = useState<string | null>(null);
+
+  const handleDeleteMember = async (memberId: string, memberEmail: string) => {
+    if (!confirm(`¿Eliminar a ${memberEmail} de ${selectedCompany?.name}?`)) return;
+    setDeletingMember(memberId);
+    try {
+      await deleteDoc(doc(db, 'companies', companyId, 'members', memberId));
+    } catch (err) {
+      console.error('Error al eliminar miembro:', err);
+      alert('Error al eliminar el miembro. Si el problema persiste, la regla de seguridad podría necesitar actualización.');
+    } finally {
+      setDeletingMember(null);
     }
   };
 
@@ -125,6 +151,21 @@ export function Configuracion() {
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${m.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
                   {m.role === 'admin' ? 'Admin' : 'Colaborador'}
                 </span>
+                {/* Delete member — admin only, cannot delete self */}
+                {userRole === 'admin' && m.id !== user?.uid && (
+                  <button
+                    onClick={() => handleDeleteMember(m.id, m.email)}
+                    disabled={deletingMember === m.id}
+                    className="shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50"
+                    title={`Eliminar a ${m.email}`}
+                  >
+                    {deletingMember === m.id ? (
+                      <div className="animate-spin h-4 w-4 border-2 border-red-400 border-t-transparent rounded-full" />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -198,7 +239,8 @@ export function Configuracion() {
             <div className="space-y-4">
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                 <p className="text-sm font-bold text-emerald-800 mb-2">¡Invitación creada!</p>
-                <p className="text-xs text-emerald-700 mb-3">Copiá este link y envíaselo al invitado por WhatsApp, Gmail, o el medio que prefieras:</p>
+                <p className="text-xs text-emerald-700 mb-1">Copiá este link y envíaselo al invitado:</p>
+                <p className="text-[11px] text-emerald-600 mb-3">Caduca el {formatDate(inviteExpiryDate + 'T23:59:59')}</p>
                 <div className="bg-white border border-emerald-200 rounded-lg p-3 flex items-center gap-2">
                   <code className="text-xs text-slate-600 break-all flex-1">{generatedLink}</code>
                   <button
@@ -276,6 +318,22 @@ export function Configuracion() {
                   >
                     Administrador
                   </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Caduca el *
+                </label>
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={inviteExpiryDate}
+                    onChange={e => setInviteExpiryDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full appearance-none border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                  />
                 </div>
               </div>
 

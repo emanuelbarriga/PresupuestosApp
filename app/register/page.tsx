@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { auth } from '@/lib/auth';
 import Link from 'next/link';
 
@@ -22,11 +24,25 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteId = searchParams.get('invite');
+  const [inviteInfo, setInviteInfo] = useState<{ companyName: string; expiresAt: string; expired: boolean } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch invitation info when inviteId is present
+  useEffect(() => {
+    if (!inviteId) return;
+    getDoc(doc(db, 'invitations', inviteId)).then(snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const expiresAt = data.expiresAt ?? '';
+      const expired = expiresAt ? new Date(expiresAt).getTime() < Date.now() : false;
+      setInviteInfo({ companyName: data.companyName ?? '', expiresAt, expired });
+      if (data.email && !email) setEmail(data.email);
+    }).catch(() => {});
+  }, [inviteId]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -93,14 +109,24 @@ function RegisterForm() {
 
   return (
     <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-8">
-      {inviteId && (
+      {inviteInfo?.expired ? (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-red-700">
+          <p className="text-xs font-bold">Esta invitación ha expirado</p>
+          <p className="text-[11px] text-red-600 mt-1">
+            El enlace de invitación venció el {new Date(inviteInfo.expiresAt).toLocaleDateString('es-CO')}. Pedí un nuevo enlace al administrador.
+          </p>
+        </div>
+      ) : inviteInfo && (
         <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-700">
           <p className="text-xs font-bold flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">✓</span>
-            Fuiste invitado a una empresa
+            Fuiste invitado a <strong>{inviteInfo.companyName}</strong>
           </p>
           <p className="text-[11px] text-emerald-600 mt-1">
-            Creá tu cuenta y la invitación se aceptará automáticamente al registrarte.
+            {inviteInfo.expiresAt && (
+              <>Caduca el {new Date(inviteInfo.expiresAt).toLocaleDateString('es-CO')} · </>
+            )}
+            Creá tu cuenta y la invitación se aceptará automáticamente.
           </p>
         </div>
       )}
@@ -160,16 +186,16 @@ function RegisterForm() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
-        >
-          {isSubmitting && (
-            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-          )}
-          {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
-        </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || !!inviteInfo?.expired}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
+          >
+            {isSubmitting && (
+              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+            )}
+            {inviteInfo?.expired ? 'Invitación expirada' : isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
+          </button>
       </form>
 
       <div className="relative my-6">

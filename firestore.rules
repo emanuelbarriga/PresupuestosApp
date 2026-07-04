@@ -37,7 +37,8 @@ service cloud.firestore {
       // Members subcollection — API Routes write via firebase-admin (bypasses rules)
       match /members/{doc} {
         allow read: if isMember(companyId);
-        allow write: if false; // Only Admin SDK writes memberships
+        allow create, update: if false; // Only Admin SDK writes memberships
+        allow delete: if isAdmin(companyId); // Admins can remove members
       }
     }
 
