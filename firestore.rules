@@ -4,11 +4,19 @@ service cloud.firestore {
     // ── Helpers ──
     function isMember(companyId) {
       return request.auth != null &&
-        exists(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid));
+        exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
     }
     function isAdmin(companyId) {
       return request.auth != null &&
-        get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── Global user profiles (identity agnostic to companies) ──
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
     }
 
     // ── Companies ──
@@ -26,12 +34,10 @@ service cloud.firestore {
       match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
 
-      // Users subcollection — API Routes write via firebase-admin (bypasses rules)
-      match /users/{userId} {
+      // Members subcollection — API Routes write via firebase-admin (bypasses rules)
+      match /members/{doc} {
         allow read: if isMember(companyId);
-        allow create: if false; // Admin SDK (firebase-admin) escribe con service account — bypasses rules
-        allow update: if isAdmin(companyId);
-        allow delete: if isAdmin(companyId);
+        allow write: if false; // Only Admin SDK writes memberships
       }
     }
 

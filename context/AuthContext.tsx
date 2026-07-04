@@ -5,6 +5,8 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut as firebaseSignOut,
   User,
 } from 'firebase/auth';
@@ -16,8 +18,11 @@ interface AuthContextValue {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
+
+const googleProvider = new GoogleAuthProvider();
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -56,13 +61,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInWithGoogleFn = useCallback(async () => {
+    setError(null);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      // User closed popup cancels — no error state needed
+      if (err.code === 'auth/popup-closed-by-user') return;
+      const code = err.code || 'auth/unknown';
+      setError(code);
+      throw err;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     setError(null);
     await firebaseSignOut(auth);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signInWithGoogle: signInWithGoogleFn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
