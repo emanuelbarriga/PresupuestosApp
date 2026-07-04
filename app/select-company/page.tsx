@@ -17,6 +17,7 @@ export default function SelectCompanyPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [autoRedirected, setAutoRedirected] = useState(false);
 
   // Auth guard
   useEffect(() => {
@@ -59,6 +60,16 @@ export default function SelectCompanyPage() {
       unsubInvitations?.();
     };
   }, [user]);
+
+  // Auto-redirect if only one company and no pending invitations
+  useEffect(() => {
+    if (autoRedirected) return;
+    if (dataLoading) return;
+    if (companies.length === 1 && invitations.length === 0) {
+      setAutoRedirected(true);
+      router.replace(`/${companies[0].id}/dashboard`);
+    }
+  }, [companies, invitations, dataLoading, autoRedirected, router]);
 
   const handleAccept = async (invitationId: string) => {
     if (!user) return;
