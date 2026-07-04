@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
-import { subscribeCompanyMembers, subscribeCompanyInvitations, createInvitation } from '@/lib/firestore';
-import { CompanyMember, Invitacion } from '@/lib/types';
-import { Shield, Mail, Copy, Check, UserPlus, Clock } from 'lucide-react';
+import { subscribeCompanyMembers, subscribeCompanyInvitations, subscribeUserCompanies, createInvitation } from '@/lib/firestore';
+import { CompanyMember, Invitacion, Company } from '@/lib/types';
+import { Shield, Mail, Copy, Check, UserPlus, Clock, Building2, ChevronDown } from 'lucide-react';
 
 export function Configuracion() {
   const { user } = useAuth();
@@ -16,7 +16,10 @@ export function Configuracion() {
   const [members, setMembers] = useState<CompanyMember[]>([]);
   // Invitations state
   const [invitations, setInvitations] = useState<Invitacion[]>([]);
+  // User's companies (for company selector in invite form)
+  const [userCompanies, setUserCompanies] = useState<Company[]>([]);
   // Create form state
+  const [inviteCompany, setInviteCompany] = useState<Company | null>(selectedCompany);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
   const [creating, setCreating] = useState(false);
@@ -37,14 +40,26 @@ export function Configuracion() {
     return () => { unsubMembers(); unsubInv(); };
   }, [companyId]);
 
+  // Subscribe to user's companies (for invite company selector)
+  useEffect(() => {
+    if (!user) return;
+    return subscribeUserCompanies(user.uid, (companies) => {
+      setUserCompanies(companies);
+      // Pre-select the first company as fallback if current isn't in list
+      if (!companies.find(c => c.id === selectedCompany?.id)) {
+        setInviteCompany(companies[0] ?? null);
+      }
+    }, console.error);
+  }, [user]);
+
   // Create invitation + generate link
   const handleCreateInvite = async () => {
-    if (!inviteEmail.trim() || !selectedCompany || !user) return;
+    if (!inviteEmail.trim() || !inviteCompany || !user) return;
     setCreating(true);
     try {
       const invitationId = await createInvitation({
-        companyId: selectedCompany.id,
-        companyName: selectedCompany.name,
+        companyId: inviteCompany.id,
+        companyName: inviteCompany.name,
         email: inviteEmail.trim(),
         role: inviteRole,
         status: 'pendiente',
@@ -203,6 +218,31 @@ export function Configuracion() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Company selector — only show if user has access to multiple companies */}
+              {userCompanies.length > 1 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Empresa *
+                  </label>
+                  <div className="relative">
+                    <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <select
+                      value={inviteCompany?.id ?? ''}
+                      onChange={e => {
+                        const c = userCompanies.find(c => c.id === e.target.value);
+                        setInviteCompany(c ?? null);
+                      }}
+                      className="w-full appearance-none border border-slate-200 rounded-lg pl-9 pr-9 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white"
+                    >
+                      {userCompanies.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                   Correo electrónico del invitado *
