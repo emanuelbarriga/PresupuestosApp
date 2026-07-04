@@ -172,6 +172,9 @@ export interface Invitacion {
   status: 'pendiente' | 'aceptada';
   invitedBy: string;   // UID of admin who invited
   createdAt: string;
+  expiresAt?: string;        // NEW — 7 days from creation
+  acceptedAt?: string;       // NEW — when accepted
+  acceptedBy?: string;       // NEW — who accepted
 }
 
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
@@ -213,7 +216,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }

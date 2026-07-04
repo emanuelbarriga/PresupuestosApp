@@ -33,6 +33,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
 import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
+import { Configuracion } from '@/components/Configuracion';
 import { EstadoResultados } from '@/components/EstadoResultados';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
@@ -51,7 +52,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
   if (main === 'estado-resultados') return { view: 'EstadoResultados' };
-  if (main === 'settings') return { view: 'Configuración' };
+  if (main === 'configuracion') return { view: 'Configuración' };
   return { view: 'Dashboard' };
 }
 
@@ -520,7 +521,7 @@ export default function CompanyPage({ params }: Props) {
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (
-              <Construction view={activeView} />
+              <Configuracion />
             )}
           </div>
 

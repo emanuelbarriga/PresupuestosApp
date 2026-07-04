@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeExtractos } from '@/lib/firestore';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -53,7 +53,9 @@ export function Datos({
     const unsubs = [
       subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
       subscribeTerceros(setTerceros, (err) => console.error('Error loading terceros:', err)),
-      subscribeSettings(setSettingsData, (err) => console.error('Error loading settings:', err)),
+      // TODO: Remove old global subscriber after confirming company-scoped path works
+      subscribeSettings(setSettingsData, (err) => console.error('Error loading settings (global fallback):', err)),
+      subscribeCompanySettings(companyId, setSettingsData, (err) => console.error('Error loading company settings:', err)),
       subscribeCuentasBancarias(companyId, setCuentas, (err) => console.error('Error loading cuentas:', err)),
       subscribeExtractos(companyId, setExtractos, (err) => console.error('Error loading extractos:', err)),
     ];

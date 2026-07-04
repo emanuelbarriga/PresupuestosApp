@@ -140,6 +140,34 @@ export async function updateSettings(data: Partial<SettingsCategorias>): Promise
   await updateDoc(doc(db, 'settings', 'categorias'), { ...data, updatedAt: serverTimestamp() });
 }
 
+export function subscribeCompanySettings(
+  companyId: string,
+  onData: (data: SettingsCategorias) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, COMPANIES_COLLECTION, companyId, 'settings', 'categorias'),
+    (snapshot) => {
+      const d = snapshot.data();
+      if (d) {
+        const normalize = (items: any) => {
+          if (!items) return [];
+          if (typeof items[0] === 'string') return items.map((name: string, i: number) => ({ name, color: '#6366f1', order: i }));
+          return items;
+        };
+        onData({
+          stateProject: normalize(d.stateProject) ?? [],
+          tipoProyectos: normalize(d.tipoProyectos) ?? [],
+          unidades: normalize(d.unidades) ?? [],
+          tipoComprobante: normalize(d.tipoComprobante) ?? [],
+          updatedAt: d.updatedAt,
+        } as SettingsCategorias);
+      }
+    },
+    onError,
+  );
+}
+
 export function subscribeBudgets(
   companyId: string,
   onData: (budgets: Budget[]) => void,
@@ -462,4 +490,22 @@ export async function createInvitation(invitation: Omit<Invitacion, 'id'>): Prom
     { ...invitation, createdAt: serverTimestamp() },
   );
   return docRef.id;
+}
+
+export function subscribeCompanyInvitations(
+  companyId: string,
+  onData: (invitations: Invitacion[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, INVITATIONS_COLLECTION),
+    where('companyId', '==', companyId),
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Invitacion));
+    },
+    onError,
+  );
 }

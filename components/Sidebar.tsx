@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { ViewType } from '@/lib/types';
-import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, Layers, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, Layers, TrendingUp, Settings, LogOut } from 'lucide-react';
 import clsx from 'clsx';
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -16,7 +17,8 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePath }: SidebarProps) {
   const router = useRouter();
-  const { selectedCompany, companies, mode, setCompany, setMode } = useCompany();
+  const { selectedCompany, companies, mode, setCompany, setMode, userRole } = useCompany();
+  const { user, signOut } = useAuth();
 
   const handleCompanySelect = (id: string) => {
     setCompany(id);
@@ -42,6 +44,7 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
     { id: 'Clientes', label: 'Clientes', icon: Users, path: `${basePath}/clientes` },
     { id: 'Extractos', label: 'Extractos', icon: FileText, path: `${basePath}/extractos` },
     { id: 'Datos', label: 'Datos', icon: Database, path: `${basePath}/datos` },
+    ...(userRole === 'admin' ? [{ id: 'Configuración' as ViewType, label: 'Configuración', icon: Settings, path: `${basePath}/configuracion` }] : []),
   ];
 
   return (
@@ -171,8 +174,23 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
         })}
       </nav>
 
-      <div className={clsx("mt-auto mb-4", collapsed ? "w-full flex justify-center" : "px-4")}>
-        <div className="w-8 h-8 rounded-full bg-slate-200 shrink-0"></div>
+      <div className={clsx("mt-auto mb-4", collapsed ? "w-full flex flex-col items-center gap-2" : "px-4")}>
+        {!collapsed && user && (
+          <div className="text-xs text-slate-500 truncate mb-1 px-1" title={user.email ?? ''}>
+            {user.email}
+          </div>
+        )}
+        <button
+          onClick={async () => { await signOut(); router.push('/login'); }}
+          className={clsx(
+            "flex items-center gap-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all rounded-lg",
+            collapsed ? "justify-center p-2" : "w-full px-3 py-2"
+          )}
+          title="Cerrar sesión"
+        >
+          <LogOut size={18} className="shrink-0" />
+          {!collapsed && <span className="text-xs font-medium">Cerrar sesión</span>}
+        </button>
       </div>
     </aside>
   );
