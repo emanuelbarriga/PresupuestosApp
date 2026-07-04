@@ -5,6 +5,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -508,4 +509,18 @@ export function subscribeCompanyInvitations(
     },
     onError,
   );
+}
+
+// ── Member Management ──
+
+export async function deleteMemberFromCompany(companyId: string, memberId: string): Promise<void> {
+  await deleteDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId));
+}
+
+export async function blockMember(companyId: string, memberId: string, blocked: boolean): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { blocked });
+}
+
+export async function deleteInvitation(invitationId: string): Promise<void> {
+  await deleteDoc(doc(db, INVITATIONS_COLLECTION, invitationId));
 }

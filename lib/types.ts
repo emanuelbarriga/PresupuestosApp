@@ -161,6 +161,7 @@ export interface CompanyMember {
   email: string;
   role: UserRole;
   joinedAt: string;
+  blocked?: boolean;
 }
 
 export interface Invitacion {

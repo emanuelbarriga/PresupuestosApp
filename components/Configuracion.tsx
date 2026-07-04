@@ -1,49 +1,62 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useCompany } from '@/context/CompanyContext';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import {
   subscribeUserCompanies,
   subscribeCompanyMembers,
   subscribeCompanyInvitations,
-  createInvitation,
+  deleteMemberFromCompany,
+  blockMember,
+  deleteInvitation,
 } from '@/lib/firestore';
-import { Company, CompanyMember, Invitacion } from '@/lib/types';
+import { Company, CompanyMember, Invitacion, FormType } from '@/lib/types';
 import {
-  Shield, Mail, Copy, Check, UserPlus, Clock, Building2, ChevronDown, Trash2, Plus,
+  Shield, Mail, Copy, Check, UserPlus, Clock, Trash2, Pencil, Ban, X,
 } from 'lucide-react';
 
-type ExpiryPreset = 1 | 3 | 7;
+// ── Aggregated types ──
 
-interface CompanySection {
+interface AggregatedUser {
+  userId: string;
+  email: string;
+  memberships: {
+    companyId: string;
+    companyName: string;
+    role: string;
+    blocked: boolean;
+  }[];
+}
+
+interface AggregatedInvitation extends Invitacion {
+  companyName: string;
+}
+
+interface ConfiguracionProps {
+  onAddNew?: (type: FormType) => void;
+}
+
+// ── Internal per-company subscription state ──
+
+interface CompanyData {
   company: Company;
   members: CompanyMember[];
   invitations: Invitacion[];
   isAdmin: boolean;
 }
 
-export function Configuracion() {
+export function Configuracion({ onAddNew }: ConfiguracionProps) {
   const { user } = useAuth();
-  const { userRole } = useCompany();
 
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
-  const [sections, setSections] = useState<CompanySection[]>([]);
+  const [companyDataMap, setCompanyDataMap] = useState<Record<string, CompanyData>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [originUrl, setOriginUrl] = useState('');
 
-  // ── Invite form state ──
-  const [inviteCompany, setInviteCompany] = useState<Company | null>(null);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
-  const [inviteExpiry, setInviteExpiry] = useState<ExpiryPreset>(7);
-  const [creating, setCreating] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  // ── Delete state ──
-  const [deleting, setDeleting] = useState<{ companyId: string; uid: string } | null>(null);
+  // ── Action loading states ──
+  const [deletingMember, setDeletingMember] = useState<string | null>(null);
+  const [blockingMember, setBlockingMember] = useState<string | null>(null);
+  const [deletingInvitation, setDeletingInvitation] = useState<string | null>(null);
 
   useEffect(() => { setOriginUrl(window.location.origin); }, []);
 
@@ -61,76 +74,83 @@ export function Configuracion() {
       let mem: CompanyMember[] = [];
       let inv: Invitacion[] = [];
 
+      const updateData = () => {
+        const isAdmin = !!mem.find((m) => m.id === user?.uid && m.role === 'admin');
+        setCompanyDataMap((prev) => ({
+          ...prev,
+          [c.id]: { company: c, members: mem, invitations: inv, isAdmin },
+        }));
+      };
+
       const u1 = subscribeCompanyMembers(c.id, (data) => {
         mem = data;
-        updateSection();
+        updateData();
       }, console.error);
 
       const u2 = subscribeCompanyInvitations(c.id, (data) => {
         inv = data;
-        updateSection();
+        updateData();
       }, console.error);
-
-      function updateSection() {
-        setSections((prev) => {
-          const next = prev.filter((s) => s.company.id !== c.id);
-          const isAdmin = !!mem.find((m) => m.id === user?.uid && m.role === 'admin');
-          return [...next, { company: c, members: mem, invitations: inv, isAdmin }];
-        });
-      }
 
       unsubs.push(u1, u2);
     }
 
-    // Cleanup companies no longer in the list
-    setSections((prev) => prev.filter((s) => userCompanies.some((c) => c.id === s.company.id)));
+    // Remove companies no longer in the list
+    setCompanyDataMap((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (!userCompanies.some((c) => c.id === key)) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
 
     return () => unsubs.forEach((fn) => fn());
   }, [userCompanies, user]);
 
-  // Pre-select invite company
-  useEffect(() => {
-    if (userCompanies.length > 0 && !inviteCompany) {
-      setInviteCompany(userCompanies[0]);
-    }
-  }, [userCompanies]);
+  // ── Aggregate users across all admin companies ──
+  const aggregatedUsers = useMemo<AggregatedUser[]>(() => {
+    const userMap = new Map<string, AggregatedUser>();
 
-  // ── Delete member ──
-  const handleDeleteMember = async (companyId: string, memberId: string, memberEmail: string) => {
-    if (!confirm(`¿Eliminar a ${memberEmail} de la empresa?`)) return;
-    setDeleting({ companyId, uid: memberId });
-    try {
-      await deleteDoc(doc(db, 'companies', companyId, 'members', memberId));
-    } catch (err) {
-      console.error('Error al eliminar:', err);
-      alert('Error al eliminar el miembro');
-    } finally {
-      setDeleting(null);
+    for (const data of Object.values(companyDataMap)) {
+      if (!data.isAdmin) continue;
+      for (const member of data.members) {
+        const existing = userMap.get(member.id);
+        const membership = {
+          companyId: data.company.id,
+          companyName: data.company.name,
+          role: member.role,
+          blocked: member.blocked ?? false,
+        };
+        if (existing) {
+          existing.memberships.push(membership);
+        } else {
+          userMap.set(member.id, {
+            userId: member.id,
+            email: member.email,
+            memberships: [membership],
+          });
+        }
+      }
     }
-  };
 
-  // ── Create invitation ──
-  const handleCreateInvite = async () => {
-    if (!inviteEmail.trim() || !inviteCompany || !user) return;
-    setCreating(true);
-    try {
-      const expiresDate = new Date(Date.now() + inviteExpiry * 24 * 60 * 60 * 1000);
-      const invitationId = await createInvitation({
-        companyId: inviteCompany.id,
-        companyName: inviteCompany.name,
-        email: inviteEmail.trim(),
-        role: inviteRole,
-        status: 'pendiente',
-        invitedBy: user.uid,
-        createdAt: new Date().toISOString(),
-        expiresAt: expiresDate.toISOString(),
-      });
-      setGeneratedLink(`${originUrl}/register?invite=${invitationId}`);
-      setInviteEmail('');
-    } finally {
-      setCreating(false);
+    return Array.from(userMap.values()).sort((a, b) => a.email.localeCompare(b.email));
+  }, [companyDataMap]);
+
+  // ── Aggregate invitations across all admin companies ──
+  const aggregatedInvitations = useMemo<AggregatedInvitation[]>(() => {
+    const result: AggregatedInvitation[] = [];
+    for (const data of Object.values(companyDataMap)) {
+      if (!data.isAdmin) continue;
+      for (const inv of data.invitations) {
+        result.push({ ...inv, companyName: data.company.name });
+      }
     }
-  };
+    return result.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  }, [companyDataMap]);
+
+  const adminCompanyCount = Object.values(companyDataMap).filter((d) => d.isAdmin).length;
 
   // ── Formatters ──
   const fmtDate = (iso: string) => {
@@ -138,20 +158,132 @@ export function Configuracion() {
     return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const expiryLabel: Record<ExpiryPreset, string> = { 1: '1 día', 3: '3 días', 7: '1 semana' };
+  const getInvitationStatus = (inv: Invitacion): 'pendiente' | 'aceptada' | 'expired' => {
+    if (inv.status === 'aceptada') return 'aceptada';
+    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) return 'expired';
+    return 'pendiente';
+  };
 
-  // Filter to companies where user is admin (for member management)
-  const adminSections = sections.filter((s) => s.isAdmin);
+  // ── Actions ──
+
+  const handleRemoveFromCompany = async (companyId: string, memberId: string, memberEmail: string, companyName: string) => {
+    if (!confirm(`¿Eliminar a ${memberEmail} de ${companyName}?`)) return;
+    const key = `${companyId}:${memberId}`;
+    setDeletingMember(key);
+    try {
+      await deleteMemberFromCompany(companyId, memberId);
+    } catch (err) {
+      console.error('Error removing member:', err);
+      alert('Error al eliminar el miembro');
+    } finally {
+      setDeletingMember(null);
+    }
+  };
+
+  const handleDeleteUserFromAll = async (aggregatedUser: AggregatedUser) => {
+    const companyNames = aggregatedUser.memberships.map((m) => m.companyName).join(', ');
+    if (!confirm(`¿Eliminar a ${aggregatedUser.email} de todas las empresas (${companyNames})?`)) return;
+    setDeletingMember(aggregatedUser.userId);
+    try {
+      await Promise.all(
+        aggregatedUser.memberships.map((m) => deleteMemberFromCompany(m.companyId, aggregatedUser.userId)),
+      );
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      alert('Error al eliminar el usuario');
+    } finally {
+      setDeletingMember(null);
+    }
+  };
+
+  const handleBlockUser = async (companyId: string, memberId: string, currentBlocked: boolean) => {
+    const key = `${companyId}:${memberId}`;
+    setBlockingMember(key);
+    try {
+      await blockMember(companyId, memberId, !currentBlocked);
+    } catch (err) {
+      console.error('Error blocking/unblocking member:', err);
+      alert('Error al actualizar el estado del miembro');
+    } finally {
+      setBlockingMember(null);
+    }
+  };
+
+  const handleCopyLink = async (invId: string) => {
+    const link = `${originUrl}/register?invite=${invId}`;
+    await navigator.clipboard.writeText(link);
+    setCopiedId(invId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDeleteInvitation = async (invId: string, email: string) => {
+    if (!confirm(`¿Eliminar la invitación para ${email}?`)) return;
+    setDeletingInvitation(invId);
+    try {
+      await deleteInvitation(invId);
+    } catch (err) {
+      console.error('Error deleting invitation:', err);
+      alert('Error al eliminar la invitación');
+    } finally {
+      setDeletingInvitation(null);
+    }
+  };
+
+  // ── Status badge ──
+  const StatusBadge = ({ status }: { status: 'pendiente' | 'aceptada' | 'expired' }) => {
+    const styles = {
+      pendiente: 'bg-amber-50 text-amber-700 border-amber-200',
+      aceptada: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      expired: 'bg-red-50 text-red-700 border-red-200',
+    };
+    const labels = { pendiente: 'Pendiente', aceptada: 'Aceptada', expired: 'Expirada' };
+    return (
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${styles[status]}`}>
+        {labels[status]}
+      </span>
+    );
+  };
+
+  // ── Company tag pill ──
+  const CompanyTag = ({
+    companyName,
+    role,
+    blocked,
+    onRemove,
+  }: {
+    companyName: string;
+    role: string;
+    blocked: boolean;
+    onRemove: () => void;
+  }) => (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+        blocked
+          ? 'bg-red-50 text-red-600 border-red-200'
+          : role === 'admin'
+            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            : 'bg-slate-50 text-slate-600 border-slate-200'
+      }`}
+    >
+      {companyName}: {role === 'admin' ? 'Admin' : 'Colab'}
+      {blocked && ' (Bloq)'}
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        className="ml-0.5 hover:bg-red-100 rounded-full p-0.5 transition-colors"
+        title={`Eliminar de ${companyName}`}
+      >
+        <X size={10} />
+      </button>
+    </span>
+  );
+
+  const isCurrentUser = (userId: string) => userId === user?.uid;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
+    <div className="max-w-6xl mx-auto p-6 space-y-8">
       <h1 className="text-xl font-bold text-slate-800">Configuración</h1>
 
-      {/* Only the section for admin's companies — they can ONLY manage companies
-          where `isAdmin == true`. However the array `sections` also contains
-          companies where the user is *only* a colaborador, which we skip here. */}
-
-      {adminSections.length === 0 && (
+      {adminCompanyCount === 0 && (
         <div className="text-center py-12 text-sm text-slate-400">
           {userCompanies.length === 0
             ? 'Todavía no formás parte de ninguna empresa.'
@@ -159,213 +291,249 @@ export function Configuracion() {
         </div>
       )}
 
-      {adminSections.map(({ company, members, invitations, isAdmin }) =>
-        !isAdmin ? null : (
-          <section
-            key={company.id}
-            className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"
-          >
-            {/* Company header */}
-            <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-              <Building2 size={16} className="text-indigo-500" />
-              <h2 className="text-sm font-bold text-slate-700">{company.name}</h2>
-            </div>
-
-            {/* Members */}
-            <div className="p-4 border-b border-slate-50">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                  <Shield size={13} /> Miembros ({members.length})
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {members.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Sin miembros</p>
-                ) : (
-                  members.map((m) => (
-                    <div key={m.id} className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-600 uppercase">
-                        {m.email[0]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-700 truncate">{m.email}</p>
-                        <p className="text-[11px] text-slate-400">Se unió el {fmtDate(m.joinedAt)}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${m.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                        {m.role === 'admin' ? 'Admin' : 'Colaborador'}
-                      </span>
-                      {m.id !== user?.uid && (
-                        <button
-                          onClick={() => handleDeleteMember(company.id, m.id, m.email)}
-                          disabled={deleting?.companyId === company.id && deleting?.uid === m.id}
-                          className="shrink-0 px-2 py-1 text-[11px] font-medium text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all disabled:opacity-50 flex items-center gap-1 border border-red-200 hover:border-red-500"
-                          title={`Eliminar de ${company.name}`}
-                        >
-                          {deleting?.companyId === company.id && deleting?.uid === m.id ? (
-                            <div className="animate-spin h-3 w-3 border-2 border-red-400 border-t-transparent rounded-full" />
-                          ) : (
-                            <><Trash2 size={12} /> Eliminar</>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Invitations */}
-            <div className="p-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5 mb-3">
-                <Mail size={13} /> Invitaciones pendientes ({invitations.length})
-              </h3>
-              <div className="space-y-2">
-                {invitations.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Sin invitaciones pendientes</p>
-                ) : (
-                  invitations.map((inv) => {
-                    const link = `${originUrl}/register?invite=${inv.id}`;
-                    const isExpired = inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now();
-                    return (
-                      <div key={inv.id} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-slate-700 truncate">{inv.email}</p>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${inv.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                              {inv.role === 'admin' ? 'Admin' : 'Colaborador'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <p className="text-[11px] text-slate-400">Enviada: {fmtDate(inv.createdAt)}</p>
-                            {inv.expiresAt && !isExpired && (
-                              <span className="flex items-center gap-1 text-[11px] text-amber-600">
-                                <Clock size={11} />
-                                {Math.ceil((new Date(inv.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))}d restantes
-                              </span>
-                            )}
-                            {isExpired && <span className="text-[11px] text-red-500">Expirada</span>}
-                          </div>
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(link); }}
-                            className="mt-1 flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700"
-                          >
-                            <Copy size={11} /> Copiar link
-                          </button>
-                        </div>
-                        <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${inv.status === 'pendiente' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                          {inv.status === 'pendiente' ? 'Pendiente' : 'Aceptada'}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </section>
-        )
-      )}
-
-      {/* ── Create Invitation (global, includes company selector) ── */}
-      {adminSections.length > 0 && (
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus size={16} className="text-slate-500" />
-            <h2 className="text-sm font-bold text-slate-700">Crear Invitación</h2>
+      {/* ── Users Table ── */}
+      {adminCompanyCount > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+            <Shield size={16} className="text-indigo-500" />
+            <h2 className="text-sm font-bold text-slate-700">
+              Usuarios ({aggregatedUsers.length})
+            </h2>
           </div>
 
-          {generatedLink ? (
-            <div className="space-y-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <p className="text-sm font-bold text-emerald-800 mb-2">¡Invitación creada!</p>
-                <p className="text-xs text-emerald-700 mb-1">Caduca en {expiryLabel[inviteExpiry]}</p>
-                <div className="bg-white border border-emerald-200 rounded-lg p-3 flex items-center gap-2">
-                  <code className="text-xs text-slate-600 break-all flex-1">{generatedLink}</code>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(generatedLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                    className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 text-xs font-bold flex items-center gap-1.5"
-                  >
-                    {copied ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
-                  </button>
-                </div>
-              </div>
-              <button onClick={() => setGeneratedLink(null)} className="text-xs font-bold text-slate-500 hover:text-slate-700">
-                Crear otra invitación
-              </button>
-            </div>
+          {aggregatedUsers.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400 italic">Sin miembros</div>
           ) : (
-            <div className="space-y-4">
-              {/* Company */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Empresa *</label>
-                <div className="relative">
-                  <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <select
-                    value={inviteCompany?.id ?? ''}
-                    onChange={(e) => setInviteCompany(userCompanies.find((c) => c.id === e.target.value) ?? null)}
-                    className="w-full appearance-none border border-slate-200 rounded-lg pl-9 pr-9 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white"
-                  >
-                    {userCompanies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Email</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Empresas</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aggregatedUsers.map((au) => (
+                    <tr key={au.userId} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                      {/* Email */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0 text-[10px] font-bold text-indigo-600 uppercase">
+                            {au.email[0]}
+                          </div>
+                          <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">
+                            {au.email}
+                          </span>
+                          {isCurrentUser(au.userId) && (
+                            <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">VOS</span>
+                          )}
+                        </div>
+                      </td>
 
-              {/* Email */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Correo electrónico *</label>
-                <div className="relative">
-                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="colaborador@ejemplo.com"
-                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
+                      {/* Empresas tags */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {au.memberships.map((m) => (
+                            <CompanyTag
+                              key={m.companyId}
+                              companyName={m.companyName}
+                              role={m.role}
+                              blocked={m.blocked}
+                              onRemove={() => handleRemoveFromCompany(m.companyId, au.userId, au.email, m.companyName)}
+                            />
+                          ))}
+                        </div>
+                      </td>
 
-              {/* Role */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Rol</label>
-                <div className="flex bg-slate-100 rounded-lg p-1">
-                  <button
-                    type="button"
-                    onClick={() => setInviteRole('colaborador')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${inviteRole === 'colaborador' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-                  >Colaborador</button>
-                  <button
-                    type="button"
-                    onClick={() => setInviteRole('admin')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${inviteRole === 'admin' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-                  >Administrador</button>
-                </div>
-              </div>
+                      {/* Actions */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Edit button */}
+                          <button
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil size={14} />
+                          </button>
 
-              {/* Expiry presets */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Caduca en</label>
-                <div className="flex bg-slate-100 rounded-lg p-1">
-                  {([1, 3, 7] as ExpiryPreset[]).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setInviteExpiry(d)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${inviteExpiry === d ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-                    >{expiryLabel[d]}</button>
+                          {/* Block button — per membership */}
+                          {au.memberships.map((m) => (
+                            <button
+                              key={`block-${m.companyId}`}
+                              onClick={() => handleBlockUser(m.companyId, au.userId, m.blocked)}
+                              disabled={blockingMember === `${m.companyId}:${au.userId}`}
+                              className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                                m.blocked
+                                  ? 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'
+                                  : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                              }`}
+                              title={m.blocked ? `Desbloquear en ${m.companyName}` : `Bloquear en ${m.companyName}`}
+                            >
+                              {blockingMember === `${m.companyId}:${au.userId}` ? (
+                                <div className="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+                              ) : (
+                                <Ban size={14} />
+                              )}
+                            </button>
+                          ))}
+
+                          {/* Delete button — only if not current user */}
+                          {!isCurrentUser(au.userId) && (
+                            <button
+                              onClick={() => handleDeleteUserFromAll(au)}
+                              disabled={deletingMember === au.userId}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                              title="Eliminar de todas las empresas"
+                            >
+                              {deletingMember === au.userId ? (
+                                <div className="animate-spin h-3.5 w-3.5 border-2 border-red-400 border-t-transparent rounded-full" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
-              <button
-                onClick={handleCreateInvite}
-                disabled={creating || !inviteEmail.trim()}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
-              >
-                {creating ? 'Creando...' : 'Crear invitación'}
-              </button>
+      {/* ── Invitations Table ── */}
+      {adminCompanyCount > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail size={16} className="text-indigo-500" />
+              <h2 className="text-sm font-bold text-slate-700">
+                Invitaciones ({aggregatedInvitations.length})
+              </h2>
+            </div>
+            <button
+              onClick={() => onAddNew?.('invite-user')}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition-colors"
+            >
+              <UserPlus size={13} />
+              Crear Invitación
+            </button>
+          </div>
+
+          {aggregatedInvitations.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400 italic">Sin invitaciones</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Email</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Empresa</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Rol</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Creada</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Caduca</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Estado</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aggregatedInvitations.map((inv) => {
+                    const status = getInvitationStatus(inv);
+                    return (
+                      <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        {/* Email */}
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-medium text-slate-700 truncate max-w-[180px] block">
+                            {inv.email}
+                          </span>
+                        </td>
+
+                        {/* Empresa */}
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-600">{inv.companyName}</span>
+                        </td>
+
+                        {/* Rol */}
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            inv.role === 'admin'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {inv.role === 'admin' ? 'Admin' : 'Colaborador'}
+                          </span>
+                        </td>
+
+                        {/* Creada */}
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-500">{fmtDate(inv.createdAt)}</span>
+                        </td>
+
+                        {/* Caduca */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-slate-500">{fmtDate(inv.expiresAt ?? '')}</span>
+                            {status === 'pendiente' && inv.expiresAt && (
+                              <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
+                                <Clock size={10} />
+                                {Math.ceil((new Date(inv.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))}d
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Estado */}
+                        <td className="px-4 py-3">
+                          <StatusBadge status={status} />
+                        </td>
+
+                        {/* Acciones */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Edit */}
+                            <button
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil size={14} />
+                            </button>
+
+                            {/* Copy link */}
+                            <button
+                              onClick={() => handleCopyLink(inv.id!)}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                copiedId === inv.id
+                                  ? 'text-emerald-600 bg-emerald-50'
+                                  : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                              }`}
+                              title="Copiar link"
+                            >
+                              {copiedId === inv.id ? <Check size={14} /> : <Copy size={14} />}
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                              onClick={() => handleDeleteInvitation(inv.id!, inv.email)}
+                              disabled={deletingInvitation === inv.id}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                              title="Eliminar"
+                            >
+                              {deletingInvitation === inv.id ? (
+                                <div className="animate-spin h-3.5 w-3.5 border-2 border-red-400 border-t-transparent rounded-full" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
