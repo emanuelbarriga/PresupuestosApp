@@ -7,7 +7,6 @@ import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
-import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
   subscribeEjecuciones,
@@ -52,6 +51,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
   if (main === 'estado-resultados') return { view: 'EstadoResultados' };
+  if (main === 'settings') return { view: 'Configuración' };
   return { view: 'Dashboard' };
 }
 
@@ -499,8 +499,7 @@ export default function CompanyPage({ params }: Props) {
   const handleSidepanelBack = () => popScreen();
 
   return (
-    <CompanyProvider companyId={companyId}>
-      <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
+    <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
         <Sidebar collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} activeView={activeView}
           onViewChange={(view) => navigateTo(view)} basePath={`/${companyId}`} />
 
@@ -520,6 +519,9 @@ export default function CompanyPage({ params }: Props) {
             {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
               <Construction view={activeView} />
             )}
+            {activeView === 'Configuración' && (
+              <Construction view={activeView} />
+            )}
           </div>
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm} customizeOpen={customizeOpen}
@@ -535,6 +537,5 @@ export default function CompanyPage({ params }: Props) {
             onSearchChange={setProjectSearch} />
         </main>
       </div>
-    </CompanyProvider>
   );
 }
