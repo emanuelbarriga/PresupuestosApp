@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter, useParams } from 'next/navigation';
 import { getUserCompaniesSnapshot } from '@/lib/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { CompanyProvider } from '@/context/CompanyContext';
 
 export default function CompanyLayout({ children }: { children: React.ReactNode }) {
@@ -38,9 +40,14 @@ export default function CompanyLayout({ children }: { children: React.ReactNode 
         const snapshot = await getUserCompaniesSnapshot(user.uid);
         const matchingCompany = snapshot.find(c => c.id === companyId);
         if (matchingCompany) {
-          // Also fetch the specific role for this company
-          // For now, derive from membership existence
-          setUserRole('admin'); // Will be refined when CompanyContext is extended
+          // Fetch the actual role from the members doc
+          try {
+            const memberSnap = await getDoc(doc(db, 'companies', companyId, 'members', user.uid));
+            const role = memberSnap.data()?.role ?? 'colaborador';
+            setUserRole(role);
+          } catch {
+            setUserRole('colaborador'); // fallback — safer to deny
+          }
           setMembershipState('granted');
         } else {
           setMembershipState('denied');
