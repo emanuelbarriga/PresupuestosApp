@@ -30,9 +30,24 @@ function RegisterForm() {
 
   useEffect(() => {
     if (!authLoading && user) {
+      // If there's a pending invite, auto-accept before redirecting
+      if (inviteId && !window.sessionStorage.getItem(`invite-accepted-${inviteId}`)) {
+        const acceptInvite = async () => {
+          try {
+            const token = await user.getIdToken();
+            await fetch('/api/companies/accept-invitation', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ invitationId: inviteId }),
+            });
+            window.sessionStorage.setItem(`invite-accepted-${inviteId}`, 'true');
+          } catch { /* ignore — can accept later */ }
+        };
+        acceptInvite();
+      }
       router.replace('/select-company');
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, inviteId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
