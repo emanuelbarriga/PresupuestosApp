@@ -29,7 +29,7 @@ service cloud.firestore {
       // Users subcollection — API Routes write via firebase-admin (bypasses rules)
       match /users/{userId} {
         allow read: if isMember(companyId);
-        allow create: if isMember(companyId) && request.auth.uid == userId;
+        allow create: if false; // Admin SDK (firebase-admin) escribe con service account — bypasses rules
         allow update: if isAdmin(companyId);
         allow delete: if isAdmin(companyId);
       }
