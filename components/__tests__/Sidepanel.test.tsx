@@ -32,6 +32,21 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('@/lib/firebase', () => ({
   db: {},
+  storage: {},
+}));
+
+vi.mock('@/lib/fileUpload', () => ({
+  validateFile: vi.fn().mockImplementation((file: File) => {
+    const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowed.includes(file.type)) return { valid: false as const, error: 'Tipo no soportado: ' + file.type + '. Permitidos: PDF, JPG, PNG' };
+    if (file.size > 5 * 1024 * 1024) return { valid: false as const, error: 'Archivo demasiado grande. Máximo: 5MB' };
+    return { valid: true as const };
+  }),
+  uploadFile: vi.fn().mockResolvedValue({ url: 'https://example.com/file.pdf', path: 'c1/ejecuciones/ej-1/file.pdf' }),
+  deleteFile: vi.fn().mockResolvedValue(undefined),
+  generateFilePath: vi.fn().mockImplementation((companyId: string, ejecucionId: string, fileName: string) =>
+    `${companyId}/ejecuciones/${ejecucionId}/${fileName}`,
+  ),
 }));
 
 // ─── Callback capture variables ─────────────────────────────────────────────
@@ -104,6 +119,7 @@ import { Dashboard, buildTerceroGroups } from '@/components/Dashboard';
 import type {
   Budget,
   Ejecucion,
+  Comprobante,
   Project,
   Client,
   ActiveForm,
@@ -111,6 +127,7 @@ import type {
   Month,
   SidepanelData,
   RecordDetail,
+  NavScreen,
   DetalleTerceroGroup,
 } from '@/lib/types';
 
@@ -255,6 +272,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -287,6 +307,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -315,6 +338,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -341,6 +367,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -374,6 +403,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -407,6 +439,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -434,6 +469,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -448,6 +486,36 @@ describe('Sidepanel', () => {
 
       const submittedData = onFormSubmit.mock.calls[0][1] as Record<string, any>;
       expect(submittedData.montoPresupuestado).toBe(0);
+    });
+  });
+
+  describe('FormPanel submit pops back', () => {
+    it('successful submit calls onBack (not onClose)', async () => {
+      const onClose = vi.fn();
+      const onBack = vi.fn();
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'budget' }}
+          companyId="c1"
+          onClose={onClose}
+          onFormSubmit={onFormSubmit}
+          canGoBack={true}
+          onBack={onBack}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+
+      // onBack should be called, not onClose
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(onClose).not.toHaveBeenCalled();
     });
   });
 
@@ -572,6 +640,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -593,6 +664,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -616,6 +690,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -642,6 +719,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -679,6 +759,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
           projects={testProjects}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -708,6 +791,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
           projects={testProjects}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -731,6 +817,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -759,6 +848,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
           projects={testProjects}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -796,6 +888,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
       await emitProjects([makeProject()]);
@@ -821,6 +916,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -840,6 +938,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -876,6 +977,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -904,6 +1008,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -924,6 +1031,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -951,6 +1061,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -972,6 +1085,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -989,6 +1105,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -996,6 +1115,35 @@ describe('Sidepanel', () => {
       await emitBudgets([makeBudget({ id: 'b1', descripcion: 'Anticipo Obra' })]);
 
       expect(screen.getByText('Anticipo Obra')).toBeInTheDocument();
+    });
+
+    it('click linked budget calls onNavigate with view detail', async () => {
+      const onNavigate = vi.fn();
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: 'b1' }) }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={onNavigate}
+        />,
+      );
+
+      await emitBudgets([makeBudget({ id: 'b1', descripcion: 'Presupuesto Vinculado' })]);
+
+      fireEvent.click(screen.getByText('Presupuesto Vinculado'));
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'view',
+          detail: expect.objectContaining({ type: 'budget' }),
+        }),
+      );
     });
   });
 
@@ -1013,6 +1161,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1028,6 +1179,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1045,6 +1199,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1064,6 +1221,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1080,6 +1240,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1116,13 +1279,18 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
+      // En modo Presupuestado muestra budgets, NO ejecuciones en el body
       expect(screen.getByText('Anticipo A')).toBeInTheDocument();
       expect(screen.getByText('Anticipo B')).toBeInTheDocument();
-      expect(screen.getByText('Pago A')).toBeInTheDocument();
-      expect(screen.getByText('$ 300.000', { exact: false })).toBeInTheDocument();
+      expect(screen.queryByText('Pago A')).not.toBeInTheDocument();
+      // El footer con totales siempre visible (puede aparecer también en headers de grupo)
+      expect(screen.getAllByText('$ 300.000', { exact: false }).length).toBeGreaterThan(0);
       expect(screen.getByText('-$ 250.000', { exact: false })).toBeInTheDocument();
     });
   });
@@ -1137,6 +1305,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1157,6 +1328,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1172,6 +1346,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1201,10 +1378,82 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
       expect(screen.getByText('Proyecto X / Julio')).toBeInTheDocument();
+    });
+  });
+
+  describe('DataPanel navigation via onNavigate', () => {
+    function dataPanelData(overrides?: Partial<SidepanelData>): SidepanelData {
+      return {
+        title: 'Proyecto X / Julio',
+        subtitle: 'Presupuestado de ingresos',
+        formula: 'Suma de todas las transacciones',
+        budgets: [
+          makeBudget({ id: 'b1', descripcion: 'Anticipo A', montoPresupuestado: 100000, mesPresupuestado: 'Julio' }),
+        ],
+        ejecuciones: [],
+        value: 100000,
+        presupuestado: 100000,
+        ejecutado: 0,
+        diferencia: -100000,
+        mode: 'Presupuestado',
+        tipo: 'ingreso',
+        ...overrides,
+      };
+    }
+
+    it('click "Ver" on a budget calls onNavigate with type="view" and budget detail', () => {
+      const onNavigate = vi.fn();
+      render(
+        <Sidepanel data={dataPanelData()} recordDetail={null} activeForm={null}
+          companyId="c1" onClose={vi.fn()} onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false} onBack={vi.fn()} onNavigate={onNavigate} />,
+      );
+
+      fireEvent.click(screen.getByText('Ver'));
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'view', detail: expect.objectContaining({ type: 'budget' }) }),
+      );
+    });
+
+    it('click "Editar" on a budget calls onNavigate with type="form" and edit form', () => {
+      const onNavigate = vi.fn();
+      render(
+        <Sidepanel data={dataPanelData()} recordDetail={null} activeForm={null}
+          companyId="c1" onClose={vi.fn()} onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false} onBack={vi.fn()} onNavigate={onNavigate} />,
+      );
+
+      fireEvent.click(screen.getByText('Editar'));
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'form', form: expect.objectContaining({ mode: 'edit', type: 'budget' }) }),
+      );
+    });
+
+    it('click "+ Ingreso Presupuestado" calls onNavigate with type="form" and add form', () => {
+      const onNavigate = vi.fn();
+      render(
+        <Sidepanel data={dataPanelData()} recordDetail={null} activeForm={null}
+          companyId="c1" onClose={vi.fn()} onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false} onBack={vi.fn()} onNavigate={onNavigate} />,
+      );
+
+      fireEvent.click(screen.getByText('Ingreso Presupuestado'));
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'form', form: expect.objectContaining({ mode: 'add' }) }),
+      );
     });
   });
 
@@ -1223,6 +1472,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1247,6 +1499,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1276,6 +1531,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
           projects={[{ id: 'p1', name: 'Otro Proyecto', clientId: '', clientName: '', estado: 'Activo' }]}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1302,6 +1560,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
           projects={[{ id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' }]}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1328,6 +1589,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
           projects={[{ id: 'p1', name: 'Proyecto Alpha', clientId: '', clientName: 'Cliente Beta', estado: 'Activo' }]}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1576,6 +1840,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1602,6 +1869,9 @@ describe('Sidepanel', () => {
           companyId="c1"
           onClose={vi.fn()}
           onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1630,6 +1900,9 @@ describe('Sidepanel', () => {
           onClose={vi.fn()}
           onFormSubmit={onFormSubmit}
           onCellClick={onCellClick}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
         />,
       );
 
@@ -1645,6 +1918,162 @@ describe('Sidepanel', () => {
       expect(data.ejecuciones[0].entityId).toBe('e2');
       expect(data.presupuestado).toBe(300000);
       expect(data.ejecutado).toBe(100000);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Comprobantes de Ejecución — Phase 3: UI + Display
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('R16 — Comprobantes: upload form + display', () => {
+    it('3.1a ADD ejecucion form muestra "Seleccionar archivos" y "Comprobantes" sección', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Seleccionar archivos')).toBeInTheDocument();
+    });
+
+    it('3.1b ADD form submit sin comprobantes no añade _pendingComprobantes al payload', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(data._pendingComprobantes).toBeUndefined();
+    });
+
+    it('3.4a EjecucionView muestra comprobantes y download link', () => {
+      const comprobantes: Comprobante[] = [
+        { id: 'c1', name: 'factura.pdf', url: 'https://example.com/factura.pdf', path: 'c1/ejecuciones/ej-1/factura.pdf', type: 'application/pdf', size: 204800, uploadedAt: '2026-07-01T00:00:00.000Z' },
+        { id: 'c2', name: 'recibo.jpg', url: 'https://example.com/recibo.jpg', path: 'c1/ejecuciones/ej-1/recibo.jpg', type: 'image/jpeg', size: 102400, uploadedAt: '2026-07-02T00:00:00.000Z' },
+      ];
+      const ejecucion = makeEjecucion({ comprobantes });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('factura.pdf')).toBeInTheDocument();
+      expect(screen.getByText('recibo.jpg')).toBeInTheDocument();
+      expect(screen.getByText(/Comprobantes \(2\)/)).toBeInTheDocument();
+
+      // Download links should exist
+      const links = screen.getAllByRole('link');
+      const pdfLink = links.find(l => l.getAttribute('href') === 'https://example.com/factura.pdf');
+      expect(pdfLink).toBeTruthy();
+    });
+
+    it('3.4b EjecucionView sin comprobantes no muestra sección', () => {
+      const ejecucion = makeEjecucion({ comprobantes: [] });
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByText(/Comprobantes/)).not.toBeInTheDocument();
+    });
+
+    it('3.4c click ejecucion row calls onNavigate with view detail', () => {
+      const onNavigate = vi.fn();
+      const ejecucion = makeEjecucion({ id: 'ej-1', descripcion: 'Pago Test' });
+      const budget = makeBudget({ id: 'b1' });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget, ejecuciones: [ejecucion] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={onNavigate}
+        />,
+      );
+
+      fireEvent.click(screen.getByText(/Pago Test/));
+
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'view',
+          detail: expect.objectContaining({ type: 'ejecucion' }),
+        }),
+      );
+    });
+
+    it('3.5 EDIT ejecucion form muestra comprobantes existentes en el formulario', () => {
+      const comprobantes: Comprobante[] = [
+        { id: 'c1', name: 'existente.pdf', url: 'https://example.com/existente.pdf', path: 'c1/ejecuciones/ej-1/existente.pdf', type: 'application/pdf', size: 204800, uploadedAt: '2026-07-01T00:00:00.000Z' },
+      ];
+      const ejecucion = makeEjecucion({ comprobantes });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'edit', type: 'ejecucion', record: ejecucion }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      // Should show the form with the existing comprobante listed
+      expect(screen.getByText('existente.pdf')).toBeInTheDocument();
+      // Download link should be present
+      const links = screen.getAllByRole('link');
+      const link = links.find(l => l.getAttribute('href') === 'https://example.com/existente.pdf');
+      expect(link).toBeTruthy();
     });
   });
 
@@ -1713,6 +2142,67 @@ describe('Sidepanel', () => {
       expect(calledData.budgets).toHaveLength(1);
       expect(calledData.budgets[0].entityId).toBe('e1');
       expect(calledData.subtitle).toContain('Entity Uno');
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // PanelHeader — back button (← Volver)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('PanelHeader — back button', () => {
+    it('no muestra botón back cuando canGoBack=false y X cierra', () => {
+      const onClose = vi.fn();
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [makeEjecucion()] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={onClose}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Presupuesto')).toBeInTheDocument();
+
+      // PanelHeader has border-b — navigate up from h3 to find it
+      const headerDiv = screen.getByText('Presupuesto').closest('[class*="border-b"]')!;
+      const buttons = headerDiv.querySelectorAll('button');
+      expect(buttons.length).toBe(1);
+
+      fireEvent.click(buttons[0]);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('muestra ← Volver cuando canGoBack=true, llama onBack y X sigue funcionando', () => {
+      const onBack = vi.fn();
+      const onClose = vi.fn();
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'budget', budget: makeBudget(), ejecuciones: [makeEjecucion()] }}
+          activeForm={null}
+          companyId="c1"
+          onClose={onClose}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={true}
+          onBack={onBack}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      const headerDiv = screen.getByText('Presupuesto').closest('[class*="border-b"]')!;
+      const buttons = headerDiv.querySelectorAll('button');
+      expect(buttons.length).toBe(2);
+
+      fireEvent.click(buttons[0]);
+      expect(onBack).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(buttons[1]);
+      expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
 });

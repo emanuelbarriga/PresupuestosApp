@@ -1,30 +1,74 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { SidepanelData, Budget, Ejecucion, RecordDetail, ActiveForm, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2 } from 'lucide-react';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
+import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface PendingComprobante {
+  id: string;
+  file: File;
+  name: string;
+  type: string;
+  size: number;
+  descripcion?: string;
+  tipo?: string;
+}
 
 interface SidepanelProps {
   data: SidepanelData | null;
   recordDetail: RecordDetail | null;
   activeForm: ActiveForm | null;
+  customizeOpen?: boolean;
   companyId: string;
   onClose: () => void;
   onFormSubmit: (form: ActiveForm, data: Record<string, any>) => Promise<void>;
-  onEditProject?: (project: Project) => void;
-  onEditTercero?: (tercero: Tercero) => void;
-  onEditCellRecord?: (form: ActiveForm) => void;
   onCellClick?: (data: SidepanelData) => void;
   projects?: Project[];
+
+  // Customization state (optional for backward compat)
+  selectedProjects?: Set<string>;
+  projectSearch?: string;
+  onProjectsChange?: (selected: Set<string>) => void;
+  onSearchChange?: (search: string) => void;
+
+  // Navigation stack props
+  canGoBack: boolean;
+  onBack: () => void;
+  onNavigate: (screen: NavScreen) => void;
 }
 
-export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onEditCellRecord, onCellClick, projects }: SidepanelProps) {
-  const visible = data || recordDetail || activeForm;
+function PanelHeader({ title, canGoBack, onBack, onClose }: { title: string; canGoBack: boolean; onBack: () => void; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+      <div className="flex items-center gap-2 min-w-0">
+        {canGoBack && (
+          <button onClick={onBack} className="p-1 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        <h3 className="text-sm font-bold text-slate-800 truncate">{title}</h3>
+      </div>
+      <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+        <X size={20} className="text-slate-400" />
+      </button>
+    </div>
+  );
+}
+
+export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = false, companyId, onClose, onFormSubmit, onCellClick, projects, selectedProjects = new Set(), projectSearch = '', onProjectsChange, onSearchChange, canGoBack, onBack, onNavigate }: SidepanelProps) {
+  const visible = data || recordDetail || activeForm || customizeOpen;
 
   return (
     <aside className={clsx("bg-white border-l border-slate-200 flex flex-col h-full transition-all duration-300 ease-out shrink-0 overflow-hidden relative", visible ? "w-[360px]" : "w-16 items-center py-4")}>
@@ -36,17 +80,153 @@ export function Sidepanel({ data, recordDetail, activeForm, companyId, onClose, 
           <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl mt-auto"><Settings size={20} /></button>
         </div>
       ) : activeForm ? (
-        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} />
+        <FormPanel form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} onBack={onBack} canGoBack={canGoBack} />
       ) : recordDetail ? (
-        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onEditProject={onEditProject} onEditTercero={onEditTercero} onCellClick={onCellClick} projects={projects} />
+        <ViewPanel recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
+      ) : customizeOpen ? (
+        <CustomizePanel projects={projects || []} selectedProjects={selectedProjects} projectSearch={projectSearch}
+          onProjectsChange={onProjectsChange} onSearchChange={onSearchChange}
+          canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       ) : data ? (
-        <DataPanel data={data} onClose={onClose} onEditCellRecord={onEditCellRecord} projects={projects} />
+        <DataPanel data={data} companyId={companyId} onClose={onClose} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : null}
     </aside>
   );
 }
 
-function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[] }) {
+function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsChange, onSearchChange, canGoBack, onBack, onClose }: {
+  projects: Project[];
+  selectedProjects: Set<string>;
+  projectSearch: string;
+  onProjectsChange?: (selected: Set<string>) => void;
+  onSearchChange?: (search: string) => void;
+  canGoBack: boolean;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  const filtered = [...projects]
+    .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(projectSearch.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const toggleProject = (key: string) => {
+    const next = new Set(selectedProjects);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onProjectsChange?.(next);
+    setShowDropdown(false);
+    setActiveIndex(-1);
+    onSearchChange?.('');
+  };
+
+  const removeProject = (key: string) => {
+    const next = new Set(selectedProjects);
+    next.delete(key);
+    onProjectsChange?.(next);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < filtered.length) {
+        const p = filtered[activeIndex];
+        toggleProject(p.id || p.name);
+      }
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setActiveIndex(-1);
+    }
+  };
+
+  const selectedList = projects
+    .filter(p => selectedProjects.has(p.id || p.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <PanelHeader title="Configuración de Dashboard" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
+      <div className="flex-1 overflow-y-auto">
+
+        <div className="px-5 pt-4 pb-3">
+          <div className="relative">
+            <input type="text" placeholder="Buscar proyecto..." value={projectSearch}
+              onChange={e => { onSearchChange?.(e.target.value); setShowDropdown(true); setActiveIndex(-1); }}
+              onFocus={() => setShowDropdown(true)}
+              onKeyDown={handleKeyDown}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none" />
+            {showDropdown && projectSearch && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-slate-400">Sin resultados</p>
+                ) : (
+                  filtered.map((p, idx) => {
+                    const key = p.id || p.name;
+                    return (
+                      <button key={key}
+                        onClick={() => toggleProject(key)}
+                        className={clsx("w-full text-left px-3 py-2 text-xs transition-colors", idx === activeIndex ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50")}>
+                        <span className="truncate">{p.name}</span>
+                        {p.descripcion && <span className="text-[10px] text-slate-400 ml-1">— {p.descripcion}</span>}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {selectedList.length > 0 && (
+          <div className="px-5 mb-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">
+              {selectedList.length} de {projects.length} proyectos
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {selectedList.map(p => {
+                const key = p.id || p.name;
+                return (
+                  <span key={key}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    {p.name}
+                    <button onClick={() => removeProject(key)} className="hover:text-indigo-900 ml-0.5">
+                      <X size={11} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {selectedProjects.size === 0 && (
+          <div className="px-5 py-3">
+            <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">
+              Mostrando todos los proyectos. Buscá y seleccioná para filtrar.
+            </p>
+          </div>
+        )}
+
+        <div className="px-5 pb-4 border-t border-slate-100 mt-3 pt-3">
+          <button onClick={() => { onProjectsChange?.(new Set()); onSearchChange?.(''); }}
+            className="w-full text-[10px] font-bold text-indigo-600 hover:text-indigo-700 px-3 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors">
+            Mostrar todos los proyectos
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [clients, setClients] = useState<Client[]>([]);
@@ -74,13 +254,17 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
   // Custom tipo/unidad for project form
   const [customTipo, setCustomTipo] = useState('');
   const [customUnidad, setCustomUnidad] = useState('');
-  const [settingsCat, setSettingsCat] = useState<SettingsCategorias | null>(null);
+  const [settingsData, setSettingsData] = useState<SettingsCategorias | null>(null);
+
+  // Comprobantes state
+  const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
+  const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
 
   const safeProjects = projects || [];
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsCat)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsData)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 
@@ -117,7 +301,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     if (form.mode === 'edit') {
       const init: Record<string, string> = {};
       const r = form.record as any;
-      Object.keys(r).forEach(k => { if (k !== 'id') init[k] = String(r[k] ?? ''); });
+      Object.keys(r).forEach(k => { if (k !== 'id' && k !== 'archivado') init[k] = String(r[k] ?? ''); });
       setFields(init);
     } else {
       const init: Record<string, string> = {};
@@ -134,6 +318,17 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       // 'project' type has no automatic defaults — all fields come from the form
       if (form.defaults) Object.assign(init, form.defaults);
       setFields(init);
+    }
+  }, [form]);
+
+  useEffect(() => {
+    if (form.mode === 'edit' && form.type === 'ejecucion') {
+      const c = form.record.comprobantes || [];
+      console.log('[COMPROBANTES] Form edit ejecucion', { ejecucionId: form.record.id, comprobantesCount: c.length });
+      setComprobantes(c);
+    } else {
+      setComprobantes([]);
+      setPendingComprobantes([]);
     }
   }, [form]);
 
@@ -189,7 +384,11 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     const ensureFechaPresupuestado = (d: Record<string, any>) => {
       if (d.mesPresupuestado && !d.fechaPresupuestado) {
         const monthIdx = MONTHS.indexOf(d.mesPresupuestado as Month);
-        if (monthIdx >= 0) d.fechaPresupuestado = `${new Date().getFullYear()}-${String(monthIdx + 1).padStart(2, '0')}`;
+        if (monthIdx >= 0) {
+          // Derive year from fechaEjecutado (set as default from cell click) or fallback to current year
+          const year = d.fechaEjecutado ? parseInt(d.fechaEjecutado.split('-')[0], 10) : new Date().getFullYear();
+          d.fechaPresupuestado = `${isNaN(year) ? new Date().getFullYear() : year}-${String(monthIdx + 1).padStart(2, '0')}`;
+        }
       }
     };
 
@@ -218,7 +417,14 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
         if (!data.entityType) data.entityType = '';
       }
       if (ft === 'budget') { data.montoPresupuestado = Number(data.montoPresupuestado) || 0; delete data.fechaEjecutado; }
-      if (ft === 'ejecucion') data.montoEjecutado = Number(data.montoEjecutado) || 0;
+      if (ft === 'ejecucion') {
+        data.montoEjecutado = Number(data.montoEjecutado) || 0;
+        if (form.mode === 'add' && pendingComprobantes.length > 0) {
+          data._pendingComprobantes = pendingComprobantes.map(pc => ({
+            id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size,
+          }));
+        }
+      }
       if (ft === 'project') {
         data.cantidad = Number(data.cantidad) || 0;
         if (data.tipoProyectos === '__custom__') data.tipoProyectos = '';
@@ -229,11 +435,12 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
       entries.push(data);
     }
 
-    // Submit all at once, panel closes after ALL complete
+    // Submit all at once, panel pops back after ALL complete
     for (const entry of entries) {
       await onSubmit(form, entry);
     }
     setSaving(false);
+    onBack();
   };
 
   const filteredBudgets = allBudgets.filter(b => {
@@ -245,7 +452,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     return true;
   });
 
-  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'tercero' ? 'Tercero' : ft === 'client' ? 'Cliente' : 'Proveedor'}`;
+  const title = `${form.mode === 'add' ? 'Nuevo' : 'Editar'} ${ft === 'budget' ? 'Presupuesto' : ft === 'ejecucion' ? 'Ejecución' : ft === 'project' ? 'Proyecto' : ft === 'tercero' ? 'Tercero' : ft === 'client' ? 'Cliente' : ft === 'cuenta' ? 'Cuenta Bancaria' : ft === 'extracto' ? 'Extracto Bancario' : 'Proveedor'}`;
 
   if (ft === 'project') {
     const clientOptions = terceros
@@ -272,10 +479,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     };
     return (
       <div className="flex flex-col h-full w-[360px] absolute inset-0">
-        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <FormInput label="Sigla" value={f('name')} onChange={v => set('name', v)} />
           <FormInput label="Nombre completo" value={f('descripcion')} onChange={v => set('descripcion', v)} />
@@ -289,7 +493,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
               </div>
             ) : (
               <ColorSelect value={f('tipoProyectos')} onChange={v => set('tipoProyectos', v)}
-                items={(settingsCat?.tipoProyectos || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                items={(settingsData?.tipoProyectos || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
                 placeholder="Seleccionar..." allowCustom />
             )}
           </div>
@@ -304,7 +508,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
               </div>
             ) : (
               <ColorSelect value={f('unidades')} onChange={v => set('unidades', v)}
-                items={(settingsCat?.unidades || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+                items={(settingsData?.unidades || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
                 placeholder="Seleccionar..." allowCustom />
             )}
           </div>
@@ -331,7 +535,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
             <ColorSelect
               value={f('estado')}
               onChange={v => set('estado', v)}
-              items={(settingsCat?.stateProject || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
+              items={(settingsData?.stateProject || []).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))}
               placeholder="Seleccionar..."
             />
           </div>
@@ -351,13 +555,68 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
     );
   }
 
+  if (ft === 'cuenta') {
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormInput label="Nombre" value={f('nombre')} onChange={v => set('nombre', v)} />
+          <FormInput label="Banco" value={f('banco')} onChange={v => set('banco', v)} />
+          <FormSelect label="Tipo" value={f('tipo')} onChange={v => set('tipo', v)}
+            options={[
+              { value: 'Ahorros', label: 'Ahorros' },
+              { value: 'Corriente', label: 'Corriente' },
+              { value: 'Tarjeta de Crédito', label: 'Tarjeta de Crédito' },
+              { value: 'Caja Menor / Efectivo', label: 'Caja Menor / Efectivo' },
+            ]} />
+          <FormInput label="Número de cuenta" value={f('numero')} onChange={v => set('numero', v)} />
+          <FormSelect label="Moneda" value={f('moneda')} onChange={v => set('moneda', v)}
+            options={[
+              { value: 'COP', label: 'COP' },
+              { value: 'USD', label: 'USD' },
+              { value: 'EUR', label: 'EUR' },
+            ]} />
+          <FormInput label="Saldo inicial" value={f('saldoInicial')} onChange={v => set('saldoInicial', v)} type="number" />
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (ft === 'extracto') {
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <FormSelect label="Mes" value={f('mes')} onChange={v => set('mes', v)}
+            options={MONTHS.map(m => ({ value: m, label: m }))} />
+          <FormInput label="Año" value={f('anio')} onChange={v => set('anio', v)} type="number" />
+          <FormInput label="Saldo inicial" value={f('saldoInicial')} onChange={v => set('saldoInicial', v)} type="number" />
+          <FormInput label="Saldo final" value={f('saldoFinal')} onChange={v => set('saldoFinal', v)} type="number" />
+          <FormSelect label="Estado" value={f('estado')} onChange={v => set('estado', v)}
+            options={[
+              { value: 'Pendiente', label: 'Pendiente' },
+              { value: 'En revisión', label: 'En revisión' },
+              { value: 'Conciliado', label: 'Conciliado' },
+            ]} />
+        </div>
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (ft === 'client' || ft === 'provider' || ft === 'tercero') {
     return (
       <div className="flex flex-col h-full w-[360px] absolute inset-0">
-        <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+        <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <FormInput label="Nombre *" value={f('name')} onChange={v => set('name', v)} />
           <FormInput label="Apodo" value={f('apodo')} onChange={v => set('apodo', v)} />
@@ -406,10 +665,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         <TipoSwitch value={f('tipo')} onChange={v => set('tipo', v)} />
         <SearchableSelect label="Proyecto" value={f('projectId') || f('projectName')} onChange={v => {
@@ -494,6 +750,19 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects }: { form: Act
                 set('tipo', b.tipo);
               }
             }} options={filteredBudgets.map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto..." />
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comprobantes</p>
+              <ComprobanteUploader
+                companyId={companyId}
+                ejecucionId={form.mode === 'edit' ? (form as any).record?.id : undefined}
+                comprobantes={comprobantes}
+                onComprobantesChange={setComprobantes}
+                mode={form.mode === 'add' ? 'add' : 'edit'}
+                pendingComprobantes={pendingComprobantes}
+                onPendingChange={setPendingComprobantes}
+                tiposComprobante={settingsData?.tipoComprobante || []}
+              />
+            </div>
           </>
         )}
         {form.mode === 'add' && (ft === 'budget' || ft === 'ejecucion') && (
@@ -566,6 +835,19 @@ function FormInput({ label, value, onChange, type = 'text' }: { label: string; v
     <div>
       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
+    </div>
+  );
+}
+
+function FormSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+        <option value="">Seleccionar...</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   );
 }
@@ -745,22 +1027,19 @@ function TerceroGroupPanel({ projects, onCellClick, mode }: {
   );
 }
 
-function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProject, onEditTercero, onCellClick, projects }: {
-  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void; onEditTercero?: (tercero: Tercero) => void; onCellClick?: (data: SidepanelData) => void; projects?: Project[];
+function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onCellClick, projects, onNavigate, canGoBack, onBack }: {
+  recordDetail: RecordDetail; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onCellClick?: (data: SidepanelData) => void; projects?: Project[]; onNavigate: (screen: NavScreen) => void; canGoBack: boolean; onBack: () => void;
 }) {
   const title = recordDetail.type === 'budget' ? 'Presupuesto' : recordDetail.type === 'ejecucion' ? 'Ejecución'
     : recordDetail.type === 'project' ? 'Proyecto' : recordDetail.type === 'client' ? 'Cliente'
     : recordDetail.type === 'provider' ? 'Proveedor' : recordDetail.type === 'tercero' ? 'Tercero' : '';
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} />}
-        {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} />}
-        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onEditProject={onEditProject} />}
+        {recordDetail.type === 'budget' && <BudgetView budget={recordDetail.budget} ejecuciones={recordDetail.ejecuciones} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onNavigate={onNavigate} />}
+        {recordDetail.type === 'ejecucion' && <EjecucionView ejecucion={recordDetail.ejecucion} companyId={companyId} onClose={onClose} onNavigate={onNavigate} />}
+        {recordDetail.type === 'project' && <ProjectView project={recordDetail.project} budgets={recordDetail.budgets} ejecuciones={recordDetail.ejecuciones} companyId={companyId} projects={projects} onFormSubmit={onFormSubmit} onNavigate={onNavigate} />}
         {recordDetail.type === 'client' && (<><DF label="Nombre" v={recordDetail.client.name} />
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Proyectos ({recordDetail.projects.length})</p>{recordDetail.projects.map(p => <div key={p.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{p.name}</span><span className="font-bold">{p.estado}</span></div>)}</div>
         </>)}
@@ -769,12 +1048,10 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProje
           <>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Tercero</p>
-              {onEditTercero && (
-                <button onClick={() => onEditTercero(recordDetail.tercero)}
-                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
-                  <Save size={12} /> Editar
-                </button>
-              )}
+              <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'tercero', record: recordDetail.tercero } })}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                <Save size={12} /> Editar
+              </button>
             </div>
             <DF label="Nombre" v={recordDetail.tercero.name} />
             {recordDetail.tercero.apodo && <DF label="Apodo" v={recordDetail.tercero.apodo} />}
@@ -807,8 +1084,8 @@ function ViewPanel({ recordDetail, companyId, onClose, onFormSubmit, onEditProje
   );
 }
 
-function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit, onEditProject }: {
-  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onEditProject?: (project: Project) => void;
+function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFormSubmit, onNavigate }: {
+  project: Project; budgets: Budget[]; ejecuciones: Ejecucion[]; companyId: string; projects?: Project[]; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onNavigate: (screen: NavScreen) => void;
 }) {
   const [selectedState, setSelectedState] = useState(project.estado);
   const [saving, setSaving] = useState(false);
@@ -857,8 +1134,8 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
     <>
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
-        {!isInferred && project.id && onEditProject && (
-          <button onClick={() => onEditProject(project)}
+        {!isInferred && project.id && (
+          <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'project', record: project } })}
             className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
             <Save size={12} /> Editar
           </button>
@@ -903,23 +1180,82 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
       )}
       <div className="border-t border-slate-100 pt-3 mt-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({budgets.length})</p>
-        {budgets.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin presupuestos</p> : budgets.map(b => <div key={b.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{b.descripcion}</span><span className="font-bold">{formatCurrency(b.montoPresupuestado)}</span></div>)}
+        {budgets.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin presupuestos</p> : (() => {
+          const groupedBudgets = budgets.reduce((acc, b) => {
+            const key = b.entityId || b.entityName || 'Sin entidad';
+            if (!acc[key]) acc[key] = { entityName: b.entityName || 'Sin entidad', entityType: b.entityType, items: [], total: 0 };
+            acc[key].items.push(b);
+            acc[key].total += b.montoPresupuestado;
+            return acc;
+          }, {} as Record<string, { entityName: string; entityType: string; items: Budget[]; total: number }>);
+          const sortedGroups = Object.values(groupedBudgets).sort((a, b) => a.entityName.localeCompare(b.entityName));
+          return sortedGroups.map(group => (
+            <div key={group.entityName} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                  <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                    {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+              </div>
+              <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                {group.items.map(b => (
+                  <div key={b.id} className="flex justify-between text-xs px-2 py-1.5 hover:bg-slate-50">
+                    <span className="text-slate-600 truncate mr-2">{b.descripcion}</span>
+                    <span className="font-semibold text-slate-700 shrink-0">{formatCurrency(b.montoPresupuestado)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
       <div className="border-t border-slate-100 pt-3 mt-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({ejecuciones.length})</p>
-        {ejecuciones.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin ejecuciones</p> : ejecuciones.map(e => <div key={e.id} className="flex justify-between text-xs bg-slate-50 p-2 rounded mb-1"><span>{e.fechaEjecutado}</span><span className="font-bold">{formatCurrency(e.montoEjecutado)}</span></div>)}
+        {ejecuciones.length === 0 ? <p className="text-xs text-slate-500 italic text-center py-3 bg-slate-50 rounded-lg">Sin ejecuciones</p> : (() => {
+          const groupedEjs = ejecuciones.reduce((acc, e) => {
+            const key = e.entityId || e.entityName || 'Sin entidad';
+            if (!acc[key]) acc[key] = { entityName: e.entityName || 'Sin entidad', entityType: e.entityType, items: [], total: 0 };
+            acc[key].items.push(e);
+            acc[key].total += e.montoEjecutado;
+            return acc;
+          }, {} as Record<string, { entityName: string; entityType: string; items: Ejecucion[]; total: number }>);
+          const sortedGroups = Object.values(groupedEjs).sort((a, b) => a.entityName.localeCompare(b.entityName));
+          return sortedGroups.map(group => (
+            <div key={group.entityName} className="mb-3 last:mb-0">
+              <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                  <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                    {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+              </div>
+              <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                {group.items.map(e => (
+                  <div key={e.id} className="flex justify-between text-xs px-2 py-1.5 hover:bg-slate-50">
+                    <span className="text-slate-600 truncate mr-2">{e.fechaEjecutado} {e.descripcion ? `· ${e.descripcion}` : ''}</span>
+                    <span className="font-semibold text-slate-700 shrink-0">{formatCurrency(e.montoEjecutado)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
     </>
   );
 }
 
-function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
-  budget: Budget; ejecuciones: Ejecucion[]; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onNavigate }: {
+  budget: Budget; ejecuciones: Ejecucion[]; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onNavigate: (screen: NavScreen) => void;
 }) {
   const [addingEj, setAddingEj] = useState(false);
   const [ejForm, setEjForm] = useState({ descripcion: '', montoEjecutado: '', fechaEjecutado: new Date().toISOString().split('T')[0] });
   const [saving, setSaving] = useState(false);
-  const [viewEj, setViewEj] = useState<Ejecucion | null>(null);
 
   const handleAddEj = async () => {
     setSaving(true);
@@ -942,15 +1278,6 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
     setAddingEj(false);
   };
 
-  if (viewEj) {
-    return (
-      <>
-        <button onClick={() => setViewEj(null)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mb-4 flex items-center gap-1">← Volver al presupuesto</button>
-        <MiniEjecucionView ejecucion={viewEj} companyId={companyId} />
-      </>
-    );
-  }
-
   return (
     <>
       <DF label="Descripción" v={budget.descripcion} />
@@ -969,7 +1296,7 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
           </button>
         </div>
         {ejecuciones.map((e) => (
-          <div key={e.id} onClick={() => setViewEj(e)} className="flex justify-between text-xs bg-slate-50 hover:bg-indigo-50 p-2 rounded mb-1 cursor-pointer transition-colors">
+          <div key={e.id} onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })} className="flex justify-between text-xs bg-slate-50 hover:bg-indigo-50 p-2 rounded mb-1 cursor-pointer transition-colors">
             <span className="text-slate-600">{e.fechaEjecutado} - {e.descripcion}</span>
             <span className="font-bold text-slate-700">{formatCurrency(e.montoEjecutado)}</span>
           </div>
@@ -992,31 +1319,348 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit }: {
   );
 }
 
-function MiniEjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; companyId: string }) {
+function ComprobantesViewer({ comprobantes, onDelete }: { comprobantes: Comprobante[]; onDelete?: (c: Comprobante) => void }) {
+  const [modal, setModal] = useState<Comprobante | null>(null);
+
+  if (!Array.isArray(comprobantes) || comprobantes.length === 0) return null;
+
   return (
     <>
-      <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Ejecución</p>
-      <DF label="Descripción" v={ejecucion.descripcion} />
-      <DF label="Proyecto" v={ejecucion.projectName} />
-      <DF label="Cliente/Proveedor" v={ejecucion.entityName} />
-      <DF label="Tipo" v={ejecucion.tipo} />
-      <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
-      <DF label="Fecha" v={ejecucion.fechaEjecutado} />
-      {ejecucion.budgetId && <DF label="Vinculado a presupuesto" v={ejecucion.budgetId} />}
+      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+        <Upload size={12} /> Comprobantes ({comprobantes.length})
+      </p>
+      <div className="space-y-2">
+        {comprobantes.map(c => (
+          <div key={c.id} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">
+            {c.type.startsWith('image/') ? (
+              <img
+                src={c.url}
+                alt={c.name}
+                className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity shrink-0"
+                onClick={() => setModal(c)}
+              />
+            ) : (
+              <button onClick={() => setModal(c)} className="shrink-0">
+                <FileText size={22} className="text-slate-400 hover:text-indigo-600 transition-colors" />
+              </button>
+            )}
+            <button className="flex-1 min-w-0 text-left" onClick={() => setModal(c)}>
+              <p className="text-xs font-semibold text-slate-700 truncate">
+                {c.descripcion || c.name}
+                {c.tipo && <span className="ml-1.5 text-[9px] text-indigo-500 font-normal">({c.tipo})</span>}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {c.type === 'application/pdf' ? 'PDF' : c.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(c.size)}
+                {c.uploadedAt && ` · ${new Date(c.uploadedAt).toLocaleDateString('es-CO')}`}
+              </p>
+            </button>
+            <a href={c.url} target="_blank" rel="noopener noreferrer"
+              className="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" title="Abrir en nueva pestaña">
+              <Download size={16} />
+            </a>
+            {onDelete && (
+              <button onClick={() => onDelete(c)}
+                className="text-slate-300 hover:text-rose-500 transition-colors shrink-0" title="Eliminar comprobante">
+                <Trash2 size={15} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Modal unificado para imágenes y PDFs */}
+      {modal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 md:p-8" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">{modal.descripcion || modal.name}</p>
+                <p className="text-[10px] text-slate-400">
+                  {modal.type === 'application/pdf' ? 'PDF' : modal.type === 'image/jpeg' ? 'JPG' : 'PNG'} &middot; {formatFileSize(modal.size)}
+                  {modal.tipo && <span className="ml-2 text-indigo-500">({modal.tipo})</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <a href={modal.url} target="_blank" rel="noopener noreferrer"
+                  className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-all" title="Descargar">
+                  <Download size={18} />
+                </a>
+                <button onClick={() => setModal(null)}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-2 bg-slate-100/50 flex items-center justify-center min-h-[300px]">
+              {modal.type.startsWith('image/') ? (
+                <img src={modal.url} alt={modal.name} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+              ) : (
+                <iframe src={modal.url} className="w-full h-[70vh] rounded-lg" title={modal.name} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; companyId: string; onClose: () => void }) {
+function ComprobanteUploader({
+  companyId,
+  ejecucionId,
+  comprobantes,
+  onComprobantesChange,
+  mode,
+  pendingComprobantes,
+  onPendingChange,
+  tiposComprobante,
+}: {
+  companyId: string;
+  ejecucionId?: string;
+  comprobantes: Comprobante[];
+  onComprobantesChange: (updated: Comprobante[]) => void;
+  mode: 'add' | 'edit';
+  pendingComprobantes?: PendingComprobante[];
+  onPendingChange?: (updated: PendingComprobante[]) => void;
+  tiposComprobante: SettingsItem[];
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [validationError, setValidationError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [newTipo, setNewTipo] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<PendingComprobante[]>([]);
+
+  const addFilesToList = (files: FileList | null) => {
+    if (!files) return;
+    setValidationError('');
+    const newItems: PendingComprobante[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        setValidationError(prev => prev ? `${prev}; ${file.name}: ${validation.error}` : `${file.name}: ${validation.error}`);
+        continue;
+      }
+      newItems.push({ id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size, descripcion: newDesc, tipo: newTipo });
+    }
+    if (newItems.length > 0) {
+      // If ADD mode, use pendingComprobantes. If EDIT, use selectedFiles (local queue)
+      if (mode === 'add' && onPendingChange) {
+        onPendingChange([...(pendingComprobantes || []), ...newItems]);
+      } else {
+        setSelectedFiles(prev => [...prev, ...newItems]);
+      }
+      setNewDesc('');
+      setNewTipo('');
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const uploadAll = async () => {
+    if (!ejecucionId || selectedFiles.length === 0) {
+      console.log('[COMPROBANTES] uploadAll skipped', { ejecucionId, files: selectedFiles.length });
+      return;
+    }
+    console.log('[COMPROBANTES] uploadAll start', { ejecucionId, filesCount: selectedFiles.length, existingComprobantes: comprobantes.length });
+    setUploading(true);
+    setUploadProgress(0);
+    let uploaded = 0;
+    const total = selectedFiles.length;
+    const newComprobantes: Comprobante[] = [];
+
+    for (const pf of selectedFiles) {
+      try {
+        const path = generateFilePath(companyId, ejecucionId, pf.name);
+        console.log('[COMPROBANTES] uploading file', { name: pf.name, path });
+        const result = await uploadFile(pf.file, path, (p) => setUploadProgress(((uploaded + p / 100) / total) * 100));
+        console.log('[COMPROBANTES] upload success', { name: pf.name, url: result.url });
+        newComprobantes.push({
+          id: crypto.randomUUID(),
+          name: pf.name,
+          url: result.url,
+          path: result.path,
+          type: pf.type,
+          size: pf.size,
+          uploadedAt: new Date().toISOString(),
+          ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
+          ...(pf.tipo ? { tipo: pf.tipo } : {}),
+        });
+        uploaded++;
+        setUploadProgress((uploaded / total) * 100);
+      } catch (err) {
+        console.error(`[COMPROBANTES] Upload failed for ${pf.name}:`, err);
+        setValidationError(prev => prev ? `${prev}; Error en ${pf.name}` : `Error en ${pf.name}`);
+      }
+    }
+
+    if (newComprobantes.length > 0) {
+      const updated = [...comprobantes, ...newComprobantes];
+      console.log('[COMPROBANTES] updating firestore', { ejecucionId, totalComprobantes: updated.length, newComprobantes: newComprobantes.length });
+      onComprobantesChange(updated);
+      try {
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+        console.log('[COMPROBANTES] firestore update success');
+      } catch (err) {
+        console.error('[COMPROBANTES] firestore update failed:', err);
+      }
+    }
+    setSelectedFiles([]);
+    setUploading(false);
+    setUploadProgress(0);
+  };
+
+  const removeSelected = (id: string) => {
+    if (mode === 'add' && onPendingChange) {
+      onPendingChange((pendingComprobantes || []).filter(p => p.id !== id));
+    } else {
+      setSelectedFiles(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleRemove = async (comp: Comprobante) => {
+    try {
+      if (ejecucionId && comp.path) {
+        await deleteFile(comp.path);
+      }
+      const updated = comprobantes.filter(c => c.id !== comp.id);
+      onComprobantesChange(updated);
+      if (ejecucionId) {
+        await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  const pendingList = mode === 'add' ? (pendingComprobantes || []) : selectedFiles;
+
+  return (
+    <div className="space-y-2">
+      {/* Descripción + Tipo */}
+      <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+        placeholder="Descripción del comprobante"
+        className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
+      {tiposComprobante.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {tiposComprobante.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(t => (
+            <button key={t.name} type="button" onClick={() => setNewTipo(newTipo === t.name ? '' : t.name)}
+              className={clsx("px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors",
+                newTipo === t.name ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}>
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* File picker */}
+      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple
+        onChange={e => { addFilesToList(e.target.files); }} className="hidden" />
+      <div className="flex gap-2">
+        <button onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+          <Upload size={14} /> Seleccionar archivos
+        </button>
+        {pendingList.length > 0 && mode === 'edit' && (
+          <button onClick={uploadAll} disabled={uploading}
+            className="flex items-center justify-center gap-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 px-4 py-2 rounded-lg transition-colors">
+            {uploading ? `${Math.round(uploadProgress)}%` : `Subir (${pendingList.length})`}
+          </button>
+        )}
+      </div>
+
+      {validationError && (
+        <p className="text-[10px] text-rose-600 font-medium">{validationError}</p>
+      )}
+
+      {uploading && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] text-slate-500">
+            <span>Subiendo archivos...</span>
+            <span>{Math.round(uploadProgress)}%</span>
+          </div>
+          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Existing comprobantes (siempre visibles) */}
+      {comprobantes.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[9px] font-bold text-slate-400 uppercase">{comprobantes.length} comprobante(s) guardado(s)</p>
+          {comprobantes.map(c => (
+            <div key={c.id} className="flex items-center gap-2 bg-emerald-50 rounded-lg p-2 border border-emerald-200">
+              {c.type.startsWith('image/') ? (
+                <img src={c.url} alt={c.name} className="w-8 h-8 rounded object-cover shrink-0" />
+              ) : (
+                <FileText size={16} className="text-emerald-500 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-emerald-800 truncate">{c.descripcion || c.name}</p>
+                <p className="text-[9px] text-emerald-600">{formatFileSize(c.size)}{c.tipo && <span className="ml-1.5 text-emerald-700 font-medium">({c.tipo})</span>}</p>
+              </div>
+              <a href={c.url} target="_blank" rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-indigo-600 shrink-0" title="Descargar">
+                <Download size={12} />
+              </a>
+              {mode === 'edit' && (
+                <button onClick={() => handleRemove(c)} className="text-emerald-400 hover:text-rose-500 shrink-0" title="Eliminar">
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pending / selected files list */}
+      {pendingList.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[9px] font-bold text-amber-500 uppercase">{pendingList.length} pendiente(s)</p>
+          {pendingList.map(pc => (
+            <div key={pc.id} className="flex items-center gap-2 bg-amber-50 rounded-lg p-2 border border-amber-200">
+              <FileText size={16} className="text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-amber-800 truncate">{pc.name}</p>
+                <p className="text-[9px] text-amber-600">{formatFileSize(pc.size)}{pc.tipo ? <span className="ml-1.5 text-amber-700 font-medium">({pc.tipo})</span> : ''}</p>
+              </div>
+              <button onClick={() => removeSelected(pc.id)}
+                className="text-amber-400 hover:text-rose-500 shrink-0" title="Quitar">
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          {mode === 'add' && (
+            <p className="text-[9px] text-amber-500 italic">Se subirán al guardar la ejecución</p>
+          )}
+        </div>
+      )}
+
+      {/* Submit button for ADD mode pending comprobantes is part of form submit */}
+    </div>
+  );
+}
+
+function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecucion; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void }) {
+  console.log('[COMPROBANTES] EjecucionView render', { ejecucionId: ejecucion.id, comprobantes: ejecucion.comprobantes?.length });
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [linking, setLinking] = useState(false);
   const [search, setSearch] = useState('');
-  const [viewBudget, setViewBudget] = useState<Budget | null>(null);
+  const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
 
   useEffect(() => {
     const unsub = subscribeBudgets(companyId, setBudgets);
     return () => unsub();
   }, [companyId]);
+
+  useEffect(() => {
+    setComprobantes(ejecucion.comprobantes || []);
+  }, [ejecucion.comprobantes]);
 
   const filtered = search ? budgets.filter(b => b.descripcion.toLowerCase().includes(search.toLowerCase()) || b.projectName.toLowerCase().includes(search.toLowerCase())) : budgets;
   const linkedBudget = budgets.find(b => b.id === ejecucion.budgetId);
@@ -1028,21 +1672,16 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
     await updateEjecucion(companyId, ejecucion.id, { budgetId: '' });
   };
 
-  if (viewBudget) {
-    return (
-      <>
-        <button onClick={() => setViewBudget(null)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mb-4 flex items-center gap-1">← Volver a la ejecución</button>
-        <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Detalle de Presupuesto Vinculado</p>
-        <DF label="Descripción" v={viewBudget.descripcion} />
-        <DF label="Proyecto" v={viewBudget.projectName} />
-        <DF label="Cliente/Proveedor" v={viewBudget.entityName} />
-        <DF label="Tipo" v={viewBudget.tipo} />
-        <DF label="Monto" v={formatCurrency(viewBudget.montoPresupuestado)} />
-        <DF label="Mes" v={viewBudget.mesPresupuestado} />
-        <DF label="Estado" v={viewBudget.estadoProyecto} />
-      </>
-    );
-  }
+  const handleDeleteComprobante = async (comp: Comprobante) => {
+    try {
+      if (comp.path) await deleteFile(comp.path);
+      const updated = comprobantes.filter(c => c.id !== comp.id);
+      setComprobantes(updated);
+      await updateEjecucion(companyId, ejecucion.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+    } catch (err) {
+      console.error('Error deleting comprobante:', err);
+    }
+  };
 
   return (
     <>
@@ -1058,7 +1697,7 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
           <Link2 size={12} /> Presupuesto vinculado
         </p>
         {linkedBudget ? (
-          <div onClick={() => setViewBudget(linkedBudget)} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
+          <div onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: linkedBudget, ejecuciones: [] } })} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
             <div>
               <p className="text-xs font-semibold text-indigo-700">{linkedBudget.descripcion}</p>
               <p className="text-[10px] text-indigo-500">{linkedBudget.projectName} • {formatCurrency(linkedBudget.montoPresupuestado)}</p>
@@ -1096,6 +1735,12 @@ function EjecucionView({ ejecucion, companyId }: { ejecucion: Ejecucion; company
           </>
         )}
       </div>
+
+      {comprobantes.length > 0 && (
+        <div className="border-t border-slate-100 pt-4">
+          <ComprobantesViewer comprobantes={comprobantes} onDelete={handleDeleteComprobante} />
+        </div>
+      )}
     </>
   );
 }
@@ -1139,10 +1784,7 @@ function SettingsEditor({ category, title, items, companyId, onClose }: {
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0 flex items-center justify-between">
-        <h2 className="font-bold text-slate-800">{title}</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-      </div>
+      <PanelHeader title={title} canGoBack={false} onBack={() => {}} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-3">
         {localItems.map((item: any, index: number) => (
           <div key={index} className="flex items-center gap-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
@@ -1247,7 +1889,22 @@ function Calculator({ value, onChange, onResult }: { value: string; onChange: (v
 
 function DF({ label, v }: { label: string; v: string }) { return <div><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{v}</p></div>; }
 
-function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: SidepanelData; onClose: () => void; onEditCellRecord?: (form: ActiveForm) => void; projects?: Project[] }) {
+function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, onBack }: { data: SidepanelData; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void; projects?: Project[]; canGoBack: boolean; onBack: () => void }) {
+  const [expandedEj, setExpandedEj] = useState<string | null>(null);
+  const [archiveConfirm, setArchiveConfirm] = useState<{ type: 'budget' | 'ejecucion'; id: string } | null>(null);
+
+  const handleArchive = async (type: 'budget' | 'ejecucion', id: string) => {
+    try {
+      if (type === 'budget') {
+        await updateBudget(companyId, id, { archivado: true });
+      } else {
+        await updateEjecucion(companyId, id, { archivado: true });
+      }
+    } catch (err) {
+      console.error('Archive failed:', err);
+    }
+    setArchiveConfirm(null);
+  };
   // Parse title "Proyecto / Mes" for cell-level data
   const titleParts = data.title?.split(' / ') || [];
   const cellProjectName = titleParts.length === 2 ? titleParts[0] : '';
@@ -1274,16 +1931,18 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     }
-    onEditCellRecord?.({ mode: 'add', type: formType, defaults });
+    onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <div className="p-6 border-b border-slate-100 shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-slate-800">Detalle de Celda</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
+      <PanelHeader
+        title={`Detalle de ${data.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} ${data.mode === 'Presupuestado' ? 'Presupuestado' : 'Ejecutado'}`}
+        canGoBack={canGoBack}
+        onBack={onBack}
+        onClose={onClose}
+      />
+      <div className="px-5 py-3">
         <div className={clsx("rounded-xl p-4 border", data.mode === 'Presupuestado' ? "bg-sky-50 border-sky-100 text-sky-900" : "bg-slate-800 border-slate-700 text-white")}>
           <p className={clsx("text-[10px] font-bold uppercase tracking-widest", data.mode === 'Presupuestado' ? "text-sky-600" : "text-slate-400")}>Seleccionado</p>
           <p className="text-sm font-bold mt-1">{data.title}</p>
@@ -1302,51 +1961,179 @@ function DataPanel({ data, onClose, onEditCellRecord, projects }: { data: Sidepa
           </div>
         )}
       </div>
+
+      {/* BODY — scrollable, cambia según modo */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>{data.budgets.map(b => (
-          <div key={b.id} className="border-b border-slate-50 pb-2 mb-2">
-            <div className="flex items-start justify-between mb-1">
-              <div className="flex-1 min-w-0 mr-2">
-                <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
-                <p className="text-[10px] text-slate-400">{b.mesPresupuestado} • {b.entityName}</p>
+        {data.mode === 'Presupuestado' && (
+          <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>
+          {(() => {
+            const grouped = data.budgets.reduce((acc, b) => {
+              const key = b.entityId || b.entityName || 'Sin entidad';
+              if (!acc[key]) acc[key] = { entityName: b.entityName || 'Sin entidad', entityType: b.entityType, items: [], total: 0 };
+              acc[key].items.push(b);
+              acc[key].total += b.montoPresupuestado;
+              return acc;
+            }, {} as Record<string, { entityName: string; entityType: string; items: Budget[]; total: number }>);
+            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            return sorted.map(group => (
+              <div key={group.entityName} className="mb-3 last:mb-0">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+                </div>
+                <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                  {group.items.map(b => {
+                    const ejbs = data.ejecuciones.filter(e => e.budgetId === b.id);
+                    return (
+                    <div key={b.id} className="px-2 py-1.5">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{b.descripcion}</p>
+                          <p className="text-[10px] text-slate-400">{b.mesPresupuestado}</p>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: ejbs } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                          <FileText size={11} /> Ver
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'budget', record: b } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                          <Save size={11} /> Editar
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'ejecucion', defaults: {
+                          projectId: b.projectId || '',
+                          projectName: b.projectName || '',
+                          entityId: b.entityId || '',
+                          entityName: b.entityName || '',
+                          entityType: b.entityType || 'client',
+                          tipo: b.tipo,
+                          budgetId: b.id,
+                        } } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
+                          <Plus size={11} /> Ejecutar
+                        </button>
+                        {archiveConfirm?.id === b.id && archiveConfirm?.type === 'budget' ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleArchive('budget', b.id)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                              Confirmar
+                            </button>
+                            <button onClick={() => setArchiveConfirm(null)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setArchiveConfirm({ type: 'budget', id: b.id })}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                            <Trash2 size={11} /> Archivar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )})}
+                </div>
               </div>
-              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
-            </div>
-            <div className="flex gap-1.5 mt-1.5">
-              <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'budget', record: b })}
-                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-                <Save size={11} /> Editar
-              </button>
-              <button onClick={() => onEditCellRecord?.({ mode: 'add', type: 'ejecucion', defaults: {
-                projectId: b.projectId || '',
-                projectName: b.projectName || '',
-                entityId: b.entityId || '',
-                entityName: b.entityName || '',
-                entityType: b.entityType || 'client',
-                tipo: b.tipo,
-                budgetId: b.id,
-              }})}
-                className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
-                <Plus size={11} /> + Ejecución
-              </button>
-            </div>
-          </div>
-        ))}</div>
-        <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>{data.ejecuciones.map(e => (
-          <div key={e.id} className="border-b border-slate-50 pb-2 mb-2">
-            <div className="flex items-start justify-between mb-1">
-              <div className="flex-1 min-w-0 mr-2">
-                <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
-                <p className="text-[10px] text-slate-400">{e.fechaEjecutado} • {e.entityName}</p>
+            ));
+          })()}</div>
+        )}
+
+        {data.mode === 'Ejecutado' && (
+          <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>
+          {(() => {
+            const grouped = data.ejecuciones.reduce((acc, e) => {
+              const key = e.entityId || e.entityName || 'Sin entidad';
+              if (!acc[key]) acc[key] = { entityName: e.entityName || 'Sin entidad', entityType: e.entityType, items: [], total: 0 };
+              acc[key].items.push(e);
+              acc[key].total += e.montoEjecutado;
+              return acc;
+            }, {} as Record<string, { entityName: string; entityType: string; items: Ejecucion[]; total: number }>);
+            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            return sorted.map(group => (
+              <div key={group.entityName} className="mb-3 last:mb-0">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
+                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
+                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
+                </div>
+                <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
+                  {group.items.map(e => {
+                    const cCount = e.comprobantes?.length || 0;
+                    if (e.id === 'ncoAgRDxY7Tx1ftrvpv0' || cCount > 0) console.log('[COMPROBANTES] DataPanel item', { id: e.id, desc: e.descripcion, cCount, comprobantes: e.comprobantes?.length });
+                    return (
+                    <div key={e.id} className="px-2 py-1.5">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{e.descripcion}</p>
+                          <p className="text-[10px] text-slate-400">{e.fechaEjecutado}</p>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'ejecucion', ejecucion: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                          <FileText size={11} /> Ver
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                          <Save size={11} /> Editar
+                        </button>
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'form', form: { mode: 'edit', type: 'ejecucion', record: e } })}
+                          className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors">
+                          <Paperclip size={11} /> {cCount > 0 ? `Comprobantes (${cCount})` : 'Agregar comprobante'}
+                        </button>
+                        {archiveConfirm?.id === e.id && archiveConfirm?.type === 'ejecucion' ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleArchive('ejecucion', e.id)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+                              Confirmar
+                            </button>
+                            <button onClick={() => setArchiveConfirm(null)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setArchiveConfirm({ type: 'ejecucion', id: e.id })}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+                            <Trash2 size={11} /> Archivar
+                          </button>
+                        )}
+                      </div>
+                      {/* Siempre mostrar comprobantes si existen */}
+                      {cCount > 0 && (
+                        <div className="mt-2">
+                          <ComprobantesViewer comprobantes={e.comprobantes} onDelete={async (comp) => {
+                            try {
+                              if (comp.path) await deleteFile(comp.path);
+                              const updated = e.comprobantes.filter((c: any) => c.id !== comp.id);
+                              await updateEjecucion(companyId, e.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
+                            } catch (err) { console.error('Error deleting comprobante:', err); }
+                          }} />
+                        </div>
+                      )}
+                    </div>
+                  )})}
+                </div>
               </div>
-              <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
-            </div>
-            <button onClick={() => onEditCellRecord?.({ mode: 'edit', type: 'ejecucion', record: e })}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
-              <Save size={11} /> Editar
-            </button>
-          </div>
-        ))}</div>
+            ));
+          })()}</div>
+        )}
+      </div>
+
+      {/* FOOTER — siempre visible abajo */}
+      <div className="shrink-0 p-6 border-t border-slate-100 bg-white">
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Presupuestado</span><span className="text-slate-700 font-bold">{formatCurrency(data.presupuestado)}</span></div>
           <div className="flex justify-between text-xs"><span className="text-slate-500 uppercase font-semibold">Ejecutado</span><span className="text-slate-700 font-bold">{formatCurrency(data.ejecutado)}</span></div>

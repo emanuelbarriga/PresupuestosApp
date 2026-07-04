@@ -1,8 +1,12 @@
 'use client'
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Project, Client, Provider, RecordDetail, ActiveForm, FormType, Month, TransactionType, MONTHS } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
+import { uploadFile, generateFilePath } from '@/lib/fileUpload';
+import { db, storage } from '@/lib/firebase';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
 import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
@@ -21,11 +25,16 @@ import {
   updateProject,
   updateTercero,
   subscribeCompanies,
+  addCuentaBancaria,
+  updateCuentaBancaria,
+  addExtracto,
+  updateExtracto,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
 import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
+import { EstadoResultados } from '@/components/EstadoResultados';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
 
@@ -42,6 +51,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'proveedores') return { view: 'Proveedores' };
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
+  if (main === 'estado-resultados') return { view: 'EstadoResultados' };
   return { view: 'Dashboard' };
 }
 
@@ -50,13 +60,22 @@ export default function CompanyPage({ params }: Props) {
   const router = useRouter();
   const { view: activeView, tab: activeTab } = viewFromSegments(segments);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidepanelData, setSidepanelData] = useState<SidepanelData | null>(null);
-  const [recordDetail, setRecordDetail] = useState<RecordDetail | null>(null);
-  const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
+  const [navStack, setNavStack] = useState<NavScreen[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  // Dashboard customization state
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [projectSearch, setProjectSearch] = useState('');
+
+  const current = navStack[navStack.length - 1];
+  const sidepanelData = current?.type === 'data' ? current.data : null;
+  const recordDetail = current?.type === 'view' ? current.detail : null;
+  const activeForm = current?.type === 'form' ? current.form : null;
+  const customizeOpen = current?.type === 'customize';
+  const canGoBack = navStack.length > 1;
 
   const isConjunto = companyId === 'all';
 
@@ -125,11 +144,155 @@ export default function CompanyPage({ params }: Props) {
 
   const projectsForCompany = isConjunto ? [] : projects;
 
-  const closePanel = () => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm(null);
+  // Diagnostic & repair tools — run from browser console
+  useEffect(() => {
+    (window as any).$$scan = async () => {
+      console.log('🔍 Escaneando comprobantes...');
+      const results: any[] = [];
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      for (const d of snap.docs) {
+        const data = d.data();
+        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name), sizes: comprobantes.map((c: any) => c.size) });
+      }
+      console.table(results.filter(r => r.comprobantes > 0));
+      console.log(`Total ejecuciones: ${results.length}, con comprobantes: ${results.filter(r => r.comprobantes > 0).length}`);
+
+      console.log('📁 Escaneando Storage...');
+      const storageRef = ref(storage, `${companyId}/ejecuciones`);
+      try {
+        const listResult = await listAll(storageRef);
+        const folders = listResult.prefixes;
+        console.log(`Carpetas en Storage: ${folders.length}`);
+        for (const folder of folders) {
+          const files = await listAll(folder);
+          const fileNames = files.items.map(f => f.name);
+          const ejecucion = results.find(r => r.id === folder.name);
+          if (!ejecucion) {
+            console.log(`⚠️ Sin ejecucion: ${folder.name}`, fileNames);
+          } else if (fileNames.length !== ejecucion.comprobantes) {
+            console.log(`❌ ${folder.name}: ${fileNames.length} files vs ${ejecucion.comprobantes} comprobantes`, { storage: fileNames, firestore: ejecucion.names });
+          } else {
+            console.log(`✅ ${folder.name}: ${fileNames.length} files`);
+          }
+        }
+      } catch (e) {
+        console.error('Storage scan error:', e);
+      }
+    };
+
+    (window as any).$$fix = async () => {
+      console.log('🔧 Reparando comprobantes...');
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      const ejecuciones = new Map(snap.docs.map(d => [d.id, d.data()]));
+
+      const storageRef = ref(storage, `${companyId}/ejecuciones`);
+      const listResult = await listAll(storageRef);
+      const results: string[] = [];
+
+      for (const folder of listResult.prefixes) {
+        const ejecucionId = folder.name;
+        const files = await listAll(folder);
+        const data = ejecuciones.get(ejecucionId);
+        if (!data) { results.push(`⚠️ ${ejecucionId}: carpeta sin ejecucion`); continue; }
+
+        const existing = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        const existingNames = new Set(existing.map((c: any) => c.name));
+        
+        // Detect duplicates by filename pattern (same name = duplicate)
+        const seen = new Map<string, { item: typeof files.items[0]; keep: boolean }>();
+        for (const item of files.items) {
+          const baseName = item.name.replace(/^[a-f0-9-]+-/, '');
+          if (seen.has(baseName)) {
+            // Delete duplicate
+            console.log(`🗑️ Eliminando duplicado: ${ejecucionId}/${item.name}`);
+            await deleteObject(item);
+            results.push(`🗑️ ${ejecucionId}: duplicado ${item.name} eliminado`);
+          } else {
+            seen.set(baseName, { item, keep: true });
+          }
+        }
+
+        // Build comprobantes array from remaining files (only those not already existing)
+        const newComprobantes: Comprobante[] = [];
+        for (const [baseName, { item }] of seen) {
+          if (existingNames.has(baseName)) continue; // already in Firestore
+          const meta = await getMetadata(item);
+          const url = await getDownloadURL(item);
+          newComprobantes.push({
+            id: crypto.randomUUID(),
+            name: baseName,
+            url,
+            path: item.fullPath,
+            type: meta.contentType || 'application/pdf',
+            size: meta.size || 0,
+            uploadedAt: new Date(meta.updated || meta.timeCreated || Date.now()).toISOString(),
+          });
+        }
+
+        if (newComprobantes.length > 0) {
+          const merged = [...existing, ...newComprobantes];
+          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', ejecucionId), { comprobantes: merged });
+          results.push(`✅ ${ejecucionId}: +${newComprobantes.length} comprobantes (total: ${merged.length})`);
+          console.log(`✅ ${ejecucionId}: agregados ${newComprobantes.length} comprobantes`);
+        } else {
+          results.push(`✅ ${ejecucionId}: sin cambios (${existing.length} comprobantes)`);
+        }
+      }
+      console.log('🔧 Reparación completa');
+      results.forEach(r => console.log(r));
+    };
+
+    // Fix comprobantes with 0B size by fetching real metadata from Storage
+    (window as any).$$fixSizes = async () => {
+      console.log('🔧 Reparando tamaños de comprobantes...');
+      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
+      let fixed = 0;
+      for (const d of snap.docs) {
+        const data = d.data();
+        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
+        let changed = false;
+        for (const c of comprobantes) {
+          if (c.size === 0 && c.path) {
+            try {
+              const fileRef = ref(storage, c.path);
+              const meta = await getMetadata(fileRef);
+              c.size = meta.size || 0;
+              c.type = meta.contentType || c.type;
+              console.log(`✅ ${d.id}: ${c.name} → ${(c.size / 1024).toFixed(0)}KB`);
+              changed = true;
+            } catch (e) {
+              console.warn(`⚠️ ${d.id}: ${c.name} no encontrado en Storage`, c.path);
+            }
+          }
+        }
+        if (changed) {
+          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', d.id), { comprobantes });
+          fixed++;
+        }
+      }
+      console.log(`🔧 ${fixed} ejecuciones con tamaños reparados`);
+    };
+
+    return () => { delete (window as any).$$scan; delete (window as any).$$fix; delete (window as any).$$fixSizes; };
+  }, [companyId]);
+
+  const pushScreen = useCallback((screen: NavScreen) => {
+    setNavStack(prev => [...prev, screen]);
+    setSidebarCollapsed(true);
+  }, []);
+
+  const popScreen = useCallback(() => {
+    setNavStack(prev => prev.slice(0, -1));
+  }, []);
+
+  const clearScreens = useCallback(() => {
+    setNavStack([]);
     setSidebarCollapsed(false);
+  }, []);
+
+  const closePanel = () => {
+    clearScreens();
   };
 
   const navigateTo = (view: ViewType, tab?: string) => {
@@ -137,6 +300,7 @@ export default function CompanyPage({ params }: Props) {
     let path = `/${companyId}`;
     if (view === 'Dashboard') path += '/dashboard';
     else if (view === 'Datos') path += `/datos${tab ? `/${tab.toLowerCase()}` : ''}`;
+    else if (view === 'EstadoResultados') path += '/estado-resultados';
     else path += `/${view.toLowerCase()}`;
     router.push(path);
   };
@@ -148,10 +312,7 @@ export default function CompanyPage({ params }: Props) {
   };
 
   const handleCellClick = (data: SidepanelData) => {
-    setRecordDetail(null);
-    setActiveForm(null);
-    setSidepanelData(data);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'data', data });
   };
 
   const handleProjectClick = (projectId: string, projectName: string) => {
@@ -172,13 +333,18 @@ export default function CompanyPage({ params }: Props) {
       budgets: relatedBudgets,
       ejecuciones: relatedEjecuciones,
     };
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
-  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => {
+  const handleCustomizeClick = () => {
+    if (current?.type === 'customize') {
+      popScreen();
+    } else {
+      pushScreen({ id: crypto.randomUUID(), type: 'customize' });
+    }
+  };
+
+  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
     if (isConjunto) return;
     const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
     const monthIndex = MONTHS.indexOf(month);
@@ -188,51 +354,48 @@ export default function CompanyPage({ params }: Props) {
       tipo,
     };
     if (projectId) defaults.projectId = projectId;
-    // Resolve client from project
-    const project = projects.find(p => p.id === projectId || p.name === projectName);
-    if (project?.clientName) {
-      defaults.entityName = project.clientName;
-      defaults.entityType = 'client';
+    // Use entity info from tercero cell if provided, otherwise resolve from project
+    if (entityName) {
+      defaults.entityName = entityName;
+      defaults.entityType = entityType || 'client';
+      if (entityId) defaults.entityId = entityId;
+    } else {
+      const project = projects.find(p => p.id === projectId || p.name === projectName);
+      if (project?.clientName) {
+        defaults.entityName = project.clientName;
+        defaults.entityType = 'client';
+      }
     }
     if (formType === 'budget') {
       defaults.mesPresupuestado = month;
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+      // Auto-link to matching budget
+      const matchBudget = entityId
+        ? budgets.find(b => b.projectId === projectId && b.entityId === entityId && b.mesPresupuestado === month && b.tipo === tipo)
+        : budgets.filter(b => b.projectId === projectId && b.mesPresupuestado === month && b.tipo === tipo);
+      const matched = Array.isArray(matchBudget) ? (matchBudget.length === 1 ? matchBudget[0] : null) : matchBudget;
+      if (matched) defaults.budgetId = matched.id;
     }
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm({ mode: 'add', type: formType, defaults });
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
 
   const handleViewRecord = (detail: RecordDetail) => {
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
   const handleAddNew = (type: FormType) => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm({ mode: 'add', type });
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type } });
   };
 
   const handleEditRecord = (form: ActiveForm) => {
-    setSidepanelData(null);
-    setRecordDetail(null);
-    setActiveForm(form);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form });
   };
 
   const handleTerceroClick = (detail: RecordDetail) => {
     if (isConjunto) return;
-    setSidepanelData(null);
-    setActiveForm(null);
-    setRecordDetail(detail);
-    setSidebarCollapsed(true);
+    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
   const handleFormSubmit = async (form: ActiveForm, data: Record<string, any>) => {
@@ -249,9 +412,32 @@ export default function CompanyPage({ params }: Props) {
         case 'budget':
           await addBudget(companyId, data as Omit<Budget, 'id'>);
           break;
-        case 'ejecucion':
-          await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
+        case 'ejecucion': {
+          const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number; descripcion?: string; tipo?: string }> | undefined;
+          delete data._pendingComprobantes;
+          const docId = await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
+          if (pendingFiles && pendingFiles.length > 0) {
+            const comprobantes: Comprobante[] = await Promise.all(
+              pendingFiles.map(async (pf) => {
+                const path = generateFilePath(companyId, docId, pf.name);
+                const result = await uploadFile(pf.file, path);
+                return {
+                  id: crypto.randomUUID(),
+                  name: pf.name,
+                  url: result.url,
+                  path: result.path,
+                  type: pf.type,
+                  size: pf.size,
+                  uploadedAt: new Date().toISOString(),
+                  ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
+                  ...(pf.tipo ? { tipo: pf.tipo } : {}),
+                };
+              }),
+            );
+            await updateEjecucion(companyId, docId, { comprobantes: JSON.parse(JSON.stringify(comprobantes)) });
+          }
           break;
+        }
         case 'project':
           await addProject(companyId, data as Omit<Project, 'id'>);
           break;
@@ -263,6 +449,12 @@ export default function CompanyPage({ params }: Props) {
           break;
         case 'tercero':
           await addTercero(data);
+          break;
+        case 'cuenta':
+          await addCuentaBancaria(companyId, data as Omit<CuentaBancaria, 'id'>);
+          break;
+        case 'extracto':
+          await addExtracto(companyId, data as Omit<ExtractoBancario, 'id'>);
           break;
       }
     } else {
@@ -291,12 +483,20 @@ export default function CompanyPage({ params }: Props) {
         case 'tercero':
           await updateTercero(form.record.id, data);
           break;
+        case 'cuenta':
+          await updateCuentaBancaria(companyId, (form as any).record.id, data as Partial<CuentaBancaria>);
+          break;
+        case 'extracto':
+          await updateExtracto(companyId, (form as any).record.id, data as Partial<ExtractoBancario>);
+          break;
       }
     }
-    closePanel();
+    popScreen();
   };
 
   const handleSidepanelClose = () => closePanel();
+
+  const handleSidepanelBack = () => popScreen();
 
   return (
     <CompanyProvider companyId={companyId}>
@@ -307,40 +507,32 @@ export default function CompanyPage({ params }: Props) {
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeView === 'Dashboard' && (
-              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
+              <Dashboard onCellClick={handleCellClick} onProjectClick={handleProjectClick} onEmptyCellClick={handleEmptyCellClick} onTerceroClick={handleTerceroClick} onCustomizeClick={handleCustomizeClick} budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} selectedProjects={selectedProjects} />
             )}
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
             )}
+            {activeView === 'EstadoResultados' && (
+              <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
+            )}
             {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
               <Construction view={activeView} />
             )}
           </div>
 
-          <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm}
+          <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm} customizeOpen={customizeOpen}
             companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
             onCellClick={handleCellClick}
-            onEditProject={(project) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm({ mode: 'edit', type: 'project', record: project });
-              setSidebarCollapsed(true);
-            }}
-            onEditTercero={(tercero) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm({ mode: 'edit', type: 'tercero', record: tercero });
-              setSidebarCollapsed(true);
-            }}
-            onEditCellRecord={(form) => {
-              setSidepanelData(null);
-              setRecordDetail(null);
-              setActiveForm(form);
-              setSidebarCollapsed(true);
-            }}
-            projects={projectsForCompany} />
+            canGoBack={canGoBack}
+            onBack={handleSidepanelBack}
+            onNavigate={pushScreen}
+            projects={projectsForCompany}
+            selectedProjects={selectedProjects}
+            projectSearch={projectSearch}
+            onProjectsChange={setSelectedProjects}
+            onSearchChange={setProjectSearch} />
         </main>
       </div>
     </CompanyProvider>

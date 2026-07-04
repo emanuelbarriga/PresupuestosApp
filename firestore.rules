@@ -8,6 +8,8 @@ service cloud.firestore {
       match /projects/{doc} { allow read, write: if true; }
       match /clients/{doc} { allow read, write: if true; }
       match /providers/{doc} { allow read, write: if true; }
+      match /cuentasBancarias/{doc} { allow read, write: if true; }
+      match /extractos/{doc} { allow read, write: if true; }
     }
     // Colecciones globales compartidas
     match /companies/{doc} { allow read: if true; }

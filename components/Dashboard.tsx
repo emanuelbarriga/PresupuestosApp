@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { SidepanelData, MONTHS, Month, ProjectState, Budget, Ejecucion, TransactionType, Project, DetalleTerceroGroup, RecordDetail } from '@/lib/types';
-import { ChevronLeft, ChevronRight, ChevronDown, Calendar, CalendarRange } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Settings } from 'lucide-react';
 import clsx from 'clsx';
 
 const currentYear = new Date().getFullYear();
@@ -125,11 +125,13 @@ export function buildTerceroGroups(
 interface DashboardProps {
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
+  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onTerceroClick?: (detail: RecordDetail) => void;
+  onCustomizeClick?: () => void;
   budgets: Budget[];
   ejecuciones: Ejecucion[];
   projects?: Project[];
+  selectedProjects?: Set<string>;
 }
 
 const getMonthFromDateStr = (dateString: string): Month => {
@@ -137,25 +139,15 @@ const getMonthFromDateStr = (dateString: string): Month => {
   return MONTHS[monthIndex];
 };
 
-export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, budgets, ejecuciones, projects }: DashboardProps) {
-  const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
-  const [timeView, setTimeView] = useState<'year' | '5months'>('year');
-  const [centerMonthIdx, setCenterMonthIdx] = useState<number>(new Date().getMonth());
+export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTerceroClick, onCustomizeClick, budgets, ejecuciones, projects, selectedProjects = new Set() }: DashboardProps) {
+  const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Ejecutado');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showNegociacion, setShowNegociacion] = useState(false);
+  const [showArchivados, setShowArchivados] = useState(false);
   const [ingresoTotals, setIngresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
   const [egresoTotals, setEgresoTotals] = useState({ presupuestado: 0, ejecutado: 0 });
 
-  const visibleMonths = useMemo(() => {
-    if (timeView === 'year') return MONTHS;
-    let start = Math.max(0, centerMonthIdx - 2);
-    let end = Math.min(11, start + 4);
-    if (end - start < 4) start = Math.max(0, end - 4);
-    return MONTHS.slice(start, end + 1);
-  }, [timeView, centerMonthIdx]);
-
-  const handlePrevMonth = () => setCenterMonthIdx(prev => Math.max(2, prev - 1));
-  const handleNextMonth = () => setCenterMonthIdx(prev => Math.min(9, prev + 1));
+  const visibleMonths = MONTHS; // Siempre vista anual — 12 meses
 
   // Resolve live project name from projects list, fallback to snapshot
   const projectNameMap = useMemo(() => {
@@ -183,12 +175,12 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
 
   const yearStr = String(selectedYear);
   const filteredBudgets = useMemo(
-    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) || !b.fechaPresupuestado),
-    [budgets, yearStr],
+    () => budgets.filter(b => (b.fechaPresupuestado || '').startsWith(yearStr) && (showArchivados || b.archivado !== true)),
+    [budgets, yearStr, showArchivados],
   );
   const filteredEjecuciones = useMemo(
-    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr)),
-    [ejecuciones, yearStr],
+    () => ejecuciones.filter(e => e.fechaEjecutado?.startsWith(yearStr) && (showArchivados || e.archivado !== true)),
+    [ejecuciones, yearStr, showArchivados],
   );
 
   const hasTerceroData = filteredBudgets.length > 0 || filteredEjecuciones.length > 0;
@@ -214,20 +206,6 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           <p className="text-[10px] uppercase tracking-wider font-medium text-slate-500">Matriz de control de Ingresos y Egresos</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 border p-1 rounded-lg bg-slate-100 border-slate-200">
-            <button onClick={() => setTimeView('year')} className={clsx("p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors", timeView === 'year' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700')}>
-              <Calendar size={14} /> Año
-            </button>
-            <button onClick={() => setTimeView('5months')} className={clsx("p-1.5 rounded text-xs font-medium flex items-center gap-1 transition-colors", timeView === '5months' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700')}>
-              <CalendarRange size={14} /> 5 Meses
-            </button>
-            {timeView === '5months' && (
-              <div className="flex items-center ml-1 border-l pl-1 border-slate-200">
-                <button onClick={handlePrevMonth} disabled={centerMonthIdx <= 2} className="p-1 disabled:opacity-30 text-slate-400 hover:text-slate-600"><ChevronLeft size={16}/></button>
-                <button onClick={handleNextMonth} disabled={centerMonthIdx >= 9} className="p-1 disabled:opacity-30 text-slate-400 hover:text-slate-600"><ChevronRight size={16}/></button>
-              </div>
-            )}
-          </div>
           <div className="flex items-center gap-1 border p-1 rounded-lg bg-slate-100 border-slate-200">
             <button onClick={() => setSelectedYear(y => y - 1)} className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-white transition-colors"><ChevronLeft size={14}/></button>
             <span className="px-2 text-xs font-bold text-slate-700 min-w-[48px] text-center select-none">{selectedYear}</span>
@@ -245,6 +223,12 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
           )} */}
           <button onClick={() => setShowNegociacion(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
             Negociación {showNegociacion ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
+          </button>
+          <button onClick={() => onCustomizeClick?.()} className="px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5 bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600">
+            <Settings size={13} /> Configuración de Dashboard
           </button>
         </div>
       </header>
@@ -267,8 +251,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       </div>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} />
-        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} />
+        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
       </div>
     </div>
   );
@@ -280,16 +264,17 @@ interface MatrixProps {
   mode: 'Presupuestado' | 'Ejecutado';
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado') => void;
+  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onReportTotals?: (totals: { presupuestado: number; ejecutado: number }) => void;
   visibleMonths: Month[];
   budgets: Budget[];
   ejecuciones: Ejecucion[];
   resolveProjectName: (projectId: string, snapshotName: string) => string;
   allProjects?: Project[];
+  selectedProjects: Set<string>;
 }
 
-function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects }: MatrixProps) {
+function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -497,9 +482,46 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
   const title = `${tipo.toUpperCase()}S ${mode.toUpperCase()}S`;
 
   const visibleRows = useMemo(
-    () => matrixData.rows.filter(row => showNegociacion || row.estado !== 'Negociación'),
-    [matrixData.rows, showNegociacion],
+    () => {
+      // Estado sort order (lower = first)
+      const estadoOrder: Record<string, number> = {
+        'En ejecución': 0,
+        'Aprobado': 1,
+        'Finalizado': 2,
+        'Negociación': 3,
+      };
+
+      let rows = matrixData.rows
+        // Exclude Cancelado projects
+        .filter(row => row.estado !== 'Cancelado')
+        // Apply Negociación filter
+        .filter(row => showNegociacion || row.estado !== 'Negociación');
+
+      // Filtrar por proyectos seleccionados (si hay alguno seleccionado)
+      if (selectedProjects.size > 0) {
+        rows = rows.filter(r => selectedProjects.has(r.projectId || r.proyecto));
+      }
+
+      // Ordenar: primero por estado (según el orden definido), luego alfabético
+      rows = [...rows].sort((a, b) => {
+        const orderA = estadoOrder[a.estado] ?? 99;
+        const orderB = estadoOrder[b.estado] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.proyecto || '').localeCompare(b.proyecto || '');
+      });
+
+      return rows;
+    },
+    [matrixData.rows, showNegociacion, selectedProjects],
   );
+
+  useEffect(() => {
+    if (selectedProjects.size > 0) {
+      setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
+    } else {
+      setExpandedProjects(new Set());
+    }
+  }, [selectedProjects, visibleRows]);
 
   const expandAll = () => {
     setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
@@ -649,13 +671,14 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                 const isExpanded = expandedProjects.has(rowKey);
                 rows.push(
                   <tr key={rowKey} className={clsx("transition-colors group", isP ? "hover:bg-sky-50/40" : "hover:bg-slate-50")}>
-                    <td className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors cursor-pointer", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
+                    <td onClick={() => onProjectClick?.(row.projectId, row.proyecto)}
+                      className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors cursor-pointer", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={(e) => { e.stopPropagation(); toggleProject(rowKey); }}
                           className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors">
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
-                        <span className="font-semibold truncate text-slate-800 hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => onProjectClick?.(row.projectId, row.proyecto)}>{row.proyecto}</span>
+                        <span className="font-semibold truncate text-slate-800">{row.proyecto}</span>
                         <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0", badgeColors[row.estado] || 'bg-slate-100 text-slate-600')}>{row.estado}</span>
                       </div>
                     </td>
@@ -665,21 +688,25 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                       const ejecutado = row.ejecucionPorMes[m];
                       const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                       const isZero = val === 0;
+                      const showGrayPresupuestado = !isP && ejecutado === 0 && presupuestado > 0;
+                      const cellVal = showGrayPresupuestado ? presupuestado : val;
                       return (
-                        <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && `font-bold ${hoverBgTheme} ${colorTheme}`, isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
+                        <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && (showGrayPresupuestado ? "text-slate-400 hover:text-slate-600" : `font-bold ${hoverBgTheme} ${colorTheme}`), isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
                           onClick={() => {
-                            if (isZero) {
+                            if (showGrayPresupuestado) {
+                              onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado');
+                            } else if (isZero) {
                               onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode);
                             } else {
                               handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || []);
                             }
                           }}>
-                          {isZero ? '-' : formatCurrency(val)}
+                          {isZero && !showGrayPresupuestado ? '-' : formatCurrency(cellVal)}
                         </td>
                       );
                     })}
-                    <td className={clsx("p-3 text-right border-l transition-colors font-bold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 && `cursor-pointer ${isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800"}`, (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) === 0 && "text-slate-400")}
-                      onClick={() => handleRowTotalClick(row.proyecto, row.totalPresupuestado, row.totalEjecutado, row.allBudgets, row.allEjecuciones)}>
+                    <td className={clsx("p-3 text-right border-l transition-colors font-bold cursor-pointer", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 ? (isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800") : "text-slate-400")}
+                      onClick={() => onProjectClick?.(row.projectId, row.proyecto)}>
                       {formatCurrency(mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado)}
                     </td>
                   </tr>
@@ -704,10 +731,13 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                           const ejecutado = t.ejecucionPorMes[m];
                           const val = mode === 'Presupuestado' ? presupuestado : ejecutado;
                           const isZero = val === 0;
+                          const showGrayPresupuestado = !isP && ejecutado === 0 && presupuestado > 0;
                           return (
-                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`, isZero && "text-slate-300")}
+                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && (showGrayPresupuestado ? "text-slate-400 cursor-pointer hover:text-slate-600" : `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`), isZero && !showGrayPresupuestado && "text-slate-300 cursor-pointer hover:bg-slate-50")}
                               onClick={() => {
-                                if (!isZero) {
+                                if (showGrayPresupuestado) {
+                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType);
+                                } else if (!isZero) {
                                   const bs = t.budgetsPorMes[m] || [];
                                   const ejs = t.ejecucionesPorMes[m] || [];
                                   onCellClick({
@@ -723,9 +753,11 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                                     mode,
                                     tipo,
                                   });
+                                } else {
+                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
                                 }
                               }}>
-                              {isZero ? '-' : formatCurrency(val)}
+                              {isZero && !showGrayPresupuestado ? '-' : formatCurrency(showGrayPresupuestado ? presupuestado : val)}
                             </td>
                           );
                         })}
