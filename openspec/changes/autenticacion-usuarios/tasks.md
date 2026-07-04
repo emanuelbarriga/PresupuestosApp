@@ -33,16 +33,19 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: Client Guard + Refactor (PR-3, ~300 lines)
 
-- [ ] 3.1 **[app/[company]/layout.tsx]** `'use client'`: spinner while loading, subscribe membership, non-member→`/select-company`, mount CompanyProvider with `userRole`. Skip for `all`
-- [ ] 3.2 **[context/CompanyContext.tsx]** Add `userRole`+`roleLoading` to value. Accept `userRole` prop. Replace `subscribeCompanies` with `subscribeUserCompanies(userId)`
-- [ ] 3.3 **[page.tsx: [[...segments]]]** Remove `<CompanyProvider>`. Remove `subscribeCompanies`. Add `'settings'`→`'Settings'` in `viewFromSegments`
+- [x] 3.1 **[app/[company]/layout.tsx]** `'use client'`: spinner while loading, subscribe membership, non-member→`/select-company`, mount CompanyProvider with `userRole`. Skip for `all`
+- [x] 3.2 **[context/CompanyContext.tsx]** Add `userRole`+`roleLoading` to value. Accept `userRole` prop. (Replace `subscribeCompanies` deferred — not in scope for this PR per user instructions)
+- [x] 3.3 **[page.tsx: [[...segments]]]** Remove `<CompanyProvider>`. Add `'settings'`→`'Configuración'` in `viewFromSegments`. Add Configuración render case.
 - [ ] 3.T2 Layout guard test — member passes, non-member redirects
 
 ## Phase 4: Admin UI (PR-4, ~400 lines)
 
-- [ ] 4.1 **[components/Sidebar.tsx]** `'Settings'` menuItem only if `userRole==='admin'`. Gray circle→user email+logout from `useAuth()`
-- [ ] 4.2 **[components/Datos.tsx]** `subscribeSettings(companyId)`. "Miembros del Equipo" section admin-only via `subscribeCompanyUsers`
-- [ ] 4.3 **[lib/types.ts + Sidepanel.tsx]** Add `'invite-user'` to ActiveForm. Invite form: email+role→`createInvitation()`
+- [x] 4.1 **[components/Sidebar.tsx]** `'Settings'` menuItem only if `userRole==='admin'`. Gray circle→user email+logout from `useAuth()`.
+  - Also updated `context/CompanyContext.tsx` to use `subscribeUserCompanies(userId)` instead of `subscribeCompanies`.
+  - Passed `userId` prop from `app/[company]/layout.tsx` to `CompanyProvider`.
+- [x] 4.2 **[components/Datos.tsx]** Added member management section (admin-only) via `subscribeCompanyMembers`. Member list with email, role badge, joined date. "Invitar colaborador" button opens sidepanel.
+- [x] 4.3 **[lib/types.ts + Sidepanel.tsx]** Added `'invite-user'` to `FormType`. Invite form with email input, role selector (Colaborador/Administrador), calls `createInvitation()`. Shows success message then closes.
+- [x] 4.4 **[components/Datos.tsx + lib/firestore.ts]** Migrated `subscribeSettings` to company-scoped path. Created `subscribeCompanySettings(companyId,...)`. Both old and new subscribers run (old as fallback with TODO).
 - [ ] 4.T3 Sidebar test — admin sees Settings, colaborador doesn't
 
 ## Order

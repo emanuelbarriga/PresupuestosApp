@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Company, UserRole } from '@/lib/types';
-import { subscribeCompanies } from '@/lib/firestore';
+import { subscribeUserCompanies } from '@/lib/firestore';
 import { Building2 } from 'lucide-react';
 
 export type CompanyMode = 'individual' | 'conjunto';
@@ -24,10 +24,12 @@ export function CompanyProvider({
   children,
   companyId,
   userRole,
+  userId,
 }: {
   children: ReactNode;
   companyId: string;
   userRole: string | null;
+  userId: string | null;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -44,7 +46,15 @@ export function CompanyProvider({
   }, [userRole]);
 
   useEffect(() => {
-    const unsub = subscribeCompanies(
+    if (!userId) {
+      setCompanies([]);
+      setSelectedCompany(null);
+      setReady(true);
+      return;
+    }
+
+    const unsub = subscribeUserCompanies(
+      userId,
       (data) => {
         setCompanies(data);
 
@@ -71,7 +81,7 @@ export function CompanyProvider({
     );
 
     return () => unsub();
-  }, [companyId]);
+  }, [companyId, userId]);
 
   const handleSetCompany = (id: string) => {
     const company = companies.find((c) => c.id === id);

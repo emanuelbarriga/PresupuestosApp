@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail } from 'lucide-react';
 import clsx from 'clsx';
+import { useAuth } from '@/context/AuthContext';
+import { useCompany } from '@/context/CompanyContext';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
@@ -227,6 +229,8 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
 }
 
 function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
+  const { user: currentUser } = useAuth();
+  const { selectedCompany } = useCompany();
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [clients, setClients] = useState<Client[]>([]);
@@ -659,6 +663,136 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
             {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // ── Invite User Form ──
+  if (ft === 'invite-user') {
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
+    const [success, setSuccess] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleInvite = async () => {
+      if (!inviteEmail.trim()) return;
+      if (!selectedCompany) return;
+      if (!currentUser) return;
+      setSaving(true);
+      setError('');
+      try {
+        await createInvitation({
+          companyId: selectedCompany.id,
+          companyName: selectedCompany.name,
+          email: inviteEmail.trim(),
+          role: inviteRole,
+          status: 'pendiente',
+          invitedBy: currentUser.uid,
+          createdAt: new Date().toISOString(),
+        });
+        setSuccess(true);
+        setTimeout(() => onBack(), 1500);
+      } catch (err: any) {
+        setError(err?.message || 'Error al crear la invitación');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <div className="flex flex-col h-full w-[360px] absolute inset-0">
+        <PanelHeader title="Invitar colaborador" canGoBack={true} onBack={onBack} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {success ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Send size={22} className="text-emerald-600" />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">¡Invitación enviada!</p>
+              <p className="text-xs text-slate-500 text-center">
+                Se envió una invitación a <strong>{inviteEmail}</strong> como{' '}
+                {inviteRole === 'admin' ? 'Administrador' : 'Colaborador'}.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Empresa</p>
+                <p className="text-sm font-semibold text-slate-700">{selectedCompany?.name}</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Correo electrónico *
+                </label>
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="colaborador@ejemplo.com"
+                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Rol</label>
+                <div className="flex bg-slate-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setInviteRole('colaborador')}
+                    className={clsx(
+                      "flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5",
+                      inviteRole === 'colaborador'
+                        ? 'bg-white text-emerald-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    <User size={14} /> Colaborador
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteRole('admin')}
+                    className={clsx(
+                      "flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5",
+                      inviteRole === 'admin'
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    <Shield size={14} /> Administrador
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  {inviteRole === 'admin'
+                    ? 'Puede gestionar miembros y acceder a la configuración.'
+                    : 'Puede ver y editar datos de la empresa.'}
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                  <p className="text-xs font-medium text-rose-700">{error}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {!success && (
+          <div className="p-6 border-t border-slate-100 shrink-0 space-y-2">
+            <button
+              onClick={handleInvite}
+              disabled={saving || !inviteEmail.trim()}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <Send size={14} />
+              {saving ? 'Enviando...' : 'Enviar invitación'}
+            </button>
+          </div>
+        )}
       </div>
     );
   }

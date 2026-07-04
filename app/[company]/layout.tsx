@@ -92,7 +92,7 @@ export default function CompanyLayout({ children }: { children: React.ReactNode 
 
   // Access granted — render the app with CompanyProvider
   return (
-    <CompanyProvider companyId={companyId} userRole={userRole}>
+    <CompanyProvider companyId={companyId} userRole={userRole} userId={user.uid}>
       {children}
     </CompanyProvider>
   );
