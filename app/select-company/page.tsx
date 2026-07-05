@@ -7,6 +7,7 @@ import { subscribeUserCompanies, subscribeInvitations } from '@/lib/firestore';
 import { db } from '@/lib/firebase';
 import { collection, query, where, collectionGroup, onSnapshot } from 'firebase/firestore';
 import type { Company, Invitacion } from '@/lib/types';
+import { Building2 } from 'lucide-react';
 
 export default function SelectCompanyPage() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -236,11 +237,18 @@ export default function SelectCompanyPage() {
               </div>
             )}
 
-            {/* Empty state */}
+            {/* Empty state — inscrito sin empresas ni invitaciones */}
             {!loadError && !hasContent && (
               <div className="text-center py-12">
-                <p className="text-sm text-slate-500 mb-6">
-                  Todavía no tenés empresas ni invitaciones pendientes.
+                <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <Building2 size={24} />
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">
+                  No tenés acceso a ninguna empresa
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                  Comunicate con un administrador para que te invite a una empresa.
+                  Cuando recibas la invitación, vas a poder aceptarla desde acá.
                 </p>
               </div>
             )}

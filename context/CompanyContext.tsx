@@ -103,16 +103,25 @@ export function CompanyProvider({
   if (!ready) return null;
 
   if (companies.length === 0) {
+    const isCollab = userRole === 'colaborador';
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center max-w-sm w-full text-center">
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4">
             <Building2 size={24} />
           </div>
-          <h2 className="text-lg font-bold text-slate-800 mb-1">Sin empresas</h2>
-          <p className="text-sm text-slate-500">
-            No hay empresas registradas en el sistema. Creá una empresa en Firestore para comenzar.
+          <h2 className="text-lg font-bold text-slate-800 mb-1">Sin acceso</h2>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            {isCollab
+              ? 'No tenés acceso a ninguna empresa. Comunicate con el administrador para que te asigne una.'
+              : 'No tenés empresas disponibles. Comunicate con un administrador para que te dé acceso.'}
           </p>
+          <button
+            onClick={() => window.location.href = '/select-company'}
+            className="mt-5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+          >
+            ← Volver al selector de empresas
+          </button>
         </div>
       </div>
     );
