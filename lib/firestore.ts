@@ -486,10 +486,7 @@ export function subscribeInvitations(
 }
 
 export async function createInvitation(invitation: Omit<Invitacion, 'id'>): Promise<string> {
-  const docRef = await addDoc(
-    collection(db, INVITATIONS_COLLECTION),
-    { ...invitation, createdAt: serverTimestamp() },
-  );
+  const docRef = await addDoc(collection(db, INVITATIONS_COLLECTION), invitation);
   return docRef.id;
 }
 

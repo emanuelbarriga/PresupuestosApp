@@ -153,9 +153,22 @@ export function Configuracion({ onAddNew }: ConfiguracionProps) {
   const adminCompanyCount = Object.values(companyDataMap).filter((d) => d.isAdmin).length;
 
   // ── Formatters ──
-  const fmtDate = (iso: string) => {
-    if (!iso) return '-';
-    return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fmtDate = (val: unknown) => {
+    if (!val) return '-';
+    try {
+      // Firestore Timestamp object ({ seconds, nanoseconds })
+      if (typeof val === 'object' && val !== null && 'seconds' in val && 'nanoseconds' in val) {
+        return new Date((val as any).seconds * 1000).toLocaleDateString('es-CO', {
+          day: 'numeric', month: 'short', year: 'numeric',
+        });
+      }
+      // ISO string
+      return new Date(val as string).toLocaleDateString('es-CO', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      });
+    } catch {
+      return '-';
+    }
   };
 
   const getInvitationStatus = (inv: Invitacion): 'pendiente' | 'aceptada' | 'expired' => {
@@ -495,6 +508,7 @@ export function Configuracion({ onAddNew }: ConfiguracionProps) {
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Edit */}
                             <button
+                              onClick={() => onAddNew?.('invite-user')}
                               className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                               title="Editar"
                             >
