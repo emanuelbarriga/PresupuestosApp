@@ -230,7 +230,7 @@ function CustomizePanel({ projects, selectedProjects, projectSearch, onProjectsC
 
 function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
   const { user: currentUser } = useAuth();
-  const { selectedCompany } = useCompany();
+  const { selectedCompany, companies } = useCompany();
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [clients, setClients] = useState<Client[]>([]);
@@ -671,25 +671,47 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
   if (ft === 'invite-user') {
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
+    const [selectedCompanies, setSelectedCompanies] = useState<string[]>(selectedCompany ? [selectedCompany.id] : []);
+    const [inviteExpiry, setInviteExpiry] = useState<1 | 3 | 7>(7);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
 
+    const toggleCompany = (companyId: string) => {
+      setSelectedCompanies(prev => 
+        prev.includes(companyId) 
+          ? prev.filter(id => id !== companyId)
+          : [...prev, companyId]
+      );
+    };
+
     const handleInvite = async () => {
       if (!inviteEmail.trim()) return;
-      if (!selectedCompany) return;
+      if (selectedCompanies.length === 0) {
+        setError('Seleccioná al menos una empresa');
+        return;
+      }
       if (!currentUser) return;
       setSaving(true);
       setError('');
       try {
-        await createInvitation({
-          companyId: selectedCompany.id,
-          companyName: selectedCompany.name,
-          email: inviteEmail.trim(),
-          role: inviteRole,
-          status: 'pendiente',
-          invitedBy: currentUser.uid,
-          createdAt: new Date().toISOString(),
-        });
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + inviteExpiry);
+        
+        for (const companyId of selectedCompanies) {
+          const company = companies.find(c => c.id === companyId);
+          if (!company) continue;
+          
+          await createInvitation({
+            companyId: company.id,
+            companyName: company.name,
+            email: inviteEmail.trim(),
+            role: inviteRole,
+            status: 'pendiente',
+            invitedBy: currentUser.uid,
+            createdAt: new Date().toISOString(),
+            expiresAt: expiresAt.toISOString(),
+          });
+        }
         setSuccess(true);
         setTimeout(() => onBack(), 1500);
       } catch (err: any) {
@@ -716,9 +738,35 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
             </div>
           ) : (
             <>
-              <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
-                <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Empresa</p>
-                <p className="text-sm font-semibold text-slate-700">{selectedCompany?.name}</p>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                  Empresas *
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                  {companies.length === 0 ? (
+                    <p className="text-xs text-slate-400">No hay empresas disponibles</p>
+                  ) : (
+                    companies.map(company => (
+                      <label
+                        key={company.id}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCompanies.includes(company.id)}
+                          onChange={() => toggleCompany(company.id)}
+                          className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-700">{company.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {selectedCompanies.length > 0 && (
+                  <p className="text-[10px] text-indigo-600 mt-1">
+                    {selectedCompanies.length} empresa{selectedCompanies.length > 1 ? 's' : ''} seleccionada{selectedCompanies.length > 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -773,6 +821,53 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
                 </p>
               </div>
 
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                  Tiempo disponible
+                </label>
+                <div className="flex bg-slate-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setInviteExpiry(1)}
+                    className={clsx(
+                      "flex-1 py-2 text-xs font-bold rounded-md transition-all",
+                      inviteExpiry === 1
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    1 día
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteExpiry(3)}
+                    className={clsx(
+                      "flex-1 py-2 text-xs font-bold rounded-md transition-all",
+                      inviteExpiry === 3
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    3 días
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteExpiry(7)}
+                    className={clsx(
+                      "flex-1 py-2 text-xs font-bold rounded-md transition-all",
+                      inviteExpiry === 7
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    1 semana
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  La invitación caducará en {inviteExpiry} día{inviteExpiry > 1 ? 's' : ''}.
+                </p>
+              </div>
+
               {error && (
                 <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
                   <p className="text-xs font-medium text-rose-700">{error}</p>
@@ -785,11 +880,11 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
           <div className="p-6 border-t border-slate-100 shrink-0 space-y-2">
             <button
               onClick={handleInvite}
-              disabled={saving || !inviteEmail.trim()}
+              disabled={saving || !inviteEmail.trim() || selectedCompanies.length === 0}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
             >
               <Send size={14} />
-              {saving ? 'Enviando...' : 'Enviar invitación'}
+              {saving ? 'Enviando...' : `Enviar invitación${selectedCompanies.length > 1 ? 'es' : ''}`}
             </button>
           </div>
         )}
