@@ -80,6 +80,8 @@ const defaultSettings = {
     { name: 'Recibo', color: '#22c55e', order: 1 },
     { name: 'Transferencia', color: '#f59e0b', order: 2 },
     { name: 'Efectivo', color: '#06b6d4', order: 3 },
+    { name: 'Comprobante de pago', color: '#8b5cf6', order: 4 },
+    { name: 'Cuenta de Cobro', color: '#f97316', order: 5 },
   ],
 };
 

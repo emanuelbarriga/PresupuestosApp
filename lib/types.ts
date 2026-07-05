@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export type TransactionType = 'ingreso' | 'egreso';
 export type ProjectState = 'Activo' | 'Cerrado' | 'Negociación' | 'En ejecución' | 'Cancelado';
 
@@ -101,6 +103,18 @@ export interface Budget {
   fechaPresupuestado: string;
   estadoProyecto: ProjectState;
   archivado?: boolean;
+  /** Denormalized — sum of budgetLinks monto for this budget. Updated atomically on write. */
+  totalEjecutado?: number;
+  /** Denormalized — linked ejecucion IDs. Updated atomically via arrayUnion/arrayRemove. */
+  linkedEjecuciones?: Array<{ ejecucionId: string; monto: number }>;
+}
+
+export interface EjecucionBudgetLink {
+  id: string;
+  companyId: string;
+  budgetId: string;
+  monto: number;
+  createdAt?: Timestamp;
 }
 
 export interface Ejecucion {
@@ -114,7 +128,8 @@ export interface Ejecucion {
   tipo: TransactionType;
   montoEjecutado: number;
   fechaEjecutado: string;
-  budgetId?: string;
+  cuentaId?: string;
+  cuentaName?: string;
   comprobantes: Comprobante[];
   archivado?: boolean;
 }

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
 import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
 import {
   subscribeBudgets,
@@ -383,12 +383,6 @@ export default function CompanyPage({ params }: Props) {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     } else {
       defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
-      // Auto-link to matching budget
-      const matchBudget = entityId
-        ? budgets.find(b => b.projectId === projectId && b.entityId === entityId && b.mesPresupuestado === month && b.tipo === tipo)
-        : budgets.filter(b => b.projectId === projectId && b.mesPresupuestado === month && b.tipo === tipo);
-      const matched = Array.isArray(matchBudget) ? (matchBudget.length === 1 ? matchBudget[0] : null) : matchBudget;
-      if (matched) defaults.budgetId = matched.id;
     }
     pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };
@@ -426,8 +420,32 @@ export default function CompanyPage({ params }: Props) {
           break;
         case 'ejecucion': {
           const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number; descripcion?: string; tipo?: string }> | undefined;
+          const budgetLinks = data._budgetLinks as Array<{ budgetId: string; monto: number }> | undefined;
           delete data._pendingComprobantes;
-          const docId = await addEjecucion(companyId, data as Omit<Ejecucion, 'id'>);
+          delete data._budgetLinks;
+          // Use writeBatch for atomic creation of ejecucion + budgetLinks + budget totals
+          const batch = writeBatch(db);
+          const ejecucionRef = doc(collection(db, 'companies', companyId, 'ejecuciones'));
+          batch.set(ejecucionRef, { ...data, createdAt: serverTimestamp() });
+          if (budgetLinks && budgetLinks.length > 0) {
+            for (const link of budgetLinks) {
+              const linkRef = doc(collection(db, ejecucionRef.path, 'budgetLinks'));
+              batch.set(linkRef, {
+                companyId,
+                budgetId: link.budgetId,
+                monto: link.monto,
+                createdAt: serverTimestamp(),
+              });
+              // Denormalize on the budget: totalEjecutado + linkedEjecuciones
+              const budgetRef = doc(db, 'companies', companyId, 'budgets', link.budgetId);
+              batch.update(budgetRef, {
+                totalEjecutado: increment(link.monto),
+                linkedEjecuciones: arrayUnion({ ejecucionId: ejecucionRef.id, monto: link.monto }),
+              });
+            }
+          }
+          await batch.commit();
+          const docId = ejecucionRef.id;
           if (pendingFiles && pendingFiles.length > 0) {
             const comprobantes: Comprobante[] = await Promise.all(
               pendingFiles.map(async (pf) => {

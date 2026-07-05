@@ -7,6 +7,7 @@ const {
   collection,
   doc,
   addDoc,
+  getDoc,
   getDocs,
   onSnapshot,
   updateDoc,
@@ -14,13 +15,18 @@ const {
   setDoc,
   query,
   where,
+  writeBatch,
+  collectionGroup,
+  deleteDoc,
   mockUnsub,
 } = vi.hoisted(() => {
   const mockUnsub = vi.fn();
+  const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
   return {
     collection: vi.fn(() => ({ type: 'collection' as const })),
-    doc: vi.fn(() => ({ type: 'doc' as const })),
+    doc: vi.fn(() => ({ type: 'doc' as const, path: 'companies/c1/ejecuciones/e1' })),
     addDoc: vi.fn().mockResolvedValue({ id: 'new-id' }),
+    getDoc: vi.fn(),
     getDocs: vi.fn(),
     onSnapshot: vi.fn().mockReturnValue(mockUnsub),
     updateDoc: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +34,9 @@ const {
     setDoc: vi.fn(),
     query: vi.fn((col) => col),
     where: vi.fn(() => ({ type: 'where' as const })),
+    writeBatch: vi.fn(() => ({ set: vi.fn(), commit: mockBatchCommit })),
+    collectionGroup: vi.fn(() => ({ type: 'collectionGroup' as const })),
+    deleteDoc: vi.fn().mockResolvedValue(undefined),
     mockUnsub,
   };
 });
@@ -36,6 +45,7 @@ vi.mock('firebase/firestore', () => ({
   collection,
   doc,
   addDoc,
+  getDoc,
   getDocs,
   onSnapshot,
   updateDoc,
@@ -43,6 +53,12 @@ vi.mock('firebase/firestore', () => ({
   setDoc,
   query,
   where,
+  writeBatch,
+  collectionGroup,
+  deleteDoc,
+  increment: vi.fn((n: number) => ({ __increment: n })),
+  arrayUnion: vi.fn((v: any) => ({ __arrayUnion: v })),
+  arrayRemove: vi.fn((v: any) => ({ __arrayRemove: v })),
   getFirestore: vi.fn(),
 }));
 
@@ -66,8 +82,8 @@ function makeMockSnapshot(
 
 // ─── Imports (resolved after mocks) ──────────────────────────────────────────
 
-import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders } from '@/lib/firestore';
-import type { Budget, Ejecucion } from '@/lib/types';
+import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget } from '@/lib/firestore';
+import type { Budget, Ejecucion, EjecucionBudgetLink } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test suites
@@ -469,6 +485,122 @@ describe('comprobantes (1.1/4.2): Ejecucion deserialization', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bank Account on Ejecucion — PR1-T4
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('bank-account (PR1-T4): addEjecucion includes cuentaId/cuentaName', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('includes cuentaId and cuentaName when provided', async () => {
+    await addEjecucion('empresa-1', {
+      descripcion: 'test',
+      montoEjecutado: 5000,
+      projectId: 'proj-1',
+      projectName: 'Proyecto',
+      entityId: 'prov-1',
+      entityName: 'Proveedor',
+      entityType: 'provider',
+      tipo: 'egreso',
+      fechaEjecutado: '2026-06-01',
+      comprobantes: [],
+      cuentaId: 'cuenta-1',
+      cuentaName: 'Banco XYZ - Corriente (Corriente)',
+    });
+
+    const payload = (addDoc as Mock).mock.calls[0][1];
+    expect(payload.cuentaId).toBe('cuenta-1');
+    expect(payload.cuentaName).toBe('Banco XYZ - Corriente (Corriente)');
+  });
+
+  it('omits cuentaId/cuentaName when not provided', async () => {
+    await addEjecucion('empresa-1', {
+      descripcion: 'test',
+      montoEjecutado: 5000,
+      projectId: 'proj-1',
+      projectName: 'Proyecto',
+      entityId: 'prov-1',
+      entityName: 'Proveedor',
+      entityType: 'provider',
+      tipo: 'egreso',
+      fechaEjecutado: '2026-06-01',
+      comprobantes: [],
+    });
+
+    const payload = (addDoc as Mock).mock.calls[0][1];
+    expect(payload.cuentaId).toBeUndefined();
+    expect(payload.cuentaName).toBeUndefined();
+  });
+});
+
+describe('bank-account (PR1-T4): subscribeEjecuciones deserializer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deserializes cuentaId and cuentaName from doc', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeEjecuciones('empresa-1', onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      {
+        id: 'ej-1',
+        descripcion: 'Test',
+        projectId: 'proj-1',
+        projectName: 'Proyecto',
+        entityId: 'prov-1',
+        entityName: 'Proveedor',
+        entityType: 'provider',
+        tipo: 'egreso',
+        montoEjecutado: 5000,
+        fechaEjecutado: '2026-06-01',
+        comprobantes: [],
+        cuentaId: 'cuenta-1',
+        cuentaName: 'Banco XYZ - Corriente',
+      },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    const result = onData.mock.calls[0][0] as Ejecucion[];
+    expect(result[0].cuentaId).toBe('cuenta-1');
+    expect(result[0].cuentaName).toBe('Banco XYZ - Corriente');
+  });
+
+  it('handles doc without cuentaId/cuentaName fields', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeEjecuciones('empresa-2', onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      {
+        id: 'ej-legacy',
+        descripcion: 'Legacy',
+        projectId: 'proj-2',
+        projectName: 'Viejo',
+        entityId: '',
+        entityName: 'Interno',
+        entityType: 'interno',
+        tipo: 'ingreso',
+        montoEjecutado: 1000,
+        fechaEjecutado: '2025-01-01',
+        comprobantes: [],
+      },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    const result = onData.mock.calls[0][0] as Ejecucion[];
+    expect(result[0].cuentaId).toBeUndefined();
+    expect(result[0].cuentaName).toBeUndefined();
+  });
+});
+
 describe('entity-references (4.4): Migration idempotent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -481,5 +613,115 @@ describe('entity-references (4.4): Migration idempotent', () => {
     expect(alreadyMigrated({ projectId: 'p1', projectName: 'Test' })).toBe(true);
     expect(alreadyMigrated({ projectId: '', projectName: 'Test' })).toBe(false);
     expect(alreadyMigrated({ projectName: 'Test' })).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Budget Links — PR3 (N:M Junction)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('budget-links (PR3): addBudgetLink', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates a budget link doc under ejecucion budgetLinks subcollection', async () => {
+    await addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 50000 });
+
+    expect(collection).toHaveBeenCalledWith(
+      expect.any(Object), 'companies', 'c1', 'ejecuciones', 'ej-1', 'budgetLinks',
+    );
+    expect(addDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'collection' }),
+      expect.objectContaining({ companyId: 'c1', budgetId: 'b-1', monto: 50000 }),
+    );
+  });
+});
+
+describe('budget-links (PR3): removeBudgetLink', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deletes a budget link doc by id', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      data: () => ({ budgetId: 'b-1', monto: 50000 }),
+    });
+
+    await removeBudgetLink('c1', 'ej-1', 'link-1');
+
+    expect(doc).toHaveBeenCalledWith(
+      expect.any(Object), 'companies', 'c1', 'ejecuciones', 'ej-1', 'budgetLinks', 'link-1',
+    );
+    expect(getDoc).toHaveBeenCalled();
+    expect(deleteDoc).toHaveBeenCalled();
+  });
+});
+
+describe('budget-links (PR3): subscribeBudgetLinks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('listens on budgetLinks subcollection for an ejecucion', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeBudgetLinks('c1', 'ej-1', onData, onError);
+
+    expect(collection).toHaveBeenCalledWith(
+      expect.any(Object), 'companies', 'c1', 'ejecuciones', 'ej-1', 'budgetLinks',
+    );
+    expect(onSnapshot).toHaveBeenCalled();
+  });
+});
+
+describe('budget-links (PR3): subscribeEjecucionesByBudget', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('subscribes to budget doc and reads linkedEjecuciones denormalized array', () => {
+    const onData = vi.fn();
+    const mockUnsub = vi.fn();
+
+    const linkedEjecuciones = [
+      { ejecucionId: 'ej-1', monto: 50000 },
+      { ejecucionId: 'ej-2', monto: 25000 },
+    ];
+
+    (doc as Mock).mockReturnValue({ type: 'doc' as const, id: 'b-1', path: 'companies/c1/budgets/b-1' });
+    (onSnapshot as Mock).mockImplementation((_ref: any, onNext: any, _onError: any) => {
+      // Simulate a budget doc with linkedEjecuciones
+      onNext({
+        data: () => ({ linkedEjecuciones }),
+      });
+      return mockUnsub;
+    });
+    (getDocs as Mock).mockResolvedValue({
+      docs: [
+        { id: 'ej-1', data: () => ({ descripcion: 'Pago 1', montoEjecutado: 50000, tipo: 'egreso', comprobantes: [] }) },
+        { id: 'ej-2', data: () => ({ descripcion: 'Pago 2', montoEjecutado: 25000, tipo: 'egreso', comprobantes: [] }) },
+      ],
+    });
+
+    subscribeEjecucionesByBudget('c1', 'b-1', onData);
+
+    expect(doc).toHaveBeenCalledWith(expect.any(Object), 'companies', 'c1', 'budgets', 'b-1');
+    expect(onSnapshot).toHaveBeenCalled();
+  });
+
+  it('calls onData with empty array when budget has no linkedEjecuciones', () => {
+    const onData = vi.fn();
+
+    (doc as Mock).mockReturnValue({ type: 'doc' as const, id: 'b-1', path: 'companies/c1/budgets/b-1' });
+    (onSnapshot as Mock).mockImplementation((_ref: any, onNext: any, _onError: any) => {
+      onNext({ data: () => ({}) });
+      return vi.fn();
+    });
+
+    subscribeEjecucionesByBudget('c1', 'b-1', onData);
+
+    expect(onData).toHaveBeenCalledWith([]);
   });
 });

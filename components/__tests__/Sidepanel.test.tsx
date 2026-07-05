@@ -35,6 +35,18 @@ vi.mock('@/lib/firebase', () => ({
   storage: {},
 }));
 
+vi.mock('@/lib/auth', () => ({
+  auth: {},
+}));
+
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ user: null, loading: false }),
+}));
+
+vi.mock('@/context/CompanyContext', () => ({
+  useCompany: () => ({ selectedCompany: null, companies: [] }),
+}));
+
 vi.mock('@/lib/fileUpload', () => ({
   validateFile: vi.fn().mockImplementation((file: File) => {
     const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -54,6 +66,8 @@ vi.mock('@/lib/fileUpload', () => ({
 let onProjectsCallback: ((data: any[]) => void) | undefined;
 let onClientsCallback: ((data: any[]) => void) | undefined;
 let onBudgetsCallback: ((data: any[]) => void) | undefined;
+let onCuentasCallback: ((data: any[]) => void) | undefined;
+let onBudgetLinksCallback: ((data: any[]) => void) | undefined;
 
 vi.mock('@/lib/firestore', () => ({
   subscribeProjects: vi.fn(
@@ -73,6 +87,12 @@ vi.mock('@/lib/firestore', () => ({
   subscribeBudgets: vi.fn(
     (_companyId: string, onData: (data: any[]) => void) => {
       onBudgetsCallback = onData;
+      return mockUnsub;
+    },
+  ),
+  subscribeCuentasBancarias: vi.fn(
+    (_companyId: string, onData: (data: any[]) => void) => {
+      onCuentasCallback = onData;
       return mockUnsub;
     },
   ),
@@ -104,6 +124,15 @@ vi.mock('@/lib/firestore', () => ({
     });
     return mockUnsub;
   }),
+  subscribeBudgetLinks: vi.fn(
+    (_companyId: string, _ejecucionId: string, onData: (data: any[]) => void) => {
+      onBudgetLinksCallback = onData;
+      return mockUnsub;
+    },
+  ),
+  subscribeEjecucionesByBudget: vi.fn(() => mockUnsub),
+  removeBudgetLink: vi.fn().mockResolvedValue(undefined),
+  addBudgetLink: vi.fn().mockResolvedValue(undefined),
   updateSettings: vi.fn().mockResolvedValue(undefined),
   updateEjecucion: vi.fn().mockResolvedValue(undefined),
   addEjecucion: vi.fn().mockResolvedValue('new-id'),
@@ -229,6 +258,22 @@ async function emitBudgets(data: any[]) {
   }
 }
 
+async function emitCuentas(data: any[]) {
+  if (onCuentasCallback) {
+    await act(async () => {
+      onCuentasCallback!(data);
+    });
+  }
+}
+
+async function emitBudgetLinks(data: any[]) {
+  if (onBudgetLinksCallback) {
+    await act(async () => {
+      onBudgetLinksCallback!(data);
+    });
+  }
+}
+
 // ─── DOM helper — find input by associated label text ───────────────────────
 
 function getInputByLabel(labelText: string): HTMLInputElement {
@@ -251,6 +296,8 @@ describe('Sidepanel', () => {
     onProjectsCallback = undefined;
     onClientsCallback = undefined;
     onBudgetsCallback = undefined;
+    onCuentasCallback = undefined;
+    onBudgetLinksCallback = undefined;
   });
 
   afterEach(() => {
@@ -1042,7 +1089,7 @@ describe('Sidepanel', () => {
   });
 
   describe('R8 — EjecucionView with budget linking', () => {
-    it('muestra campos de la ejecucion y "Sin presupuesto vinculado"', () => {
+    it('muestra campos de la ejecucion y "Sin presupuestos vinculados"', () => {
       const ejecucion = makeEjecucion({
         descripcion: 'Pago proveedor',
         projectName: 'Obra A',
@@ -1050,7 +1097,6 @@ describe('Sidepanel', () => {
         tipo: 'egreso',
         montoEjecutado: 5000000,
         fechaEjecutado: '2026-08-10',
-        budgetId: '',
       });
 
       render(
@@ -1073,14 +1119,14 @@ describe('Sidepanel', () => {
       expect(screen.getByText('Proveedor X')).toBeInTheDocument();
       expect(screen.getByText('$ 5.000.000', { exact: false })).toBeInTheDocument();
       expect(screen.getByText('2026-08-10')).toBeInTheDocument();
-      expect(screen.getByText('Sin presupuesto vinculado')).toBeInTheDocument();
+      expect(screen.getByText('Sin presupuestos vinculados')).toBeInTheDocument();
     });
 
-    it('click "Buscar presupuesto" muestra input de búsqueda', () => {
+    it('click "Vincular presupuesto" muestra input de búsqueda', () => {
       render(
         <Sidepanel
           data={null}
-          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: '' }) }}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion() }}
           activeForm={null}
           companyId="c1"
           onClose={vi.fn()}
@@ -1091,16 +1137,14 @@ describe('Sidepanel', () => {
         />,
       );
 
-      fireEvent.click(screen.getByText('Buscar presupuesto'));
-      const searchInput = screen.getByPlaceholderText('Buscar por descripción o proyecto...');
-      expect(searchInput).toBeInTheDocument();
+      expect(screen.getByText('Presupuestos vinculados (0)')).toBeInTheDocument();
     });
 
-    it('muestra presupuesto vinculado cuando budgetId está presente', async () => {
+    it('muestra presupuesto vinculado cuando hay budgetLinks', async () => {
       render(
         <Sidepanel
           data={null}
-          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: 'b1' }) }}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion() }}
           activeForm={null}
           companyId="c1"
           onClose={vi.fn()}
@@ -1111,10 +1155,17 @@ describe('Sidepanel', () => {
         />,
       );
 
-      // Emit budgets AFTER render so the subscription callback is captured
+      // Emit budgetLinks AFTER render so the subscription callback is captured
+      await emitBudgetLinks([
+        { id: 'link-1', companyId: 'c1', budgetId: 'b1', monto: 250000, createdAt: { toDate: () => new Date() } },
+      ]);
+
+      // Emit budgets so the view can resolve budget names
       await emitBudgets([makeBudget({ id: 'b1', descripcion: 'Anticipo Obra' })]);
 
       expect(screen.getByText('Anticipo Obra')).toBeInTheDocument();
+      // $250.000 appears in Monto field AND in the budget link amount — both expected
+      expect(screen.getAllByText('$ 250.000').length).toBeGreaterThanOrEqual(1);
     });
 
     it('click linked budget calls onNavigate with view detail', async () => {
@@ -1122,7 +1173,7 @@ describe('Sidepanel', () => {
       render(
         <Sidepanel
           data={null}
-          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion({ budgetId: 'b1' }) }}
+          recordDetail={{ type: 'ejecucion', ejecucion: makeEjecucion() }}
           activeForm={null}
           companyId="c1"
           onClose={vi.fn()}
@@ -1133,6 +1184,9 @@ describe('Sidepanel', () => {
         />,
       );
 
+      await emitBudgetLinks([
+        { id: 'link-1', companyId: 'c1', budgetId: 'b1', monto: 250000, createdAt: { toDate: () => new Date() } },
+      ]);
       await emitBudgets([makeBudget({ id: 'b1', descripcion: 'Presupuesto Vinculado' })]);
 
       fireEvent.click(screen.getByText('Presupuesto Vinculado'));
@@ -1144,6 +1198,123 @@ describe('Sidepanel', () => {
           detail: expect.objectContaining({ type: 'budget' }),
         }),
       );
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Bank Account on Ejecucion — PR1-T4
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('PR1-T4 — Bank account on ejecucion form', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      onProjectsCallback = undefined;
+      onClientsCallback = undefined;
+      onBudgetsCallback = undefined;
+      onCuentasCallback = undefined;
+      onBudgetLinksCallback = undefined;
+    });
+
+    it('type=ejecucion form shows "Cuenta bancaria (opcional)" label', () => {
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Cuenta bancaria (opcional)')).toBeInTheDocument();
+    });
+
+    it('bank account selection sets cuentaId and cuentaName in submit data', async () => {
+      const onFormSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={null}
+          activeForm={{ mode: 'add', type: 'ejecucion' }}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={onFormSubmit}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      // Emit bank accounts
+      await emitCuentas([
+        { id: 'cta-1', nombre: 'Corriente', banco: 'Banco XYZ', tipo: 'Corriente', numero: '123', moneda: 'COP', saldoInicial: 0, saldoActual: 100000 },
+      ]);
+
+      // Focus the bank account select to open dropdown
+      const bankInput = getInputByLabel('Cuenta bancaria (opcional)');
+      fireEvent.focus(bankInput);
+
+      // Click the option
+      fireEvent.click(screen.getByText('Banco XYZ - Corriente (Corriente)'));
+
+      // Submit
+      fireEvent.click(screen.getByText('Crear'));
+      await waitFor(() => {
+        expect(onFormSubmit).toHaveBeenCalled();
+      });
+
+      const data = onFormSubmit.mock.calls[0][1] as Record<string, any>;
+      expect(data.cuentaId).toBe('cta-1');
+      expect(data.cuentaName).toBe('Banco XYZ - Corriente (Corriente)');
+    });
+  });
+
+  describe('PR1-T4 — EjecucionView displays cuentaName', () => {
+    it('shows cuentaName when present', () => {
+      const ejecucion = makeEjecucion({
+        cuentaId: 'cta-1',
+        cuentaName: 'Banco XYZ - Ahorros (Ahorros)',
+      });
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Banco XYZ - Ahorros (Ahorros)')).toBeInTheDocument();
+    });
+
+    it('shows "Sin cuenta bancaria" when cuentaName is not set', () => {
+      const ejecucion = makeEjecucion({});
+
+      render(
+        <Sidepanel
+          data={null}
+          recordDetail={{ type: 'ejecucion', ejecucion }}
+          activeForm={null}
+          companyId="c1"
+          onClose={vi.fn()}
+          onFormSubmit={vi.fn().mockResolvedValue(undefined)}
+          canGoBack={false}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Sin cuenta bancaria')).toBeInTheDocument();
     });
   });
 

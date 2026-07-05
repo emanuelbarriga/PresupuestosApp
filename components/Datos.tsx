@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip } from 'lucide-react';
+import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -48,6 +49,7 @@ export function Datos({
   const [filterMontoMin, setFilterMontoMin] = useState('');
   const [filterMontoMax, setFilterMontoMax] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
+  const [filterComprobante, setFilterComprobante] = useState('');
 
   useEffect(() => {
     const unsubs = [
@@ -72,6 +74,7 @@ export function Datos({
     setFilterMontoMin('');
     setFilterMontoMax('');
     setFilterEstado('');
+    setFilterComprobante('');
   }, [activeTab]);
 
   const handleTabClick = (tab: TabType) => {
@@ -144,8 +147,14 @@ export function Datos({
     const min = filterMontoMin ? Number(filterMontoMin) : 0;
     const max = filterMontoMax ? Number(filterMontoMax) : Infinity;
     if (min > 0 || max < Infinity) data = data.filter(e => e.montoEjecutado >= min && e.montoEjecutado <= max);
+    if (filterComprobante) {
+      data = data.filter(e => {
+        const result = derivarEstadoComprobantes(e.comprobantes || [], REQUIRED_COMPROBANTE_TYPES);
+        return result.estado === filterComprobante;
+      });
+    }
     return data;
-  }, [ejecuciones, searchQuery, filterTipo, filterDateFrom, filterDateTo, filterMontoMin, filterMontoMax]);
+  }, [ejecuciones, searchQuery, filterTipo, filterDateFrom, filterDateTo, filterMontoMin, filterMontoMax, filterComprobante]);
 
   const filteredProyectos = useMemo(() => {
     let data = proyectosConData;
@@ -171,13 +180,24 @@ export function Datos({
     return data;
   }, [cuentas, searchQuery]);
 
+  // Count of ejecuciones per bank account (for Bancos "Ejecuciones" column)
+  const ejecucionCountByCuenta = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of ejecuciones) {
+      if (e.cuentaId) {
+        map.set(e.cuentaId, (map.get(e.cuentaId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [ejecuciones]);
+
   const stateColorMap = useMemo(() => {
     const map = new Map<string, string>();
     (settingsData?.stateProject || []).forEach((s: SettingsItem) => map.set(s.name, s.color));
     return map;
   }, [settingsData]);
 
-  const hasActiveFilters = searchQuery || filterTipo || filterMonth || filterDateFrom || filterDateTo || filterMontoMin || filterMontoMax || filterEstado;
+  const hasActiveFilters = searchQuery || filterTipo || filterMonth || filterDateFrom || filterDateTo || filterMontoMin || filterMontoMax || filterEstado || filterComprobante;
 
   const clearFilters = () => {
     setFilterTipo('');
@@ -187,6 +207,7 @@ export function Datos({
     setFilterMontoMin('');
     setFilterMontoMax('');
     setFilterEstado('');
+    setFilterComprobante('');
     setSearchQuery('');
     setCurrentPage(1);
   };
@@ -318,6 +339,16 @@ export function Datos({
                         <input type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setCurrentPage(1); }}
                           className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors" />
                       </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-medium text-slate-400 uppercase">Comp.</span>
+                        <select value={filterComprobante} onChange={e => { setFilterComprobante(e.target.value); setCurrentPage(1); }}
+                          className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors cursor-pointer bg-white">
+                          <option value="">Todos</option>
+                          <option value="Sin comprobantes">Sin comprobantes</option>
+                          <option value="Falta un comprobante">Falta un comprobante</option>
+                          <option value="Completada">Completada</option>
+                        </select>
+                      </div>
                     </>
                   )}
                   {activeTab === 'Proyectos' && (
@@ -375,15 +406,15 @@ export function Datos({
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Mes</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Monto</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Ejecutado</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredBudgets).map((b) => {
-                      const hasEj = ejecuciones.some(e => e.budgetId === b.id);
-                      return (<tr key={b.id} className={clsx("cursor-pointer transition-colors", hasEj ? 'hover:bg-slate-50' : 'hover:bg-amber-50/50')} onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: ejecuciones.filter(e => e.budgetId === b.id) })}>
+                      const ejecutado = b.totalEjecutado ?? 0;
+                      return (<tr key={b.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: [] })}>
                         <td className="p-3 font-semibold text-slate-700">
-                          <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasEj ? 'bg-emerald-400' : 'bg-amber-400')} title={hasEj ? 'Con ejecuciones' : 'Sin ejecuciones'} />
                           {b.descripcion}
                         </td>
                         <td className="p-3 text-slate-600">{b.projectName}</td>
@@ -391,6 +422,7 @@ export function Datos({
                         <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", b.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700')}>{b.tipo}</span></td>
                         <td className="p-3 text-slate-600">{b.mesPresupuestado}</td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(b.montoPresupuestado)}</td>
+                        <td className="p-3 text-right font-semibold text-indigo-600">{ejecutado > 0 ? formatCurrency(ejecutado) : <span className="text-slate-300">—</span>}</td>
                         <ActionCell><EditBtn onClick={() => edit('budget', b)} /></ActionCell>
                       </tr>);
                     })}
@@ -413,17 +445,18 @@ export function Datos({
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Cliente/Prov.</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
-                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Comp.</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Estado</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center">Comp.</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Banco</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Monto</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredEjecuciones).map((e) => {
-                      const hasLink = !!e.budgetId;
-                      return (<tr key={e.id} className={clsx("cursor-pointer transition-colors", hasLink ? 'hover:bg-slate-50' : 'hover:bg-amber-50/50')} onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}>
+                      const comprobanteCount = e.comprobantes?.length ?? 0;
+                      return (<tr key={e.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}>
                         <td className="p-3 font-semibold text-slate-700">
-                          <span className={clsx("inline-block w-2 h-2 rounded-full mr-2 align-middle", hasLink ? 'bg-emerald-400' : 'bg-amber-400')} title={hasLink ? 'Vinculado a presupuesto' : 'Sin presupuesto vinculado'} />
                           {e.descripcion}
                         </td>
                         <td className="p-3 text-slate-600">{e.projectName}</td>
@@ -431,14 +464,28 @@ export function Datos({
                         <td className="p-3"><span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", e.tipo === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700')}>{e.tipo}</span></td>
                         <td className="p-3 text-slate-600">{e.fechaEjecutado}</td>
                         <td className="p-3 text-center">
-                          {e.comprobantes && e.comprobantes.length > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-indigo-600" title={`${e.comprobantes.length} comprobante(s)`}>
-                              <Paperclip size={13} />
-                              <span className="text-[10px] font-bold">{e.comprobantes.length}</span>
+                          {(() => {
+                            const result = derivarEstadoComprobantes(e.comprobantes || [], REQUIRED_COMPROBANTE_TYPES);
+                            if (result.estado === 'Completada') {
+                              return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-700">Completada</span>;
+                            }
+                            if (result.estado === 'Falta un comprobante') {
+                              const label = result.faltante === 'falta_pago' ? 'Falta pago' : 'Falta cuenta de cobro';
+                              return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700">{label}</span>;
+                            }
+                            return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-500">Sin comprobantes</span>;
+                          })()}
+                        </td>
+                        <td className="p-3 text-center text-slate-600">
+                          {comprobanteCount > 0 ? (
+                            <span className="inline-flex items-center gap-1" title={`${comprobanteCount} archivo${comprobanteCount !== 1 ? 's' : ''}`}>
+                              <Paperclip size={11} className="text-slate-400" />
+                              {comprobanteCount}
                             </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
+                          ) : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="p-3 text-slate-500 max-w-[120px] truncate">
+                          {e.cuentaName || <span className="text-slate-300">—</span>}
                         </td>
                         <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(e.montoEjecutado)}</td>
                         <ActionCell><EditBtn onClick={() => edit('ejecucion', e)} /></ActionCell>
@@ -560,13 +607,14 @@ export function Datos({
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Número</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Saldo Actual</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center">Ejecs</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredCuentas).length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-xs text-slate-400 italic">No hay cuentas bancarias registradas</td>
+                        <td colSpan={7} className="p-8 text-center text-xs text-slate-400 italic">No hay cuentas bancarias registradas</td>
                       </tr>
                     ) : (
                       paginate(filteredCuentas).map((cuenta) => {
@@ -602,13 +650,16 @@ export function Datos({
                               </td>
                               <td className="p-3 text-slate-600">{cuenta.numero}</td>
                               <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(cuenta.saldoActual)}</td>
+                              <td className="p-3 text-center text-slate-600">
+                                {ejecucionCountByCuenta.get(cuenta.id) ?? 0}
+                              </td>
                               <ActionCell>
                                 <EditBtn onClick={() => edit('cuenta', cuenta)} />
                               </ActionCell>
                             </tr>
                             {isExpanded && (
                               <tr key={`${cuenta.id}-extractos`}>
-                                <td colSpan={6} className="p-0 bg-slate-50">
+                                <td colSpan={7} className="p-0 bg-slate-50">
                                   <div className="border-t border-b border-slate-200 mx-3">
                                     <table className="w-full text-left border-collapse">
                                       <thead>
@@ -624,7 +675,7 @@ export function Datos({
                                       <tbody className="text-[11px] divide-y divide-slate-200">
                                         {cuentaExtractos.length === 0 ? (
                                           <tr>
-                                            <td colSpan={6} className="p-4 text-center text-[10px] text-slate-400 italic">Sin extractos para esta cuenta</td>
+                                            <td colSpan={7} className="p-4 text-center text-[10px] text-slate-400 italic">Sin extractos para esta cuenta</td>
                                           </tr>
                                         ) : (
                                           cuentaExtractos.map((ext) => (

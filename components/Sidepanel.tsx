@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion } from '@/lib/types';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
 import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2 } from 'lucide-react';
+import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
@@ -931,12 +932,15 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
   // Comprobantes state
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
+  // Multi-budget linking state
+  const [selectedBudgetLinks, setSelectedBudgetLinks] = useState<Array<{budgetId: string; budgetName: string; monto: string}>>([]);
 
   const safeProjects = projects || [];
 
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
+  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   useEffect(() => {
-    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeSettings(setSettingsData)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeCuentasBancarias(companyId, setCuentas), subscribeSettings(setSettingsData)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 
@@ -1021,6 +1025,18 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
 
   const handleSubmit = async () => {
     setSaving(true);
+
+    // Validate budget links sum matching before submit
+    if (ft === 'ejecucion' && selectedBudgetLinks.length > 0) {
+      const montoEj = Number(f('montoEjecutado')) || 0;
+      const totalLinks = selectedBudgetLinks.reduce((s, l) => s + (Number(l.monto) || 0), 0);
+      if (Math.abs(montoEj - totalLinks) > 1) {
+        setSaving(false);
+        alert(`La suma de los montos vinculados (${totalLinks}) no coincide con el monto ejecutado (${montoEj}). Ajustá los montos o eliminá los vínculos.`);
+        return;
+      }
+    }
+
     const base: Record<string, any> = { ...fields };
 
     const addMonth = (monthName: string, count: number): string => {
@@ -1091,6 +1107,12 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
       if (ft === 'budget') { data.montoPresupuestado = Number(data.montoPresupuestado) || 0; delete data.fechaEjecutado; }
       if (ft === 'ejecucion') {
         data.montoEjecutado = Number(data.montoEjecutado) || 0;
+        if (selectedBudgetLinks.length > 0) {
+          data._budgetLinks = selectedBudgetLinks.map(l => ({
+            budgetId: l.budgetId,
+            monto: Number(l.monto) || 0,
+          }));
+        }
         if (form.mode === 'add' && pendingComprobantes.length > 0) {
           data._pendingComprobantes = pendingComprobantes.map(pc => ({
             id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size,
@@ -1447,18 +1469,53 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         {ft === 'ejecucion' && (
           <>
             <FormInput label="Fecha de ejecución" value={f('fechaEjecutado')} onChange={v => set('fechaEjecutado', v)} type="date" />
-            <SearchableSelect label="Vincular presupuesto (opcional)" value={f('budgetId')} onChange={v => {
-              set('budgetId', v);
-              const b = allBudgets.find(b => b.id === v);
-              if (b) {
-                set('projectId', b.projectId);
-                set('projectName', b.projectName);
-                set('entityId', b.entityId);
-                set('entityName', b.entityName);
-                set('entityType', b.entityType);
-                set('tipo', b.tipo);
-              }
-            }} options={filteredBudgets.map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto..." />
+            {/* Multi-budget linking (N:M) */}
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 flex items-center gap-1.5">
+                <Link2 size={12} /> Vincular presupuestos (opcional)
+              </p>
+              <SearchableSelect label="" value="" onChange={v => {
+                if (!v) return;
+                const b = allBudgets.find(b => b.id === v);
+                if (b && !selectedBudgetLinks.some(l => l.budgetId === b.id)) {
+                  setSelectedBudgetLinks(prev => [...prev, { budgetId: b.id, budgetName: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}`, monto: '' }]);
+                }
+              }} options={allBudgets
+                .filter(b => !selectedBudgetLinks.some(l => l.budgetId === b.id))
+                .map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto para vincular..." />
+              {selectedBudgetLinks.map((link, idx) => (
+                <div key={link.budgetId} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2.5 mt-2 border border-slate-200">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-700 truncate">{link.budgetName}</p>
+                    <input type="text" inputMode="numeric" value={link.monto}
+                      onChange={e => {
+                        const updated = [...selectedBudgetLinks];
+                        updated[idx] = { ...updated[idx], monto: unformatThousands(e.target.value) };
+                        setSelectedBudgetLinks(updated);
+                      }}
+                      placeholder="Monto a vincular..."
+                      className="w-full mt-1 border border-slate-200 rounded px-2 py-1 text-xs focus:border-indigo-500 outline-none bg-white" />
+                  </div>
+                  <button onClick={() => setSelectedBudgetLinks(prev => prev.filter((_, i) => i !== idx))}
+                    className="text-slate-400 hover:text-rose-500 transition-colors shrink-0" title="Quitar">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              {selectedBudgetLinks.length > 0 && (() => {
+                const totalLinks = selectedBudgetLinks.reduce((s, l) => s + (Number(l.monto) || 0), 0);
+                const montoEj = Number(f('montoEjecutado')) || 0;
+                const diff = Math.abs(montoEj - totalLinks);
+                const isValid = diff <= 1;
+                return (
+                  <p className={clsx("text-[10px] font-bold mt-1.5", isValid ? 'text-emerald-600' : 'text-amber-600')}>
+                    Total vinculado: {formatCurrency(totalLinks)}
+                    {montoEj > 0 && !isValid && <span className="ml-1">— Diferencia: {formatCurrency(diff)}</span>}
+                    {isValid && montoEj > 0 && <span className="ml-1">✓</span>}
+                  </p>
+                );
+              })()}
+            </div>
             <div className="border-t border-slate-100 pt-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comprobantes</p>
               <ComprobanteUploader
@@ -1470,8 +1527,20 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
                 pendingComprobantes={pendingComprobantes}
                 onPendingChange={setPendingComprobantes}
                 tiposComprobante={settingsData?.tipoComprobante || []}
+                requiredTypes={REQUIRED_COMPROBANTE_TYPES.map(r => r.name)}
               />
             </div>
+            <SearchableSelect 
+              label="Cuenta bancaria (opcional)" 
+              value={f('cuentaId')} 
+              onChange={v => {
+                set('cuentaId', v);
+                const c = cuentas.find(c => c.id === v);
+                if (c) set('cuentaName', `${c.banco} - ${c.nombre} (${c.tipo})`);
+              }} 
+              options={cuentas.map(c => ({ value: c.id, label: `${c.banco} - ${c.nombre} (${c.tipo})` }))} 
+              placeholder="Buscar cuenta bancaria..." 
+            />
           </>
         )}
         {form.mode === 'add' && (ft === 'budget' || ft === 'ejecucion') && (
@@ -1959,12 +2028,21 @@ function ProjectView({ project, budgets, ejecuciones, companyId, projects, onFor
   );
 }
 
-function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onNavigate }: {
+function BudgetView({ budget, ejecuciones: initialEjecuciones, companyId, onClose, onFormSubmit, onNavigate }: {
   budget: Budget; ejecuciones: Ejecucion[]; companyId: string; onClose: () => void; onFormSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; onNavigate: (screen: NavScreen) => void;
 }) {
+  const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>(initialEjecuciones);
   const [addingEj, setAddingEj] = useState(false);
   const [ejForm, setEjForm] = useState({ descripcion: '', montoEjecutado: '', fechaEjecutado: new Date().toISOString().split('T')[0] });
   const [saving, setSaving] = useState(false);
+
+  // Subscribe via collectionGroup to get live linked ejecuciones
+  useEffect(() => {
+    const unsub = subscribeEjecucionesByBudget(companyId, budget.id, (linkedEjecuciones) => {
+      setEjecuciones(linkedEjecuciones);
+    });
+    return () => unsub();
+  }, [companyId, budget.id]);
 
   const handleAddEj = async () => {
     setSaving(true);
@@ -1980,7 +2058,6 @@ function BudgetView({ budget, ejecuciones, companyId, onClose, onFormSubmit, onN
         tipo: budget.tipo,
         montoEjecutado: Number(ejForm.montoEjecutado) || 0,
         fechaEjecutado: ejForm.fechaEjecutado,
-        budgetId: budget.id,
       },
     );
     setSaving(false);
@@ -2126,6 +2203,7 @@ function ComprobanteUploader({
   pendingComprobantes,
   onPendingChange,
   tiposComprobante,
+  requiredTypes,
 }: {
   companyId: string;
   ejecucionId?: string;
@@ -2135,6 +2213,7 @@ function ComprobanteUploader({
   pendingComprobantes?: PendingComprobante[];
   onPendingChange?: (updated: PendingComprobante[]) => void;
   tiposComprobante: SettingsItem[];
+  requiredTypes?: string[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState('');
@@ -2259,8 +2338,9 @@ function ComprobanteUploader({
           {tiposComprobante.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(t => (
             <button key={t.name} type="button" onClick={() => setNewTipo(newTipo === t.name ? '' : t.name)}
               className={clsx("px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors",
-                newTipo === t.name ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}>
-              {t.name}
+                newTipo === t.name ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300',
+                requiredTypes?.includes(t.name) && 'ring-1 ring-indigo-300')}>
+              {t.name}{requiredTypes?.includes(t.name) ? ' *' : ''}
             </button>
           ))}
         </div>
@@ -2358,8 +2438,6 @@ function ComprobanteUploader({
 function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecucion; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void }) {
   console.log('[COMPROBANTES] EjecucionView render', { ejecucionId: ejecucion.id, comprobantes: ejecucion.comprobantes?.length });
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [linking, setLinking] = useState(false);
-  const [search, setSearch] = useState('');
   const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
 
   useEffect(() => {
@@ -2367,18 +2445,28 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
     return () => unsub();
   }, [companyId]);
 
+  // Derive budgetLinks from budgets' linkedEjecuciones — no subcollection read needed
+  const budgetLinks = useMemo(() => {
+    const links: Array<{ id: string; budgetId: string; budgetName: string; monto: number }> = [];
+    for (const b of budgets) {
+      const match = (b.linkedEjecuciones ?? []).find(le => le.ejecucionId === ejecucion.id);
+      if (match) {
+        links.push({ id: match.ejecucionId, budgetId: b.id, budgetName: b.descripcion, monto: match.monto });
+      }
+    }
+    return links;
+  }, [budgets, ejecucion.id]);
+
   useEffect(() => {
     setComprobantes(ejecucion.comprobantes || []);
   }, [ejecucion.comprobantes]);
 
-  const filtered = search ? budgets.filter(b => b.descripcion.toLowerCase().includes(search.toLowerCase()) || b.projectName.toLowerCase().includes(search.toLowerCase())) : budgets;
-  const linkedBudget = budgets.find(b => b.id === ejecucion.budgetId);
-
-  const handleLink = async (budgetId: string) => {
-    await updateEjecucion(companyId, ejecucion.id, { budgetId });
-  };
-  const handleUnlink = async () => {
-    await updateEjecucion(companyId, ejecucion.id, { budgetId: '' });
+  const handleRemoveLink = async (linkId: string) => {
+    try {
+      await removeBudgetLink(companyId, ejecucion.id, linkId);
+    } catch (err) {
+      console.error('Error removing budget link:', err);
+    }
   };
 
   const handleDeleteComprobante = async (comp: Comprobante) => {
@@ -2400,50 +2488,52 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
       <DF label="Tipo" v={ejecucion.tipo} />
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
+      <DF label="Cuenta bancaria" v={ejecucion.cuentaName || 'Sin cuenta bancaria'} />
 
       <div className="border-t border-slate-100 pt-4">
         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
-          <Link2 size={12} /> Presupuesto vinculado
+          <Link2 size={12} /> Presupuestos vinculados ({budgetLinks.length})
         </p>
-        {linkedBudget ? (
-          <div onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: linkedBudget, ejecuciones: [] } })} className="flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 cursor-pointer transition-colors">
-            <div>
-              <p className="text-xs font-semibold text-indigo-700">{linkedBudget.descripcion}</p>
-              <p className="text-[10px] text-indigo-500">{linkedBudget.projectName} • {formatCurrency(linkedBudget.montoPresupuestado)}</p>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); handleUnlink(); }} className="text-slate-400 hover:text-rose-500 transition-colors" title="Desvincular">
-              <Unlink size={14} />
-            </button>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500 italic mb-3">Sin presupuesto vinculado</p>
-        )}
-
-        {!linkedBudget && (
-          <>
-            <button onClick={() => setLinking(!linking)} className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 mt-2 transition-colors">
-              <Search size={12} /> {linking ? 'Cerrar' : 'Buscar presupuesto'}
-            </button>
-            {linking && (
-              <div className="mt-3">
-                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por descripción o proyecto..." autoFocus
-                  className="w-full border border-slate-200 rounded-lg p-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all mb-2" />
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {filtered.length === 0 ? (
-                    <p className="text-xs text-slate-500 text-center py-3">Sin resultados</p>
-                  ) : filtered.map(b => (
-                    <button key={b.id} onClick={() => { handleLink(b.id); setLinking(false); setSearch(''); }}
-                      className={clsx("w-full text-left p-2 rounded-lg text-xs transition-colors hover:bg-indigo-50", b.id === ejecucion.budgetId ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700')}>
-                      <span className="font-medium">{b.descripcion}</span>
-                      <span className="text-slate-400 ml-2">{b.projectName} • {formatCurrency(b.montoPresupuestado)}</span>
-                    </button>
-                  ))}
-                </div>
+        {budgetLinks.length === 0 ? (
+          <p className="text-xs text-slate-500 italic">Sin presupuestos vinculados</p>
+        ) : budgetLinks.map(link => {
+          const linkedBudget = budgets.find(b => b.id === link.budgetId);
+          return (
+            <div key={link.id} onClick={() => {
+              if (linkedBudget) onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: linkedBudget, ejecuciones: [] } });
+            }} className={clsx("flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 mb-2 cursor-pointer transition-colors", !linkedBudget && 'opacity-60')}>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-indigo-700 truncate">
+                  {linkedBudget?.descripcion || 'Presupuesto eliminado'}
+                </p>
+                <p className="text-[10px] text-indigo-500">
+                  {linkedBudget ? `${linkedBudget.projectName} • ${formatCurrency(linkedBudget.montoPresupuestado)}` : ''}
+                  {link.monto > 0 && <span className="ml-2 font-bold">{formatCurrency(link.monto)}</span>}
+                </p>
               </div>
-            )}
-          </>
-        )}
+              <button onClick={(e) => { e.stopPropagation(); handleRemoveLink(link.id); }}
+                className="text-slate-400 hover:text-rose-500 transition-colors shrink-0 ml-2" title="Desvincular">
+                <Unlink size={14} />
+              </button>
+            </div>
+          );
+        })}
       </div>
+
+      {(() => {
+        const stateResult = derivarEstadoComprobantes(ejecucion.comprobantes || [], REQUIRED_COMPROBANTE_TYPES);
+        if (stateResult.estado !== 'Completada' || (ejecucion.comprobantes?.length ?? 0) > 0) {
+          return (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+                <FileText size={12} /> Estado de comprobantes: {stateResult.estado}
+                {stateResult.faltante && <span className="text-amber-600">({stateResult.faltante === 'falta_pago' ? 'falta pago' : 'falta cuenta de cobro'})</span>}
+              </p>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {comprobantes.length > 0 && (
         <div className="border-t border-slate-100 pt-4">
@@ -2697,7 +2787,6 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                 </div>
                 <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
                   {group.items.map(b => {
-                    const ejbs = data.ejecuciones.filter(e => e.budgetId === b.id);
                     return (
                     <div key={b.id} className="px-2 py-1.5">
                       <div className="flex items-start justify-between mb-1">
@@ -2708,7 +2797,7 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                         <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: ejbs } })}
+                        <button onClick={() => onNavigate({ id: crypto.randomUUID(), type: 'view', detail: { type: 'budget', budget: b, ejecuciones: [] } })}
                           className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
                           <FileText size={11} /> Ver
                         </button>
@@ -2723,7 +2812,6 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                           entityName: b.entityName || '',
                           entityType: b.entityType || 'client',
                           tipo: b.tipo,
-                          budgetId: b.id,
                         } } })}
                           className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
                           <Plus size={11} /> Ejecutar

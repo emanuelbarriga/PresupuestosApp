@@ -1,6 +1,7 @@
 import {
   collection,
   collectionGroup,
+  getDoc,
   getDocs,
   addDoc,
   setDoc,
@@ -10,15 +11,20 @@ import {
   onSnapshot,
   query,
   where,
+  writeBatch,
   serverTimestamp,
+  increment,
+  arrayUnion,
+  arrayRemove,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, CompanyMember, Invitacion } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, EjecucionBudgetLink, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, CompanyMember, Invitacion } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
 const EJECUCIONES_COLLECTION = 'ejecuciones';
+const BUDGET_LINKS_COLLECTION = 'budgetLinks';
 const TERCEROS_COLLECTION = 'terceros';
 const PROJECTS_COLLECTION = 'projects';
 const STATE_PROJECTS_COLLECTION = 'stateProject';
@@ -193,6 +199,8 @@ export function subscribeBudgets(
           fechaPresupuestado: data.fechaPresupuestado ?? '',
           estadoProyecto: data.estadoProyecto ?? 'Activo',
           archivado: data.archivado ?? false,
+          totalEjecutado: data.totalEjecutado ?? undefined,
+          linkedEjecuciones: Array.isArray(data.linkedEjecuciones) ? data.linkedEjecuciones : undefined,
         } as Budget;
       }));
     },
@@ -221,7 +229,8 @@ export function subscribeEjecuciones(
           tipo: data.tipo ?? 'ingreso',
           montoEjecutado: data.montoEjecutado ?? 0,
           fechaEjecutado: data.fechaEjecutado ?? '',
-          budgetId: data.budgetId ?? undefined,
+          cuentaId: data.cuentaId ?? undefined,
+          cuentaName: data.cuentaName ?? undefined,
           comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
           archivado: data.archivado ?? false,
         } as Ejecucion;
@@ -295,6 +304,124 @@ export async function updateBudget(companyId: string, budgetId: string, data: Pa
 
 export async function updateEjecucion(companyId: string, ejecucionId: string, data: Partial<Ejecucion>): Promise<void> {
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId), { ...data, updatedAt: serverTimestamp() });
+}
+
+// ── Budget Links (N:M junction) ──
+
+export function subscribeBudgetLinks(
+  companyId: string,
+  ejecucionId: string,
+  onData: (links: EjecucionBudgetLink[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          companyId: data.companyId ?? '',
+          budgetId: data.budgetId ?? '',
+          monto: data.monto ?? 0,
+          createdAt: data.createdAt ?? undefined,
+        } as EjecucionBudgetLink;
+      }));
+    },
+    onError,
+  );
+}
+
+export async function addBudgetLink(
+  companyId: string,
+  ejecucionId: string,
+  data: Omit<EjecucionBudgetLink, 'id' | 'createdAt'>,
+): Promise<string> {
+  const docRef = await addDoc(
+    collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION),
+    { ...data, createdAt: serverTimestamp() },
+  );
+  // Denormalize on the budget: totalEjecutado + linkedEjecuciones
+  await updateDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId),
+    {
+      totalEjecutado: increment(data.monto),
+      linkedEjecuciones: arrayUnion({ ejecucionId, monto: data.monto }),
+    },
+  );
+  return docRef.id;
+}
+
+export async function removeBudgetLink(
+  companyId: string,
+  ejecucionId: string,
+  linkId: string,
+): Promise<void> {
+  // Read the link to get budgetId and monto before deleting
+  const linkRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION, linkId);
+  const linkSnap = await getDoc(linkRef);
+  const linkData = linkSnap.data() as EjecucionBudgetLink | undefined;
+  await deleteDoc(linkRef);
+  // Decrement denormalized data on the budget
+  if (linkData?.budgetId && linkData?.monto) {
+    await updateDoc(
+      doc(db, COMPANIES_COLLECTION, companyId, 'budgets', linkData.budgetId),
+      {
+        totalEjecutado: increment(-linkData.monto),
+        linkedEjecuciones: arrayRemove({ ejecucionId, monto: linkData.monto }),
+      },
+    );
+  }
+}
+
+export function subscribeEjecucionesByBudget(
+  companyId: string,
+  budgetId: string,
+  onData: (ejecuciones: Ejecucion[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  // Subscribe to the budget doc to read denormalized linkedEjecuciones (no collectionGroup needed)
+  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, 'budgets', budgetId);
+  return onSnapshot(
+    budgetRef,
+    async (snapshot) => {
+      const data = snapshot.data();
+      const linked = (data?.linkedEjecuciones as Array<{ ejecucionId: string; monto: number }>) ?? [];
+      if (linked.length === 0) {
+        onData([]);
+        return;
+      }
+      try {
+        const linkedIds = new Set(linked.map(l => l.ejecucionId));
+        const ejecucionesSnap = await getDocs(collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION));
+        const filtered = ejecucionesSnap.docs
+          .filter((d) => linkedIds.has(d.id))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              descripcion: data.descripcion ?? '',
+              projectId: data.projectId ?? '',
+              projectName: data.projectName ?? data.proyectoAsignado ?? '',
+              entityId: data.entityId ?? '',
+              entityName: data.entityName ?? data.clienteOProveedor ?? '',
+              entityType: data.entityType ?? '',
+              tipo: data.tipo ?? 'ingreso',
+              montoEjecutado: data.montoEjecutado ?? 0,
+              fechaEjecutado: data.fechaEjecutado ?? '',
+              cuentaId: data.cuentaId ?? undefined,
+              cuentaName: data.cuentaName ?? undefined,
+              comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
+              archivado: data.archivado ?? false,
+            } as Ejecucion;
+          });
+        onData(filtered);
+      } catch (err) {
+        onError?.(err as Error);
+      }
+    },
+    onError,
+  );
 }
 
 export async function updateProject(companyId: string, projectId: string, data: Partial<Project>): Promise<void> {
