@@ -34,6 +34,9 @@ vi.mock('@/lib/firestore', () => ({
   subscribeProjects: vi.fn(() => mockUnsub),
   subscribeTerceros: vi.fn(() => mockUnsub),
   subscribeSettings: vi.fn(() => mockUnsub),
+  subscribeCompanySettings: vi.fn(() => mockUnsub),
+  subscribeCuentasBancarias: vi.fn(() => mockUnsub),
+  subscribeExtractos: vi.fn(() => mockUnsub),
   subscribeBudgets: vi.fn(() => mockUnsub),
 }));
 

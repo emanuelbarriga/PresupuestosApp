@@ -11,6 +11,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // ── Collection group rule for members — allows users to find their own membership ──
+    // This is required by subscribeUserCompanies which uses collectionGroup('members') where id == uid
+    match /{path=**}/members/{doc} {
+      allow read: if request.auth != null && resource.data.id == request.auth.uid;
+    }
+
     // ── Global user profiles (identity agnostic to companies) ──
     match /users/{userId} {
       allow read: if request.auth != null;
@@ -34,10 +40,12 @@ service cloud.firestore {
       match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
 
-      // Members subcollection — API Routes write via firebase-admin (bypasses rules)
+      // Members subcollection — managed by company admins
       match /members/{doc} {
         allow read: if isMember(companyId);
-        allow write: if false; // Only Admin SDK writes memberships
+        allow create: if isAdmin(companyId); // Admins can add members directly
+        allow update: if isAdmin(companyId); // Admins can update any member fields
+        allow delete: if isAdmin(companyId); // Admins can remove members
       }
     }
 
@@ -49,13 +57,26 @@ service cloud.firestore {
     }
 
     // ── Invitations ──
-    // Admin creates; invited user reads/accepts by email match; no deletions.
+    // Admin creates; invited user reads/accepts by email match.
+    // Creator, invited user, or company admin can delete.
     match /invitations/{invitationId} {
       allow create: if request.auth != null;
-      allow read, update: if request.auth != null &&
-        (request.auth.uid == resource.data.invitedBy ||
-         request.auth.token.email == resource.data.email);
-      allow delete: if false;
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.invitedBy ||
+        request.auth.token.email == resource.data.email ||
+        exists(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid))
+      );
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.invitedBy ||
+        request.auth.token.email == resource.data.email ||
+        exists(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid))
+      );
+      allow delete: if request.auth != null && (
+        request.auth.uid == resource.data.invitedBy ||
+        request.auth.token.email == resource.data.email ||
+        (exists(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     // ── TRANSITIONAL RULES ──

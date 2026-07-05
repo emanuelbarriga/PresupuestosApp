@@ -161,6 +161,7 @@ export interface CompanyMember {
   email: string;
   role: UserRole;
   joinedAt: string;
+  blocked?: boolean;
 }
 
 export interface Invitacion {
@@ -172,6 +173,9 @@ export interface Invitacion {
   status: 'pendiente' | 'aceptada';
   invitedBy: string;   // UID of admin who invited
   createdAt: string;
+  expiresAt?: string;        // NEW — 7 days from creation
+  acceptedAt?: string;       // NEW — when accepted
+  acceptedBy?: string;       // NEW — who accepted
 }
 
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
@@ -213,7 +217,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role' | 'create-company';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }
@@ -224,7 +228,9 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'provider'; record: Provider }
   | { mode: 'edit'; type: 'tercero'; record: Tercero }
   | { mode: 'edit'; type: 'cuenta'; record: CuentaBancaria }
-  | { mode: 'edit'; type: 'extracto'; record: ExtractoBancario };
+  | { mode: 'edit'; type: 'extracto'; record: ExtractoBancario }
+  | { mode: 'edit'; type: 'invite-user'; record: Invitacion }
+  | { mode: 'edit'; type: 'edit-user-role'; record: { userId: string; email: string; memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[] } };
 
 export type NavScreen =
   | { id: string; type: 'data'; data: SidepanelData }

@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Company } from '@/lib/types';
-import { subscribeCompanies } from '@/lib/firestore';
+import { Company, UserRole } from '@/lib/types';
+import { subscribeUserCompanies } from '@/lib/firestore';
 import { Building2 } from 'lucide-react';
 
 export type CompanyMode = 'individual' | 'conjunto';
@@ -10,6 +10,8 @@ export type CompanyMode = 'individual' | 'conjunto';
 interface CompanyContextValue {
   selectedCompany: Company | null;
   companies: Company[];
+  userRole: UserRole | null;
+  roleLoading: boolean;
   mode: CompanyMode;
   setCompany: (id: string) => void;
   setMode: (mode: CompanyMode) => void;
@@ -21,17 +23,38 @@ const CompanyContext = createContext<CompanyContextValue | undefined>(undefined)
 export function CompanyProvider({
   children,
   companyId,
+  userRole,
+  userId,
 }: {
   children: ReactNode;
   companyId: string;
+  userRole: string | null;
+  userId: string | null;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [mode, setMode] = useState<CompanyMode>(companyId === 'all' ? 'conjunto' : 'individual');
   const [ready, setReady] = useState(false);
 
+  // Store userRole from prop, allowing future refinement from Firestore
+  const [effectiveRole, setEffectiveRole] = useState<UserRole | null>(
+    (userRole ?? null) as UserRole | null,
+  );
+
   useEffect(() => {
-    const unsub = subscribeCompanies(
+    setEffectiveRole((userRole ?? null) as UserRole | null);
+  }, [userRole]);
+
+  useEffect(() => {
+    if (!userId) {
+      setCompanies([]);
+      setSelectedCompany(null);
+      setReady(true);
+      return;
+    }
+
+    const unsub = subscribeUserCompanies(
+      userId,
       (data) => {
         setCompanies(data);
 
@@ -58,7 +81,7 @@ export function CompanyProvider({
     );
 
     return () => unsub();
-  }, [companyId]);
+  }, [companyId, userId]);
 
   const handleSetCompany = (id: string) => {
     const company = companies.find((c) => c.id === id);
@@ -80,16 +103,25 @@ export function CompanyProvider({
   if (!ready) return null;
 
   if (companies.length === 0) {
+    const isCollab = userRole === 'colaborador';
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center max-w-sm w-full text-center">
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4">
             <Building2 size={24} />
           </div>
-          <h2 className="text-lg font-bold text-slate-800 mb-1">Sin empresas</h2>
-          <p className="text-sm text-slate-500">
-            No hay empresas registradas en el sistema. Creá una empresa en Firestore para comenzar.
+          <h2 className="text-lg font-bold text-slate-800 mb-1">Sin acceso</h2>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            {isCollab
+              ? 'No tenés acceso a ninguna empresa. Comunicate con el administrador para que te asigne una.'
+              : 'No tenés empresas disponibles. Comunicate con un administrador para que te dé acceso.'}
           </p>
+          <button
+            onClick={() => window.location.href = '/select-company'}
+            className="mt-5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+          >
+            ← Volver al selector de empresas
+          </button>
         </div>
       </div>
     );
@@ -102,6 +134,8 @@ export function CompanyProvider({
       value={{ 
         selectedCompany, 
         companies, 
+        userRole: effectiveRole,
+        roleLoading: false,
         mode,
         setCompany: handleSetCompany, 
         setMode: handleSetMode,

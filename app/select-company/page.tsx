@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { subscribeUserCompanies, subscribeInvitations } from '@/lib/firestore';
+import { db } from '@/lib/firebase';
+import { collection, query, where, collectionGroup, onSnapshot } from 'firebase/firestore';
 import type { Company, Invitacion } from '@/lib/types';
-import Link from 'next/link';
+import { Building2 } from 'lucide-react';
 
 export default function SelectCompanyPage() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -17,6 +19,9 @@ export default function SelectCompanyPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [autoRedirected, setAutoRedirected] = useState(false);
+  const [isAdminSomewhere, setIsAdminSomewhere] = useState(false);
+  const [firstAdminCompany, setFirstAdminCompany] = useState<string | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -54,11 +59,45 @@ export default function SelectCompanyPage() {
         )
       : undefined;
 
+    // Check if user is admin in any company
+    const membersQuery = query(
+      collectionGroup(db, 'members'),
+      where('id', '==', user.uid),
+    );
+    const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
+      let isAdmin = false;
+      let firstAdmin = '';
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        if (data.role === 'admin' && data.blocked !== true) {
+          isAdmin = true;
+          if (!firstAdmin) {
+            // Extract companyId from path: companies/{companyId}/members/{userId}
+            const segments = doc.ref.path.split('/');
+            firstAdmin = segments[1];
+          }
+        }
+      }
+      setIsAdminSomewhere(isAdmin);
+      setFirstAdminCompany(firstAdmin || null);
+    });
+
     return () => {
       unsubCompanies();
       unsubInvitations?.();
+      unsubMembers();
     };
   }, [user]);
+
+  // Auto-redirect if only one company and no pending invitations
+  useEffect(() => {
+    if (autoRedirected) return;
+    if (dataLoading) return;
+    if (companies.length === 1 && invitations.length === 0) {
+      setAutoRedirected(true);
+      router.replace(`/${companies[0].id}/dashboard`);
+    }
+  }, [companies, invitations, dataLoading, autoRedirected, router]);
 
   const handleAccept = async (invitationId: string) => {
     if (!user) return;
@@ -198,24 +237,33 @@ export default function SelectCompanyPage() {
               </div>
             )}
 
-            {/* Empty state */}
+            {/* Empty state — inscrito sin empresas ni invitaciones */}
             {!loadError && !hasContent && (
               <div className="text-center py-12">
-                <p className="text-sm text-slate-500 mb-6">
-                  Todavía no tenés empresas ni invitaciones pendientes.
+                <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <Building2 size={24} />
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">
+                  No tenés acceso a ninguna empresa
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                  Comunicate con un administrador para que te invite a una empresa.
+                  Cuando recibas la invitación, vas a poder aceptarla desde acá.
                 </p>
               </div>
             )}
 
-            {/* Create company */}
-            <div className="pt-2">
-              <button
-                onClick={() => router.push('/onboarding')}
-                className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-4 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all"
-              >
-                + Crear nueva empresa
-              </button>
-            </div>
+            {/* Create company — only for admins */}
+            {isAdminSomewhere && firstAdminCompany && (
+              <div className="pt-2">
+                <button
+                  onClick={() => router.push(`/${firstAdminCompany}/dashboard?create-company=1`)}
+                  className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-4 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all"
+                >
+                  + Crear nueva empresa
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

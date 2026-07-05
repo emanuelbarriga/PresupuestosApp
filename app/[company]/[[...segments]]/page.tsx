@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, use, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
-import { CompanyProvider } from '@/context/CompanyContext';
 import {
   subscribeBudgets,
   subscribeEjecuciones,
@@ -34,6 +33,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
 import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
+import { Configuracion } from '@/components/Configuracion';
 import { EstadoResultados } from '@/components/EstadoResultados';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
@@ -52,6 +52,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
   if (main === 'estado-resultados') return { view: 'EstadoResultados' };
+  if (main === 'configuracion') return { view: 'Configuración' };
   return { view: 'Dashboard' };
 }
 
@@ -291,6 +292,17 @@ export default function CompanyPage({ params }: Props) {
     setSidebarCollapsed(false);
   }, []);
 
+  // Auto-open create-company form when arriving with ?create-company=1
+  const createTriggered = useRef(false);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (createTriggered.current) return;
+    if (searchParams.get('create-company') === '1') {
+      createTriggered.current = true;
+      pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'create-company' } });
+    }
+  }, [searchParams, pushScreen]);
+
   const closePanel = () => {
     clearScreens();
   };
@@ -499,8 +511,7 @@ export default function CompanyPage({ params }: Props) {
   const handleSidepanelBack = () => popScreen();
 
   return (
-    <CompanyProvider companyId={companyId}>
-      <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
+    <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
         <Sidebar collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} activeView={activeView}
           onViewChange={(view) => navigateTo(view)} basePath={`/${companyId}`} />
 
@@ -520,6 +531,9 @@ export default function CompanyPage({ params }: Props) {
             {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
               <Construction view={activeView} />
             )}
+            {activeView === 'Configuración' && (
+              <Configuracion onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
+            )}
           </div>
 
           <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm} customizeOpen={customizeOpen}
@@ -535,6 +549,5 @@ export default function CompanyPage({ params }: Props) {
             onSearchChange={setProjectSearch} />
         </main>
       </div>
-    </CompanyProvider>
   );
 }

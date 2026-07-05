@@ -5,6 +5,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -138,6 +139,34 @@ export function subscribeSettings(
 
 export async function updateSettings(data: Partial<SettingsCategorias>): Promise<void> {
   await updateDoc(doc(db, 'settings', 'categorias'), { ...data, updatedAt: serverTimestamp() });
+}
+
+export function subscribeCompanySettings(
+  companyId: string,
+  onData: (data: SettingsCategorias) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, COMPANIES_COLLECTION, companyId, 'settings', 'categorias'),
+    (snapshot) => {
+      const d = snapshot.data();
+      if (d) {
+        const normalize = (items: any) => {
+          if (!items) return [];
+          if (typeof items[0] === 'string') return items.map((name: string, i: number) => ({ name, color: '#6366f1', order: i }));
+          return items;
+        };
+        onData({
+          stateProject: normalize(d.stateProject) ?? [],
+          tipoProyectos: normalize(d.tipoProyectos) ?? [],
+          unidades: normalize(d.unidades) ?? [],
+          tipoComprobante: normalize(d.tipoComprobante) ?? [],
+          updatedAt: d.updatedAt,
+        } as SettingsCategorias);
+      }
+    },
+    onError,
+  );
 }
 
 export function subscribeBudgets(
@@ -376,7 +405,13 @@ export function subscribeUserCompanies(
   return onSnapshot(
     q,
     async (snapshot) => {
-      const companyIds = snapshot.docs.map((docSnap) => {
+      // Filter out blocked members
+      const activeDocs = snapshot.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        return data.blocked !== true;
+      });
+
+      const companyIds = activeDocs.map((docSnap) => {
         const segments = docSnap.ref.path.split('/');
         return segments[1]; // companies/{companyId}/members/{userId}
       });
@@ -407,7 +442,13 @@ export async function getUserCompaniesSnapshot(userId: string): Promise<Company[
   );
   const snapshot = await getDocs(q);
 
-  const companyIds = snapshot.docs.map((docSnap) => {
+  // Filter out blocked members
+  const activeDocs = snapshot.docs.filter((docSnap) => {
+    const data = docSnap.data();
+    return data.blocked !== true;
+  });
+
+  const companyIds = activeDocs.map((docSnap) => {
     const segments = docSnap.ref.path.split('/');
     return segments[1];
   });
@@ -457,9 +498,67 @@ export function subscribeInvitations(
 }
 
 export async function createInvitation(invitation: Omit<Invitacion, 'id'>): Promise<string> {
-  const docRef = await addDoc(
-    collection(db, INVITATIONS_COLLECTION),
-    { ...invitation, createdAt: serverTimestamp() },
-  );
+  const docRef = await addDoc(collection(db, INVITATIONS_COLLECTION), invitation);
   return docRef.id;
+}
+
+export function subscribeCompanyInvitations(
+  companyId: string,
+  onData: (invitations: Invitacion[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, INVITATIONS_COLLECTION),
+    where('companyId', '==', companyId),
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Invitacion));
+    },
+    onError,
+  );
+}
+
+// ── Member Management ──
+
+export async function deleteMemberFromCompany(companyId: string, memberId: string): Promise<void> {
+  await deleteDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId));
+}
+
+export async function blockMember(companyId: string, memberId: string, blocked: boolean): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { blocked });
+}
+
+export async function deleteInvitation(invitationId: string): Promise<void> {
+  await deleteDoc(doc(db, INVITATIONS_COLLECTION, invitationId));
+}
+
+export async function updateInvitation(
+  invitationId: string,
+  data: { role?: string; expiresAt?: string },
+): Promise<void> {
+  await updateDoc(doc(db, INVITATIONS_COLLECTION, invitationId), data);
+}
+
+export async function updateMemberRole(
+  companyId: string,
+  memberId: string,
+  role: string,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { role });
+}
+
+export async function addMemberToCompany(
+  companyId: string,
+  memberId: string,
+  email: string,
+  role: string = 'colaborador',
+): Promise<void> {
+  await setDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), {
+    id: memberId,
+    email,
+    role,
+    joinedAt: new Date().toISOString(),
+  });
 }
