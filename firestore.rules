@@ -43,7 +43,8 @@ service cloud.firestore {
       // Members subcollection — API Routes write via firebase-admin (bypasses rules)
       match /members/{doc} {
         allow read: if isMember(companyId);
-        allow create, update: if false; // Only Admin SDK writes memberships
+        allow create: if false; // Only Admin SDK creates memberships
+        allow update: if isAdmin(companyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked']); // Admins can only toggle blocked
         allow delete: if isAdmin(companyId); // Admins can remove members
       }
     }
@@ -56,7 +57,8 @@ service cloud.firestore {
     }
 
     // ── Invitations ──
-    // Admin creates; invited user reads/accepts by email match; no deletions.
+    // Admin creates; invited user reads/accepts by email match.
+    // Creator, invited user, or company admin can delete.
     match /invitations/{invitationId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && (
@@ -69,7 +71,12 @@ service cloud.firestore {
         request.auth.token.email == resource.data.email ||
         exists(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid))
       );
-      allow delete: if false;
+      allow delete: if request.auth != null && (
+        request.auth.uid == resource.data.invitedBy ||
+        request.auth.token.email == resource.data.email ||
+        (exists(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/companies/$(resource.data.companyId)/members/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     // ── TRANSITIONAL RULES ──
