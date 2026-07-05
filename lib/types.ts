@@ -217,7 +217,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role' | 'create-company';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }

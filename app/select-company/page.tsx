@@ -20,6 +20,7 @@ export default function SelectCompanyPage() {
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [autoRedirected, setAutoRedirected] = useState(false);
   const [isAdminSomewhere, setIsAdminSomewhere] = useState(false);
+  const [firstAdminCompany, setFirstAdminCompany] = useState<string | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -63,11 +64,21 @@ export default function SelectCompanyPage() {
       where('id', '==', user.uid),
     );
     const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
-      const isAdmin = snapshot.docs.some((doc) => {
+      let isAdmin = false;
+      let firstAdmin = '';
+      for (const doc of snapshot.docs) {
         const data = doc.data();
-        return data.role === 'admin' && data.blocked !== true;
-      });
+        if (data.role === 'admin' && data.blocked !== true) {
+          isAdmin = true;
+          if (!firstAdmin) {
+            // Extract companyId from path: companies/{companyId}/members/{userId}
+            const segments = doc.ref.path.split('/');
+            firstAdmin = segments[1];
+          }
+        }
+      }
       setIsAdminSomewhere(isAdmin);
+      setFirstAdminCompany(firstAdmin || null);
     });
 
     return () => {
@@ -235,10 +246,10 @@ export default function SelectCompanyPage() {
             )}
 
             {/* Create company — only for admins */}
-            {isAdminSomewhere && (
+            {isAdminSomewhere && firstAdminCompany && (
               <div className="pt-2">
                 <button
-                  onClick={() => router.push('/onboarding')}
+                  onClick={() => router.push(`/${firstAdminCompany}/dashboard?create-company=1`)}
                   className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-4 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all"
                 >
                   + Crear nueva empresa

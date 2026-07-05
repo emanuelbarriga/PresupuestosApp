@@ -5,7 +5,7 @@ import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
@@ -717,6 +717,129 @@ function EditUserRoleForm({
   );
 }
 
+// ── Create Company Form (admin only) ──
+
+function CreateCompanyForm({
+  onBack,
+  onClose,
+}: {
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const { user } = useAuth();
+  const [companyName, setCompanyName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [createdCompanyId, setCreatedCompanyId] = useState('');
+
+  const handleCreate = async () => {
+    if (!companyName.trim()) {
+      setError('El nombre de la empresa es obligatorio');
+      return;
+    }
+    if (!user) return;
+
+    setSaving(true);
+    setError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/companies/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ companyName: companyName.trim() }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error || 'Error al crear la empresa');
+        return;
+      }
+
+      setCreatedCompanyId(body.companyId);
+      setSuccess(true);
+    } catch (err: any) {
+      setError(err?.message || 'Error de conexión');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <PanelHeader title="Crear empresa" canGoBack={true} onBack={onBack} onClose={onClose} />
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Building2 size={22} className="text-emerald-600" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">¡Empresa creada!</p>
+            <p className="text-xs text-slate-500 text-center">
+              <strong>{companyName}</strong> fue creada exitosamente.
+            </p>
+            <button
+              onClick={() => {
+                window.location.href = `/${createdCompanyId}/dashboard`;
+              }}
+              className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 px-6 text-xs font-bold transition-colors"
+            >
+              Ir a {companyName}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+              <Building2 size={18} className="text-indigo-500 shrink-0" />
+              <p className="text-xs text-slate-600">
+                Como administrador, podés crear una empresa nueva. Serás el administrador automáticamente.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                Nombre de la empresa *
+              </label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Ej: Constructora S.A."
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              />
+              <p className="text-[10px] text-slate-400 mt-1.5">
+                El ID se generará automáticamente a partir del nombre.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-rose-700">{error}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      {!success && (
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button
+            onClick={handleCreate}
+            disabled={saving || !companyName.trim()}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors"
+          >
+            {saving ? 'Creando...' : 'Crear empresa'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
   const { user: currentUser } = useAuth();
   const { selectedCompany, companies } = useCompany();
@@ -1163,6 +1286,16 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         onBack={onBack}
         onClose={onClose}
         form={form}
+      />
+    );
+  }
+
+  // ── Create Company Form (admin only) ──
+  if (ft === 'create-company') {
+    return (
+      <CreateCompanyForm
+        onBack={onBack}
+        onClose={onClose}
       />
     );
   }

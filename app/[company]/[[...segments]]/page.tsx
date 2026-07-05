@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, use, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
@@ -291,6 +291,17 @@ export default function CompanyPage({ params }: Props) {
     setNavStack([]);
     setSidebarCollapsed(false);
   }, []);
+
+  // Auto-open create-company form when arriving with ?create-company=1
+  const createTriggered = useRef(false);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (createTriggered.current) return;
+    if (searchParams.get('create-company') === '1') {
+      createTriggered.current = true;
+      pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'create-company' } });
+    }
+  }, [searchParams, pushScreen]);
 
   const closePanel = () => {
     clearScreens();
