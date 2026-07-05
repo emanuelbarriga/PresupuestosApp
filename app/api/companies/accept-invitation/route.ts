@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invitation is already accepted' }, { status: 409 });
     }
 
+    if (invitation.expiresAt && new Date(invitation.expiresAt).getTime() < Date.now()) {
+      return NextResponse.json({ error: 'Invitation has expired' }, { status: 410 });
+    }
+
     const userEmail = decoded.email ?? '';
     if (invitation.email !== userEmail) {
       return NextResponse.json({ error: 'Email mismatch — this invitation was sent to a different email' }, { status: 403 });
