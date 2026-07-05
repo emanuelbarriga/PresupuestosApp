@@ -405,7 +405,13 @@ export function subscribeUserCompanies(
   return onSnapshot(
     q,
     async (snapshot) => {
-      const companyIds = snapshot.docs.map((docSnap) => {
+      // Filter out blocked members
+      const activeDocs = snapshot.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        return data.blocked !== true;
+      });
+
+      const companyIds = activeDocs.map((docSnap) => {
         const segments = docSnap.ref.path.split('/');
         return segments[1]; // companies/{companyId}/members/{userId}
       });
@@ -436,7 +442,13 @@ export async function getUserCompaniesSnapshot(userId: string): Promise<Company[
   );
   const snapshot = await getDocs(q);
 
-  const companyIds = snapshot.docs.map((docSnap) => {
+  // Filter out blocked members
+  const activeDocs = snapshot.docs.filter((docSnap) => {
+    const data = docSnap.data();
+    return data.blocked !== true;
+  });
+
+  const companyIds = activeDocs.map((docSnap) => {
     const segments = docSnap.ref.path.split('/');
     return segments[1];
   });

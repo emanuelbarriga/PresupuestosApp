@@ -40,10 +40,16 @@ export default function CompanyLayout({ children }: { children: React.ReactNode 
         const snapshot = await getUserCompaniesSnapshot(user.uid);
         const matchingCompany = snapshot.find(c => c.id === companyId);
         if (matchingCompany) {
-          // Fetch the actual role from the members doc
+          // Fetch the members doc to check blocked status and role
           try {
             const memberSnap = await getDoc(doc(db, 'companies', companyId, 'members', user.uid));
-            const role = memberSnap.data()?.role ?? 'colaborador';
+            const memberData = memberSnap.data();
+            if (memberData?.blocked === true) {
+              setMembershipState('denied');
+              setTimeout(() => router.replace('/select-company'), 2000);
+              return;
+            }
+            const role = memberData?.role ?? 'colaborador';
             setUserRole(role);
           } catch {
             setUserRole('colaborador'); // fallback — safer to deny
