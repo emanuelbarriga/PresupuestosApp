@@ -81,7 +81,7 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
               {/* Create company — admin only */}
               {userRole === 'admin' && (
                 <button
-                  onClick={() => router.push('/onboarding')}
+                  onClick={() => router.push(`/${selectedCompany?.id}/dashboard?create-company=1`)}
                   className="w-full text-left px-3 py-2 text-sm rounded-md transition-all flex items-center gap-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
                 >
                   <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 bg-indigo-100 text-indigo-600">
@@ -112,7 +112,7 @@ export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePat
             ))}
             {userRole === 'admin' && (
               <button
-                onClick={() => router.push('/onboarding')}
+                onClick={() => router.push(`/${selectedCompany?.id}/dashboard?create-company=1`)}
                 className="w-10 h-10 rounded-lg flex items-center justify-center transition-all bg-indigo-100 text-indigo-600 hover:bg-indigo-200"
                 title="Crear empresa"
               >
