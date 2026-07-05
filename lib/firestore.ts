@@ -521,3 +521,18 @@ export async function blockMember(companyId: string, memberId: string, blocked: 
 export async function deleteInvitation(invitationId: string): Promise<void> {
   await deleteDoc(doc(db, INVITATIONS_COLLECTION, invitationId));
 }
+
+export async function updateInvitation(
+  invitationId: string,
+  data: { role?: string; expiresAt?: string },
+): Promise<void> {
+  await updateDoc(doc(db, INVITATIONS_COLLECTION, invitationId), data);
+}
+
+export async function updateMemberRole(
+  companyId: string,
+  memberId: string,
+  role: string,
+): Promise<void> {
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { role });
+}

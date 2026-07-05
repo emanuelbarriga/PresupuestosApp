@@ -521,7 +521,7 @@ export default function CompanyPage({ params }: Props) {
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (
-              <Configuracion onAddNew={handleAddNew} />
+              <Configuracion onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
             )}
           </div>
 

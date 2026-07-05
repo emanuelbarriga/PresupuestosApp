@@ -217,7 +217,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }
@@ -228,7 +228,9 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'provider'; record: Provider }
   | { mode: 'edit'; type: 'tercero'; record: Tercero }
   | { mode: 'edit'; type: 'cuenta'; record: CuentaBancaria }
-  | { mode: 'edit'; type: 'extracto'; record: ExtractoBancario };
+  | { mode: 'edit'; type: 'extracto'; record: ExtractoBancario }
+  | { mode: 'edit'; type: 'invite-user'; record: Invitacion }
+  | { mode: 'edit'; type: 'edit-user-role'; record: { userId: string; email: string; memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[] } };
 
 export type NavScreen =
   | { id: string; type: 'data'; data: SidepanelData }

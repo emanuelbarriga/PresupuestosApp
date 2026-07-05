@@ -9,8 +9,9 @@ import {
   deleteMemberFromCompany,
   blockMember,
   deleteInvitation,
+  updateMemberRole,
 } from '@/lib/firestore';
-import { Company, CompanyMember, Invitacion, FormType } from '@/lib/types';
+import { Company, CompanyMember, Invitacion, FormType, ActiveForm } from '@/lib/types';
 import {
   Shield, Mail, Copy, Check, UserPlus, Clock, Trash2, Pencil, Ban, X,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ interface AggregatedInvitation extends Invitacion {
 
 interface ConfiguracionProps {
   onAddNew?: (type: FormType) => void;
+  onEditRecord?: (form: ActiveForm) => void;
 }
 
 // ── Internal per-company subscription state ──
@@ -45,7 +47,7 @@ interface CompanyData {
   isAdmin: boolean;
 }
 
-export function Configuracion({ onAddNew }: ConfiguracionProps) {
+export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
   const { user } = useAuth();
 
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
@@ -364,8 +366,22 @@ export function Configuracion({ onAddNew }: ConfiguracionProps) {
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Edit button */}
                           <button
+                            onClick={() => onEditRecord?.({
+                              mode: 'edit',
+                              type: 'edit-user-role',
+                              record: {
+                                userId: au.userId,
+                                email: au.email,
+                                memberships: au.memberships.map(m => ({
+                                  companyId: m.companyId,
+                                  companyName: m.companyName,
+                                  role: m.role,
+                                  blocked: m.blocked,
+                                })),
+                              },
+                            })}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Editar"
+                            title="Editar roles en empresas"
                           >
                             <Pencil size={14} />
                           </button>
@@ -508,7 +524,11 @@ export function Configuracion({ onAddNew }: ConfiguracionProps) {
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Edit */}
                             <button
-                              onClick={() => onAddNew?.('invite-user')}
+                              onClick={() => onEditRecord?.({
+                                mode: 'edit',
+                                type: 'invite-user',
+                                record: inv,
+                              })}
                               className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                               title="Editar"
                             >

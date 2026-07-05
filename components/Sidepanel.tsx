@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
@@ -237,6 +237,7 @@ function InviteUserForm({
   setSaving,
   onBack,
   onClose,
+  form,
 }: {
   currentUser: any;
   companies: any[];
@@ -245,13 +246,25 @@ function InviteUserForm({
   setSaving: (v: boolean) => void;
   onBack: () => void;
   onClose: () => void;
+  form?: ActiveForm;
 }) {
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>('colaborador');
+  const isEdit = form?.mode === 'edit' && form?.type === 'invite-user';
+  const record = (isEdit ? (form as any).record : null) as Invitacion | null;
+
+  const [inviteEmail, setInviteEmail] = useState(record?.email ?? '');
+  const [inviteRole, setInviteRole] = useState<'colaborador' | 'admin'>(
+    (record?.role as 'colaborador' | 'admin') ?? 'colaborador',
+  );
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>(
     selectedCompany ? [selectedCompany.id] : [],
   );
-  const [inviteExpiry, setInviteExpiry] = useState<1 | 3 | 7>(7);
+  const [inviteExpiry, setInviteExpiry] = useState<1 | 3 | 7>(() => {
+    if (!record?.expiresAt) return 7;
+    const remaining = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+    if (remaining <= 1) return 1;
+    if (remaining <= 3) return 3;
+    return 7;
+  });
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
@@ -264,6 +277,28 @@ function InviteUserForm({
   };
 
   const handleInvite = async () => {
+    if (isEdit && record) {
+      // Update existing invitation
+      setSaving(true);
+      setError('');
+      try {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + inviteExpiry);
+        await updateInvitation(record.id!, {
+          role: inviteRole,
+          expiresAt: expiresAt.toISOString(),
+        });
+        setSuccess(true);
+        setTimeout(() => onBack(), 1000);
+      } catch (err: any) {
+        setError(err?.message || 'Error al actualizar la invitación');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Create new invitation
     if (!inviteEmail.trim()) return;
     if (selectedCompanies.length === 0) {
       setError('Seleccioná al menos una empresa');
@@ -300,58 +335,69 @@ function InviteUserForm({
     }
   };
 
+  const title = isEdit ? 'Editar invitación' : 'Invitar colaborador';
+
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
-      <PanelHeader title="Invitar colaborador" canGoBack={true} onBack={onBack} onClose={onClose} />
+      <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {success ? (
           <div className="flex flex-col items-center justify-center py-10 gap-3">
             <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
-              <Send size={22} className="text-emerald-600" />
+              {isEdit ? <Pencil size={22} className="text-emerald-600" /> : <Send size={22} className="text-emerald-600" />}
             </div>
-            <p className="text-sm font-semibold text-slate-700">¡Invitación enviada!</p>
-            <p className="text-xs text-slate-500 text-center">
-              Se envió una invitación a <strong>{inviteEmail}</strong> como{' '}
-              {inviteRole === 'admin' ? 'Administrador' : 'Colaborador'}.
+            <p className="text-sm font-semibold text-slate-700">
+              {isEdit ? '¡Invitación actualizada!' : '¡Invitación enviada!'}
             </p>
           </div>
         ) : (
           <>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
-                Empresas *
-              </label>
-              <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                {companies.length === 0 ? (
-                  <p className="text-xs text-slate-400">No hay empresas disponibles</p>
-                ) : (
-                  companies.map((company) => (
-                    <label
-                      key={company.id}
-                      className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCompanies.includes(company.id)}
-                        onChange={() => toggleCompany(company.id)}
-                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-slate-700">{company.name}</span>
-                    </label>
-                  ))
+            {/* Companies section */}
+            {isEdit ? (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Empresa</label>
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <span className="text-sm text-slate-700">{(record as any)?.companyName ?? '—'}</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                  Empresas *
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                  {companies.length === 0 ? (
+                    <p className="text-xs text-slate-400">No hay empresas disponibles</p>
+                  ) : (
+                    companies.map((company) => (
+                      <label
+                        key={company.id}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCompanies.includes(company.id)}
+                          onChange={() => toggleCompany(company.id)}
+                          className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-slate-700">{company.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {selectedCompanies.length > 0 && (
+                  <p className="text-[10px] text-indigo-600 mt-1">
+                    {selectedCompanies.length} empresa{selectedCompanies.length > 1 ? 's' : ''} seleccionada
+                    {selectedCompanies.length > 1 ? 's' : ''}
+                  </p>
                 )}
               </div>
-              {selectedCompanies.length > 0 && (
-                <p className="text-[10px] text-indigo-600 mt-1">
-                  {selectedCompanies.length} empresa{selectedCompanies.length > 1 ? 's' : ''} seleccionada
-                  {selectedCompanies.length > 1 ? 's' : ''}
-                </p>
-              )}
-            </div>
+            )}
 
+            {/* Email */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                Correo electrónico *
+                Correo electrónico {isEdit ? '' : '*'}
               </label>
               <div className="relative">
                 <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -360,12 +406,17 @@ function InviteUserForm({
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="colaborador@ejemplo.com"
-                  className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
-                  autoFocus
+                  disabled={isEdit}
+                  className={clsx(
+                    'w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all',
+                    isEdit && 'bg-slate-50 text-slate-500 cursor-not-allowed',
+                  )}
+                  autoFocus={!isEdit}
                 />
               </div>
             </div>
 
+            {/* Role */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Rol</label>
               <div className="flex bg-slate-100 rounded-lg p-1">
@@ -401,6 +452,7 @@ function InviteUserForm({
               </p>
             </div>
 
+            {/* Expiry */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
                 Tiempo disponible
@@ -448,6 +500,25 @@ function InviteUserForm({
               </p>
             </div>
 
+            {/* Fecha de envío — solo en modo edición */}
+            {isEdit && record?.createdAt && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Enviada</label>
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <Clock size={14} className="text-slate-400 shrink-0" />
+                  <span className="text-sm text-slate-700">
+                    {new Date(record.createdAt).toLocaleDateString('es-CO', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
                 <p className="text-xs font-medium text-rose-700">{error}</p>
@@ -460,11 +531,185 @@ function InviteUserForm({
         <div className="p-6 border-t border-slate-100 shrink-0 space-y-2">
           <button
             onClick={handleInvite}
-            disabled={saving || !inviteEmail.trim() || selectedCompanies.length === 0}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2"
+            disabled={saving || (!isEdit && (!inviteEmail.trim() || selectedCompanies.length === 0))}
+            className={clsx(
+              'w-full text-white rounded-lg py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-2',
+              isEdit
+                ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400'
+                : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400',
+            )}
           >
-            <Send size={14} />
-            {saving ? 'Enviando...' : `Enviar invitación${selectedCompanies.length > 1 ? 'es' : ''}`}
+            {isEdit ? <Pencil size={14} /> : <Send size={14} />}
+            {saving
+              ? 'Guardando...'
+              : isEdit
+                ? 'Guardar cambios'
+                : `Enviar invitación${selectedCompanies.length > 1 ? 'es' : ''}`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Edit User Role Form ──
+
+interface UserMembership {
+  companyId: string;
+  companyName: string;
+  role: string;
+  active: boolean;
+}
+
+function EditUserRoleForm({
+  onBack,
+  onClose,
+  form,
+}: {
+  onBack: () => void;
+  onClose: () => void;
+  form: ActiveForm;
+}) {
+  const record = (form as any).record as {
+    userId: string;
+    email: string;
+    memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[];
+  };
+
+  const [memberships, setMemberships] = useState<UserMembership[]>(
+    record.memberships.map((m) => ({ ...m, active: !m.blocked })),
+  );
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+
+  const toggleMembership = (companyId: string) => {
+    setMemberships((prev) =>
+      prev.map((m) => (m.companyId === companyId ? { ...m, active: !m.active } : m)),
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const originalMap = new Map(record.memberships.map((om) => [om.companyId, om]));
+
+      for (const m of memberships) {
+        const original = originalMap.get(m.companyId);
+        if (!original) continue;
+
+        // Apply block/unblock based on toggle change
+        if (m.active !== !original.blocked) {
+          await blockMember(m.companyId, record.userId, !m.active);
+        }
+
+        // Apply role change
+        if (m.role !== original.role) {
+          await updateMemberRole(m.companyId, record.userId, m.role);
+        }
+      }
+      setSuccess(true);
+      setTimeout(() => onBack(), 1000);
+    } catch (err: any) {
+      setError(err?.message || 'Error al guardar los cambios');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <PanelHeader title="Gestionar colaborador" canGoBack={true} onBack={onBack} onClose={onClose} />
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Shield size={22} className="text-emerald-600" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">¡Permisos actualizados!</p>
+          </div>
+        ) : (
+          <>
+            {/* Email header */}
+            <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+              <Mail size={18} className="text-indigo-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-800 truncate">{record.email}</p>
+                <p className="text-[10px] text-slate-500">Colaborador</p>
+              </div>
+            </div>
+
+            {/* Memberships */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                Acceso a empresas
+              </label>
+              <div className="space-y-2">
+                {memberships.map((m) => (
+                  <div
+                    key={m.companyId}
+                    className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800">{m.companyName}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={clsx(
+                            'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold',
+                            m.role === 'admin'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-emerald-100 text-emerald-700',
+                          )}
+                        >
+                          {m.role === 'admin' ? (
+                            <Shield size={10} />
+                          ) : (
+                            <User size={10} />
+                          )}
+                          {m.role === 'admin' ? 'Admin' : 'Colaborador'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleMembership(m.companyId)}
+                      className={clsx(
+                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                        m.active ? 'bg-indigo-600' : 'bg-slate-300',
+                      )}
+                      role="switch"
+                      aria-checked={m.active}
+                    >
+                      <span
+                        className={clsx(
+                          'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                          m.active ? 'translate-x-4' : 'translate-x-0',
+                        )}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-rose-700">{error}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      {!success && (
+        <div className="p-6 border-t border-slate-100 shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors"
+          >
+            {saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
       )}
@@ -911,6 +1156,17 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     );
   }
 
+  // ── Edit User Role Form ──
+  if (ft === 'edit-user-role') {
+    return (
+      <EditUserRoleForm
+        onBack={onBack}
+        onClose={onClose}
+        form={form}
+      />
+    );
+  }
+
   // ── Invite User Form ──
   if (ft === 'invite-user') {
     return (
@@ -922,6 +1178,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         setSaving={setSaving}
         onBack={onBack}
         onClose={onClose}
+        form={form}
       />
     );
   }
