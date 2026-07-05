@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion } from '@/lib/types';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
 import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2 } from 'lucide-react';
 import clsx from 'clsx';
@@ -559,6 +559,7 @@ interface UserMembership {
   companyName: string;
   role: string;
   active: boolean;
+  isNew?: boolean; // newly added in this session
 }
 
 function EditUserRoleForm({
@@ -576,6 +577,10 @@ function EditUserRoleForm({
     memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[];
   };
 
+  const { companies: allCompanies } = useCompany();
+
+  const currentCompanyIds = new Set(record.memberships.map((m) => m.companyId));
+
   const [memberships, setMemberships] = useState<UserMembership[]>(
     record.memberships.map((m) => ({ ...m, active: !m.blocked })),
   );
@@ -583,10 +588,20 @@ function EditUserRoleForm({
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // Companies the user is NOT yet a member of
+  const availableCompanies = allCompanies.filter((c) => !currentCompanyIds.has(c.id));
+
   const toggleMembership = (companyId: string) => {
     setMemberships((prev) =>
       prev.map((m) => (m.companyId === companyId ? { ...m, active: !m.active } : m)),
     );
+  };
+
+  const addCompany = (companyId: string, companyName: string) => {
+    setMemberships((prev) => [
+      ...prev,
+      { companyId, companyName, role: 'colaborador', active: true, isNew: true },
+    ]);
   };
 
   const handleSave = async () => {
@@ -597,16 +612,19 @@ function EditUserRoleForm({
 
       for (const m of memberships) {
         const original = originalMap.get(m.companyId);
-        if (!original) continue;
 
-        // Apply block/unblock based on toggle change
-        if (m.active !== !original.blocked) {
-          await blockMember(m.companyId, record.userId, !m.active);
-        }
-
-        // Apply role change
-        if (m.role !== original.role) {
-          await updateMemberRole(m.companyId, record.userId, m.role);
+        if (m.isNew) {
+          // New membership — create directly
+          await addMemberToCompany(m.companyId, record.userId, record.email, m.role);
+        } else if (original) {
+          // Existing membership — block/unblock
+          if (m.active !== !original.blocked) {
+            await blockMember(m.companyId, record.userId, !m.active);
+          }
+          // Role change
+          if (m.role !== original.role) {
+            await updateMemberRole(m.companyId, record.userId, m.role);
+          }
         }
       }
       setSuccess(true);
@@ -640,20 +658,33 @@ function EditUserRoleForm({
               </div>
             </div>
 
-            {/* Memberships */}
+            {/* Current memberships */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
                 Acceso a empresas
               </label>
+              {memberships.length === 0 && (
+                <p className="text-xs text-slate-400 py-2">Sin empresas asignadas</p>
+              )}
               <div className="space-y-2">
                 {memberships.map((m) => (
                   <div
                     key={m.companyId}
-                    className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    className={clsx(
+                      'flex items-center justify-between p-3 rounded-lg transition-colors border',
+                      m.isNew
+                        ? 'border-emerald-300 bg-emerald-50'
+                        : 'border-slate-200 hover:bg-slate-50',
+                    )}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-800">{m.companyName}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
+                        {m.isNew && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            Nueva
+                          </span>
+                        )}
                         <span
                           className={clsx(
                             'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold',
@@ -693,6 +724,31 @@ function EditUserRoleForm({
                 ))}
               </div>
             </div>
+
+            {/* Available companies to add */}
+            {availableCompanies.length > 0 && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                  Agregar a otras empresas
+                </label>
+                <div className="space-y-1.5 max-h-44 overflow-y-auto border border-slate-200 rounded-lg p-2">
+                  {availableCompanies.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm text-slate-700">{c.name}</span>
+                      <button
+                        onClick={() => addCompany(c.id, c.name)}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">

@@ -548,3 +548,17 @@ export async function updateMemberRole(
 ): Promise<void> {
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { role });
 }
+
+export async function addMemberToCompany(
+  companyId: string,
+  memberId: string,
+  email: string,
+  role: string = 'colaborador',
+): Promise<void> {
+  await setDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), {
+    id: memberId,
+    email,
+    role,
+    joinedAt: new Date().toISOString(),
+  });
+}
