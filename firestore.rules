@@ -40,11 +40,11 @@ service cloud.firestore {
       match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
 
-      // Members subcollection — API Routes write via firebase-admin (bypasses rules)
+      // Members subcollection — managed by company admins
       match /members/{doc} {
         allow read: if isMember(companyId);
-        allow create: if false; // Only Admin SDK creates memberships
-        allow update: if isAdmin(companyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked']); // Admins can only toggle blocked
+        allow create: if isAdmin(companyId); // Admins can add members directly
+        allow update: if isAdmin(companyId); // Admins can update any member fields
         allow delete: if isAdmin(companyId); // Admins can remove members
       }
     }
