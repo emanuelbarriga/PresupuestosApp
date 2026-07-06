@@ -35,10 +35,14 @@ export function FormExtractoParseBtn({
   const handleParseClick = useCallback(async () => {
     setLoading(true);
     try {
-      // Extract PDF text using pdfjs-dist
+      // Extract PDF text using pdfjs-dist — fetch as ArrayBuffer first to avoid CORS issues
+      const response = await fetch(pdfUrl);
+      if (!response.ok) throw new Error(`Error al descargar el PDF: ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-      const loadingTask = pdfjs.getDocument(pdfUrl);
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
       const pages: string[] = [];
       for (let i = 1; i <= pdf.numPages; i++) {

@@ -19,9 +19,14 @@ const MAX_RETRIES = 3;
  * Extract text content from all pages of a PDF using pdfjs-dist.
  */
 async function extractPdfText(pdfUrl: string): Promise<string> {
+  // Fetch PDF as ArrayBuffer first (avoids CORS issues with pdfjs internal fetch)
+  const response = await fetch(pdfUrl);
+  if (!response.ok) throw new Error(`Error al descargar el PDF: ${response.status} ${response.statusText}`);
+  const arrayBuffer = await response.arrayBuffer();
+
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  const loadingTask = pdfjs.getDocument(pdfUrl);
+  const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;
 
   const pages: string[] = [];
