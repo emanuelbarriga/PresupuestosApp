@@ -28,6 +28,8 @@ import {
   updateCuentaBancaria,
   addExtracto,
   updateExtracto,
+  batchAddMovimientos,
+  updateExtractoStatus,
   deleteBudget, deleteEjecucion,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
@@ -502,9 +504,27 @@ export default function CompanyPage({ params }: Props) {
         case 'cuenta':
           await addCuentaBancaria(companyId, data as Omit<CuentaBancaria, 'id'>);
           break;
-        case 'extracto':
-          await addExtracto(companyId, data.accountId, data as Omit<ExtractoBancario, 'id'>);
+        case 'extracto': {
+          const pendingMovs = data._pendingMovimientos ? (data._pendingMovimientos as any[]) : undefined;
+          const pendingSaldoFinal = data._pendingSaldoFinal as number | undefined;
+          delete data._pendingMovimientos;
+          delete data._pendingSaldoFinal;
+
+          const extractoId = await addExtracto(companyId, data.accountId, data as Omit<ExtractoBancario, 'id'>);
+
+          // Save pre-parsed movements in one go
+          if (pendingMovs && pendingMovs.length > 0) {
+            await batchAddMovimientos(companyId, data.accountId, extractoId, pendingMovs);
+            const totalMov = pendingMovs.length;
+            // Update saldoFinal with the parsed value (source of truth)
+            await updateExtractoStatus(companyId, data.accountId, extractoId, 'Completado', {
+              totalMovimientosParseados: totalMov,
+              saldoInicial: Number(data.saldoInicial) || 0,
+              saldoFinal: pendingSaldoFinal ?? (Number(data.saldoFinal) || 0),
+            });
+          }
           break;
+        }
       }
     } else {
       switch (form.type) {

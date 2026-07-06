@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado, MovimientoBancarioInput } from '@/lib/types';
 import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
@@ -1310,36 +1310,126 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     const currentArchivo = archivoEnFields || existingArchivo;
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [archivoFile, setArchivoFile] = useState<File | null>(null);
-    const [uploadingPdf, setUploadingPdf] = useState(false);
+    const [parseoLoading, setParseoLoading] = useState(false);
+    const [preParseMovs, setPreParseMovs] = useState<MovimientoBancarioInput[] | null>(null);
+    const [preParseSaldoFinal, setPreParseSaldoFinal] = useState<number | null>(null);
 
-    const handlePdfSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // ── File select: store File reference only, NO upload yet ──
+    const handlePdfSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
       if (file.size > 10 * 1024 * 1024) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
-
-      // Upload immediately so the extracto save has the URL
-      setUploadingPdf(true);
-      try {
-        const path = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const result = await uploadFile(file, path);
-        const archivoData = { url: result.url, path: result.path, name: file.name, uploadedAt: new Date().toISOString() };
-        set('_archivoUploaded', JSON.stringify(archivoData));
-      } catch (err) {
-        console.error('Error uploading PDF:', err);
-        alert('Error al subir el PDF. Intentá de nuevo.');
-      } finally {
-        setUploadingPdf(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-
-      // Keep the File reference for direct parsing (no need to re-download)
       setArchivoFile(file);
+      set('_archivoPendiente', JSON.stringify({ name: file.name }));
+      if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const removeArchivo = () => {
-      set('_archivoUploaded', '');
       setArchivoFile(null);
+      setPreParseMovs(null);
+      setPreParseSaldoFinal(null);
+      set('_archivoPendiente', '');
+      set('_archivoUploaded', '');
+    };
+
+    // ── Parse: extract data from the File and auto-fill the form ──
+    const handleExtraerDatos = async () => {
+      if (!archivoFile) return;
+      setParseoLoading(true);
+      try {
+        const buffer = await archivoFile.arrayBuffer();
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+        const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+
+        const pages: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map((item: any) => item.str ?? '').join(' '));
+        }
+        const texto = pages.join('\n\n').trim();
+        if (!texto) throw new Error('PDF sin texto extraíble');
+
+        // Detect bank
+        const { detectarBanco, getParser } = await import('@/lib/parsers/index');
+        const banco = detectarBanco(texto);
+        if (banco === 'No detectado') {
+          const bancoManual = prompt('Banco no detectado. Ingresá el nombre del banco:', '');
+          if (!bancoManual) { setParseoLoading(false); return; }
+        }
+
+        const parser = getParser(banco);
+        const result = parser.parse(texto);
+
+        // Auto-fill form fields
+        if (result.context.periodoDesde) {
+          const parts = result.context.periodoDesde.split('-');
+          const mesNum = parseInt(parts[1], 10);
+          set('mes', MONTHS[mesNum - 1] || '');
+          set('anio', parts[0]);
+        }
+        set('saldoInicial', String(result.context.saldoInicial));
+        set('saldoFinal', String(result.context.saldoFinal));
+        set('estado', 'Completado');
+
+        // Store parsed movements for later batch save
+        const { reconciliar } = await import('@/lib/parsers/reconciliador');
+        const movs = reconciliar(result.movimientos, result.context.saldoInicial);
+        setPreParseMovs(movs);
+        setPreParseSaldoFinal(result.context.saldoFinal);
+
+        alert(`Datos extraídos: ${result.movimientos.length} movimientos, saldo inicial $${result.context.saldoInicial.toLocaleString('es-CO')}`);
+      } catch (err) {
+        console.error('Error parsing PDF:', err);
+        alert('Error al leer el PDF. Verificá que el archivo sea válido.');
+      } finally {
+        setParseoLoading(false);
+      }
+    };
+
+    // ── Override handleSubmit for extracto: upload → save → batch movements ──
+    const handleExtractoSubmit = async () => {
+      setSaving(true);
+      try {
+        const data: Record<string, any> = { ...fields };
+        data.anio = Number(data.anio) || new Date().getFullYear();
+        data.saldoInicial = Number(data.saldoInicial) || 0;
+        data.saldoFinal = Number(data.saldoFinal) || 0;
+        if (data._archivoUploaded) {
+          try { data.archivo = JSON.parse(data._archivoUploaded); } catch {}
+          delete data._archivoUploaded;
+        }
+        delete data._archivoPendiente;
+
+        // Upload PDF to Storage (only now, before saving extracto)
+        if (archivoFile) {
+          const uploadPath = `${companyId}/extractos/${crypto.randomUUID()}-${archivoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const uploadResult = await uploadFile(archivoFile, uploadPath);
+          data.archivo = { url: uploadResult.url, path: uploadResult.path, name: archivoFile.name, uploadedAt: new Date().toISOString() };
+        }
+
+        // Save extracto (creates the Firestore doc)
+        await onSubmit(form, data);
+
+        // If we have pre-parsed movements, save them now
+        if (preParseMovs && preParseMovs.length > 0 && data.archivo?.url) {
+          const accountId = data.accountId || (form.mode === 'edit' ? extractoRecord?.accountId : '');
+          if (accountId) {
+            // We need the extractoId — it was created by onSubmit which does popScreen().
+            // Since we can't get it synchronously, we store it in a temp field
+            // and let the page.tsx handler deal with it.
+            data._pendingMovimientos = preParseMovs;
+            data._pendingSaldoFinal = preParseSaldoFinal;
+          }
+        }
+      } catch (err) {
+        console.error('Error saving extracto:', err);
+        alert('Error al guardar el extracto.');
+      } finally {
+        setSaving(false);
+      }
     };
 
     return (
@@ -1360,62 +1450,59 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
               { value: 'Error de parseo', label: 'Error de parseo' },
             ]} />
 
-          {/* PDF Upload */}
+          {/* PDF: select + parse + auto-fill */}
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Extracto PDF</label>
             <input ref={fileInputRef} type="file" accept=".pdf"
               onChange={handlePdfSelected} className="hidden" />
-            {currentArchivo ? (
-              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileText size={16} className="text-indigo-500 shrink-0" />
-                  <span className="text-xs text-indigo-700 truncate">{currentArchivo.name}</span>
+            {archivoFile ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText size={16} className="text-indigo-500 shrink-0" />
+                    <span className="text-xs text-indigo-700 truncate">{archivoFile.name}</span>
+                    {preParseMovs && <span className="text-[9px] text-emerald-600 font-bold ml-1">✓ {preParseMovs.length} movs</span>}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={handleExtraerDatos} disabled={parseoLoading}
+                      className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all disabled:opacity-50" title="Extraer datos del PDF">
+                      {parseoLoading
+                        ? <span className="inline-block w-3 h-3 border-2 border-indigo-400 border-t-indigo-600 rounded-full animate-spin" />
+                        : <FileText size={14} />
+                      }
+                    </button>
+                    <button onClick={removeArchivo}
+                      className="p-1.5 rounded-lg text-indigo-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Quitar archivo">
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {currentArchivo.url && (
-                    <a href={currentArchivo.url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all" title="Ver PDF">
-                      <Eye size={14} />
-                    </a>
-                  )}
-                  <button onClick={removeArchivo}
-                    className="p-1.5 rounded-lg text-indigo-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Quitar archivo">
-                    <X size={14} />
-                  </button>
-                </div>
+                {!preParseMovs && !parseoLoading && (
+                  <p className="text-[10px] text-slate-400 italic text-center">Hacé click en el ícono de archivo para extraer los datos automáticamente</p>
+                )}
               </div>
             ) : (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingPdf}
-                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-400 disabled:border-slate-200 rounded-lg p-3 transition-colors text-xs text-slate-500 hover:text-indigo-600 disabled:text-slate-300"
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-lg p-3 transition-colors text-xs text-slate-500 hover:text-indigo-600"
               >
-                {uploadingPdf ? (
-                  <><span className="inline-block w-3 h-3 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin" /> Subiendo...</>
-                ) : (
-                  <><Upload size={14} /> Seleccionar PDF del extracto</>
-                )}
+                <Upload size={14} /> Seleccionar PDF del extracto
               </button>
             )}
           </div>
 
-          {(currentArchivo?.url || archivoFile) && f('estado') !== 'Conciliado' && (
-            <div className="flex justify-center pt-2">
-              <FormExtractoParseBtn
-                companyId={companyId}
-                accountId={extractoRecord?.accountId ?? ''}
-                extractoId={extractoRecord?.id ?? ''}
-                pdfUrl={currentArchivo?.url}
-                pdfFile={archivoFile ?? undefined}
-                storagePath={currentArchivo?.path}
-                estado={f('estado') as ExtractoEstado}
-              />
+          {preParseMovs && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+              <p className="text-[10px] font-bold text-emerald-700 uppercase">✓ Datos extraídos</p>
+              <p className="text-xs text-emerald-600">{preParseMovs.length} movimientos — saldo final ${preParseSaldoFinal?.toLocaleString('es-CO')}</p>
+              <p className="text-[9px] text-emerald-500 mt-1">Los movimientos se guardarán junto con el extracto</p>
             </div>
           )}
         </div>
         <div className="p-6 border-t border-slate-100 shrink-0">
-          <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
-            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+          <button onClick={handleExtractoSubmit} disabled={saving}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear y guardar' : 'Guardar cambios'}
           </button>
         </div>
       </div>
