@@ -1320,7 +1320,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
       try {
         const path = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
         const result = await uploadFile(file, path);
-        const archivoData = { url: result.url, name: file.name, uploadedAt: new Date().toISOString() };
+        const archivoData = { url: result.url, path: result.path, name: file.name, uploadedAt: new Date().toISOString() };
         set('_archivoUploaded', JSON.stringify(archivoData));
       } catch (err) {
         console.error('Error uploading PDF:', err);
@@ -1399,6 +1399,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
                 accountId={extractoRecord!.accountId}
                 extractoId={extractoRecord!.id}
                 pdfUrl={currentArchivo.url}
+                storagePath={currentArchivo.path}
                 estado={f('estado') as ExtractoEstado}
               />
             </div>

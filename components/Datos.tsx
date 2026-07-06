@@ -1222,6 +1222,7 @@ export function Datos({
                                                         accountId={ext.accountId}
                                                         extractoId={ext.id}
                                                         pdfUrl={ext.archivo.url}
+                                                        storagePath={ext.archivo.path}
                                                         estado={ext.estado}
                                                       />
                                                     )}

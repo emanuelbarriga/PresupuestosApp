@@ -23,11 +23,16 @@ vi.mock('@/lib/firestore', () => ({
   doc: vi.fn(),
 }));
 
+vi.mock('@/lib/downloadPdf', () => ({
+  downloadPdfBytes: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
+}));
+
 vi.mock('@/lib/types', () => ({}));
 
 // We need to mock pdfjs-dist too
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   getDocument: vi.fn(),
+  GlobalWorkerOptions: { workerSrc: '' },
 }));
 
 import { runParsePipeline } from '@/lib/parsers/parsePipeline';

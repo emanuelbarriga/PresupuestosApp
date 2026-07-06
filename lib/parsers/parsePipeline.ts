@@ -3,6 +3,7 @@ import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
 import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
+import { downloadPdfBytes } from '@/lib/downloadPdf';
 
 export interface PipelineResult {
   success: boolean;
@@ -18,11 +19,8 @@ const MAX_RETRIES = 3;
 /**
  * Extract text content from all pages of a PDF using pdfjs-dist.
  */
-async function extractPdfText(pdfUrl: string): Promise<string> {
-  // Fetch PDF as ArrayBuffer first (avoids CORS issues with pdfjs internal fetch)
-  const response = await fetch(pdfUrl);
-  if (!response.ok) throw new Error(`Error al descargar el PDF: ${response.status} ${response.statusText}`);
-  const arrayBuffer = await response.arrayBuffer();
+async function extractPdfText(pdfUrl: string, storagePath?: string): Promise<string> {
+  const arrayBuffer = await downloadPdfBytes(pdfUrl, storagePath);
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -86,6 +84,7 @@ export async function runParsePipeline(
   extractoId: string,
   pdfUrl: string,
   bancoConfirmado: Banco | null,
+  storagePath?: string,
 ): Promise<PipelineResult> {
   const errores: string[] = [];
 
@@ -102,8 +101,8 @@ export async function runParsePipeline(
     // Step 2: Extract PDF text
     let texto: string;
     try {
-      console.log('[PARSE-PIPELINE] Step 2: extracting PDF text from', pdfUrl);
-      texto = await extractPdfText(pdfUrl);
+      console.log('[PARSE-PIPELINE] Step 2: extracting PDF text from', pdfUrl, { storagePath });
+      texto = await extractPdfText(pdfUrl, storagePath);
       console.log('[PARSE-PIPELINE] PDF extracted', { length: texto.length, preview: texto.slice(0, 200) });
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;

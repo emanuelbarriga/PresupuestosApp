@@ -177,7 +177,7 @@ export interface ExtractoBancario {
   anio: number;
   saldoInicial: number;
   saldoFinal: number;
-  archivo?: { url: string; name: string; uploadedAt: string };
+  archivo?: { url: string; name: string; uploadedAt: string; path?: string };
   estado: ExtractoEstado;
   uploadedAt: string;
   totalMovimientosParseados?: number;

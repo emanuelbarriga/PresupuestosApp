@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import type { Banco, ExtractoEstado } from '@/lib/types';
 import { detectarBanco } from '@/lib/parsers/index';
 import { runParsePipeline } from '@/lib/parsers/parsePipeline';
+import { downloadPdfBytes } from '@/lib/downloadPdf';
 import { BankConfirmModal } from '@/components/bancos/BankConfirmModal';
 
 interface FormExtractoParseBtnProps {
@@ -11,6 +12,7 @@ interface FormExtractoParseBtnProps {
   accountId: string;
   extractoId: string;
   pdfUrl: string;
+  storagePath?: string;
   estado: ExtractoEstado;
   onComplete?: () => void;
 }
@@ -24,6 +26,7 @@ export function FormExtractoParseBtn({
   accountId,
   extractoId,
   pdfUrl,
+  storagePath,
   estado,
   onComplete,
 }: FormExtractoParseBtnProps) {
@@ -35,10 +38,8 @@ export function FormExtractoParseBtn({
   const handleParseClick = useCallback(async () => {
     setLoading(true);
     try {
-      // Extract PDF text using pdfjs-dist — fetch as ArrayBuffer first to avoid CORS issues
-      const response = await fetch(pdfUrl);
-      if (!response.ok) throw new Error(`Error al descargar el PDF: ${response.status}`);
-      const arrayBuffer = await response.arrayBuffer();
+      // Extract PDF text using pdfjs-dist — download via Firebase SDK (no CORS issues)
+      const arrayBuffer = await downloadPdfBytes(pdfUrl, storagePath);
 
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -63,7 +64,7 @@ export function FormExtractoParseBtn({
     } finally {
       setLoading(false);
     }
-  }, [pdfUrl]);
+  }, [pdfUrl, storagePath]);
 
   const handleConfirm = useCallback(async () => {
     setLoading(true);
@@ -76,6 +77,7 @@ export function FormExtractoParseBtn({
         extractoId,
         pdfUrl,
         selectedBank,
+        storagePath,
       );
 
       if (result.success) {
@@ -89,7 +91,7 @@ export function FormExtractoParseBtn({
     } finally {
       setLoading(false);
     }
-  }, [companyId, accountId, extractoId, pdfUrl, selectedBank, onComplete]);
+  }, [companyId, accountId, extractoId, pdfUrl, selectedBank, storagePath, onComplete]);
 
   const handleCancel = useCallback(() => {
     setShowModal(false);
