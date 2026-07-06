@@ -503,7 +503,7 @@ export default function CompanyPage({ params }: Props) {
           await addCuentaBancaria(companyId, data as Omit<CuentaBancaria, 'id'>);
           break;
         case 'extracto':
-          await addExtracto(companyId, data as Omit<ExtractoBancario, 'id'>);
+          await addExtracto(companyId, data.accountId, data as Omit<ExtractoBancario, 'id'>);
           break;
       }
     } else {
@@ -535,9 +535,11 @@ export default function CompanyPage({ params }: Props) {
         case 'cuenta':
           await updateCuentaBancaria(companyId, (form as any).record.id, data as Partial<CuentaBancaria>);
           break;
-        case 'extracto':
-          await updateExtracto(companyId, (form as any).record.id, data as Partial<ExtractoBancario>);
+        case 'extracto': {
+          const r = (form as any).record;
+          await updateExtracto(companyId, r.accountId, r.id, data as Partial<ExtractoBancario>);
           break;
+        }
       }
     }
     popScreen();

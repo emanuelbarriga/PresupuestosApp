@@ -185,14 +185,51 @@ export function Datos({
     const unsubs = [
       subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
       subscribeTerceros(setTerceros, (err) => console.error('Error loading terceros:', err)),
-      // TODO: Remove old global subscriber after confirming company-scoped path works
       subscribeSettings(setSettingsData, (err) => console.error('Error loading settings (global fallback):', err)),
       subscribeCompanySettings(companyId, setSettingsData, (err) => console.error('Error loading company settings:', err)),
       subscribeCuentasBancarias(companyId, setCuentas, (err) => console.error('Error loading cuentas:', err)),
-      subscribeExtractos(companyId, setExtractos, (err) => console.error('Error loading extractos:', err)),
     ];
     return () => unsubs.forEach((u) => u());
   }, [companyId]);
+
+  // Subscribe to extractos PER ACCOUNT (anidados bajo cuentasBancarias/{accountId}/extractos/)
+  useEffect(() => {
+    const currentMap = extractoUnsubRef.current;
+    const subscribed = new Set(currentMap.keys());
+    const active = new Set(cuentas.map(c => c.id));
+
+    // Unsubscribe removed accounts
+    for (const id of subscribed) {
+      if (!active.has(id)) {
+        const unsub = currentMap.get(id);
+        if (unsub) { unsub(); currentMap.delete(id); }
+      }
+    }
+
+    // Subscribe new accounts
+    for (const cuenta of cuentas) {
+      if (!currentMap.has(cuenta.id)) {
+        const unsub = subscribeExtractos(
+          companyId,
+          cuenta.id,
+          (exts) => {
+            setExtractos(prev => {
+              // Replace extractos for this account, keep others unchanged
+              const others = prev.filter(e => e.accountId !== cuenta.id);
+              return [...others, ...exts];
+            });
+          },
+          (err) => console.error('Error loading extractos for account', cuenta.id, err),
+        );
+        currentMap.set(cuenta.id, unsub);
+      }
+    }
+
+    return () => {
+      for (const [, unsub] of currentMap) unsub();
+      currentMap.clear();
+    };
+  }, [companyId, cuentas]);
 
   const handleTabClick = (tab: TabType) => {
     if (tab !== 'Presupuestos' && tab !== 'Ejecuciones') {

@@ -42,13 +42,15 @@ service cloud.firestore {
       match /ejecuciones/{doc} { allow read, write: if isMember(companyId); }
       match /projects/{doc} { allow read, write: if isMember(companyId); }
       match /cuentasBancarias/{doc} { allow read, write: if isMember(companyId); }
-      match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
 
       // BudgetLinks subcollection — same access as ejecuciones
       match /ejecuciones/{ejecucionId}/budgetLinks/{linkId} { allow read, write: if isMember(companyId); }
 
-      // Movimientos subcollection under extractos — same access as extractos
+      // Extractos anidados bajo cuentasBancarias/{accountId}/extractos/
+      match /cuentasBancarias/{accountId}/extractos/{extractoId} { allow read, write: if isMember(companyId); }
+
+      // Movimientos subcollection under extractos
       match /cuentasBancarias/{accountId}/extractos/{extractoId}/movimientos/{docId} { allow read, write: if isMember(companyId); }
 
       // Members subcollection — managed by company admins

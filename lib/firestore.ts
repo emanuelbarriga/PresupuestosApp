@@ -468,11 +468,12 @@ export function subscribeCuentasBancarias(
 
 export function subscribeExtractos(
   companyId: string,
+  accountId: string,
   onData: (extractos: ExtractoBancario[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION),
+    collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION),
     (snapshot) => {
       onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as ExtractoBancario));
     },
@@ -493,10 +494,11 @@ export async function addCuentaBancaria(
 
 export async function addExtracto(
   companyId: string,
+  accountId: string,
   data: Omit<ExtractoBancario, 'id'>,
 ): Promise<string> {
   const docRef = await addDoc(
-    collection(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION),
+    collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION),
     { ...data, createdAt: serverTimestamp() },
   );
   return docRef.id;
@@ -512,10 +514,11 @@ export async function updateCuentaBancaria(
 
 export async function updateExtracto(
   companyId: string,
+  accountId: string,
   extractoId: string,
   data: Partial<ExtractoBancario>,
 ): Promise<void> {
-  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION, extractoId), { ...data, updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId), { ...data, updatedAt: serverTimestamp() });
 }
 
 // ── Movimientos Bancarios (subcollection of extractos) ──
