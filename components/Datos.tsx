@@ -1227,7 +1227,15 @@ export function Datos({
                                                     )}
                                                   </td>
                                                   <td className="p-2 text-center">
-                                                    <EditBtn onClick={() => edit('extracto', ext)} />
+                                                    <div className="flex items-center justify-center gap-1">
+                                                      {ext.archivo?.url && (
+                                                        <a href={ext.archivo.url} target="_blank" rel="noopener noreferrer"
+                                                          className="text-slate-400 hover:text-indigo-600 transition-colors p-1" title="Ver PDF">
+                                                          <Eye size={14} />
+                                                        </a>
+                                                      )}
+                                                      <EditBtn onClick={() => edit('extracto', ext)} />
+                                                    </div>
                                                   </td>
                                                 </tr>
                                                 {isExtExpanded && (

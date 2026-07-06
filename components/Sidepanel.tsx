@@ -6,7 +6,7 @@ import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2 } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2, Eye } from 'lucide-react';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -1364,10 +1364,18 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
                   <FileText size={16} className="text-indigo-500 shrink-0" />
                   <span className="text-xs text-indigo-700 truncate">{currentArchivo.name}</span>
                 </div>
-                <button onClick={removeArchivo}
-                  className="p-1 hover:bg-indigo-100 rounded-lg transition-colors shrink-0 ml-2">
-                  <X size={14} className="text-indigo-400 hover:text-rose-500" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {currentArchivo.url && (
+                    <a href={currentArchivo.url} target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all" title="Ver PDF">
+                      <Eye size={14} />
+                    </a>
+                  )}
+                  <button onClick={removeArchivo}
+                    className="p-1.5 rounded-lg text-indigo-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Quitar archivo">
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
             ) : (
               <button
