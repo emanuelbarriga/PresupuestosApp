@@ -1,0 +1,92 @@
+import { describe, it, expect } from 'vitest';
+import { reconciliar } from '@/lib/parsers/reconciliador';
+import type { MovimientoBancarioInput } from '@/lib/types';
+
+function makeMov(overrides: Partial<MovimientoBancarioInput> & { ordinal: number }): MovimientoBancarioInput {
+  return {
+    fecha: '2026-01-01',
+    descripcion: 'test',
+    saldo: 0,
+    moneda: 'COP',
+    bancoOrigen: 'Bancolombia' as const,
+    ...overrides,
+  };
+}
+
+describe('reconciliar', () => {
+  it('reconciles all rows when saldos match', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 900 }),
+      makeMov({ ordinal: 2, credito: 200, saldo: 1100 }),
+      makeMov({ ordinal: 3, debito: 50, saldo: 1050 }),
+    ];
+    const result = reconciliar(movs, 1000);
+    expect(result).toHaveLength(3);
+    expect(result[0].requiereRevision).toBeFalsy();
+    expect(result[1].requiereRevision).toBeFalsy();
+    expect(result[2].requiereRevision).toBeFalsy();
+  });
+
+  it('marks row as requiereRevision when saldo does not match', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 900 }),   // 1000 - 100 = 900 ✓
+      makeMov({ ordinal: 2, credito: 200, saldo: 1300 }), // 900 + 200 = 1100 ≠ 1300 ✗
+      makeMov({ ordinal: 3, debito: 50, saldo: 1050 }),
+    ];
+    const result = reconciliar(movs, 1000);
+    expect(result[1].requiereRevision).toBe(true);
+    expect(result[0].requiereRevision).toBeFalsy();
+    expect(result[2].requiereRevision).toBeFalsy();
+  });
+
+  it('marks first row as requiereRevision when it fails', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 800 }),   // 1000 - 100 = 900 ≠ 800 ✗
+      makeMov({ ordinal: 2, credito: 200, saldo: 1000 }),
+    ];
+    const result = reconciliar(movs, 1000);
+    expect(result[0].requiereRevision).toBe(true);
+  });
+
+  it('uses default tolerance of 0.01', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 900.005 }),
+    ];
+    // 1000 - 100 = 900, difference is 0.005 which is within 0.01
+    const result = reconciliar(movs, 1000);
+    expect(result[0].requiereRevision).toBeFalsy();
+  });
+
+  it('uses custom tolerance when provided', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 899.99 }),
+    ];
+    // 1000 - 100 = 900, difference is 0.01 which is within 0.02
+    const result = reconciliar(movs, 1000, 0.02);
+    expect(result[0].requiereRevision).toBeFalsy();
+  });
+
+  it('fails when tolerance is exceeded', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 899.98 }),
+    ];
+    // 1000 - 100 = 900, difference is 0.02 which exceeds 0.01 default
+    const result = reconciliar(movs, 1000);
+    expect(result[0].requiereRevision).toBe(true);
+  });
+
+  it('handles rows with both debito and credito', () => {
+    // This is a theoretical case: a row with both columns populated
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, credito: 30, saldo: 930 }),
+    ];
+    // 1000 - 100 + 30 = 930 ✓
+    const result = reconciliar(movs, 1000);
+    expect(result[0].requiereRevision).toBeFalsy();
+  });
+
+  it('returns empty array for empty input', () => {
+    const result = reconciliar([], 0);
+    expect(result).toEqual([]);
+  });
+});
