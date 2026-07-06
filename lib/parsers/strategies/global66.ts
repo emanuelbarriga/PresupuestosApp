@@ -34,18 +34,25 @@ export class Global66Parser implements ExtractoParser {
     // Step 1: merge split amounts
     const merged = mergeAmounts(texto);
 
+    // pdfjs extrae cada página como UNA línea (sin \n internos), por lo que
+    // split('\n') da la página completa como un solo elemento. La fecha no
+    // está al inicio de la línea (el header está primero). Usamos split por
+    // lookahead para separar en bloques que empiezan con fecha.
+    const rowBlocks = merged.split(/(?=\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+
+    // Keep these for backwards compatibility: extractContext uses the full text
     const lines = merged.split('\n').map(l => l.trim()).filter(Boolean);
 
     const context = this.extractContext(lines);
 
-    // Filter: keep only transaction rows (lines starting with YYYY-MM-DD)
-    const rowLines = lines.filter(line => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/.test(line));
+    // Filter: keep only blocks that start with a date (skip header block)
+    const rows = rowBlocks.filter(block => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/.test(block.trim()));
 
     const movimientos: MovimientoBancarioInput[] = [];
     let ordinal = 0;
 
-    for (const line of rowLines) {
-      const mov = this.parseRow(line);
+    for (const row of rows) {
+      const mov = this.parseRow(row.trim());
       if (mov) {
         ordinal++;
         movimientos.push({ ...mov, ordinal });

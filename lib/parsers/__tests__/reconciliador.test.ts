@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import type { MovimientoBancarioInput } from '@/lib/types';
 
@@ -103,5 +103,35 @@ describe('reconciliar', () => {
   it('returns empty array for empty input', () => {
     const result = reconciliar([], 0);
     expect(result).toEqual([]);
+  });
+
+  describe('onProgress callback', () => {
+    it('invokes onProgress once per row with (current, total)', () => {
+      const movs: MovimientoBancarioInput[] = [
+        makeMov({ ordinal: 1, debito: 100, saldo: 900 }),
+        makeMov({ ordinal: 2, credito: 200, saldo: 1100 }),
+        makeMov({ ordinal: 3, debito: 50, saldo: 1050 }),
+      ];
+      const onProgress = vi.fn();
+      reconciliar(movs, 1000, 0.01, onProgress);
+
+      expect(onProgress).toHaveBeenCalledTimes(3);
+      expect(onProgress).toHaveBeenNthCalledWith(1, 1, 3);
+      expect(onProgress).toHaveBeenNthCalledWith(2, 2, 3);
+      expect(onProgress).toHaveBeenNthCalledWith(3, 3, 3);
+    });
+
+    it('does not invoke onProgress for empty input', () => {
+      const onProgress = vi.fn();
+      reconciliar([], 0, 0.01, onProgress);
+      expect(onProgress).not.toHaveBeenCalled();
+    });
+
+    it('works without onProgress (optional param, backward compatible)', () => {
+      const movs: MovimientoBancarioInput[] = [
+        makeMov({ ordinal: 1, debito: 100, saldo: 900 }),
+      ];
+      expect(() => reconciliar(movs, 1000)).not.toThrow();
+    });
   });
 });

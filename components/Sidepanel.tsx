@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado, MovimientoBancarioInput } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado, MovimientoBancarioInput, Banco } from '@/lib/types';
 import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
+import { ExtractoParseModal, type ExtractoParseHeader, type ExtractoParseProgress } from '@/components/bancos/ExtractoParseModal';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
@@ -898,6 +899,211 @@ function CreateCompanyForm({
   );
 }
 
+const MAX_EXTRACTO_SIZE = 10 * 1024 * 1024;
+
+/**
+ * "Add extracto" flow: a single drag & drop zone. Selecting/dropping a PDF
+ * auto-detects the bank and parses it in-memory (no persistence yet), then
+ * opens `ExtractoParseModal` for the user to review/correct and confirm.
+ * Persistence (upload + addExtracto + batchAddMovimientos) only happens when
+ * the user clicks "Guardar" in the modal — via the same `onSubmit` callback
+ * used by every other form type in this panel.
+ */
+export function ExtractoAddForm({
+  form,
+  companyId,
+  title,
+  onSubmit,
+  onBack,
+  onClose,
+}: {
+  form: Extract<ActiveForm, { mode: 'add' }>;
+  companyId: string;
+  title: string;
+  onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textoRef = useRef<string>('');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<ExtractoParseProgress | null>(null);
+  const [header, setHeader] = useState<ExtractoParseHeader | null>(null);
+  const [movimientos, setMovimientos] = useState<MovimientoBancarioInput[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const resetAll = () => {
+    setModalOpen(false);
+    setFile(null);
+    setLoading(false);
+    setProgress(null);
+    setHeader(null);
+    setMovimientos([]);
+    setError(null);
+    textoRef.current = '';
+  };
+
+  const runParse = async (banco: Banco, texto: string) => {
+    if (banco === 'No detectado') {
+      setError('No se pudo detectar el banco automáticamente. Seleccioná uno manualmente.');
+      setHeader({ mes: '', anio: new Date().getFullYear(), banco, saldoInicial: 0, saldoFinal: 0 });
+      setMovimientos([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { getParser } = await import('@/lib/parsers/index');
+      const parser = getParser(banco);
+      const result = parser.parse(texto);
+
+      const { derivarMesAnio } = await import('@/lib/parsers/periodo');
+      const { mes, anio } = derivarMesAnio(result.context.periodoDesde);
+
+      const { reconciliar } = await import('@/lib/parsers/reconciliador');
+      const movs = reconciliar(result.movimientos, result.context.saldoInicial, 0.01, (current, tot) => {
+        setProgress({ stage: 'reconciliando', current, total: tot });
+      });
+
+      setHeader({
+        mes,
+        anio: anio ?? new Date().getFullYear(),
+        banco,
+        saldoInicial: result.context.saldoInicial,
+        saldoFinal: result.context.saldoFinal,
+      });
+      setMovimientos(movs);
+      setError(null);
+    } catch (err) {
+      console.error('Error running parser:', err);
+      setError(err instanceof Error ? err.message : 'Error al parsear el extracto.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startParsing = async (selected: File) => {
+    setFile(selected);
+    setModalOpen(true);
+    setLoading(true);
+    setError(null);
+    setHeader(null);
+    setMovimientos([]);
+    setProgress(null);
+
+    try {
+      const buffer = await selected.arrayBuffer();
+      const { extractPdfTextFromBuffer } = await import('@/lib/parsers/pdfText');
+      const texto = await extractPdfTextFromBuffer(buffer, (current, total) => {
+        setProgress({ stage: 'extrayendo', current, total });
+      });
+      textoRef.current = texto;
+
+      const { detectarBanco } = await import('@/lib/parsers/index');
+      const banco = detectarBanco(texto);
+      await runParse(banco, texto);
+    } catch (err) {
+      console.error('Error parsing PDF:', err);
+      setError(err instanceof Error ? err.message : 'Error al leer el PDF.');
+      setLoading(false);
+    }
+  };
+
+  const handleFiles = (fileList: FileList | null) => {
+    const selected = fileList?.[0];
+    if (!selected) return;
+    if (selected.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
+    if (selected.size > MAX_EXTRACTO_SIZE) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
+    void startParsing(selected);
+  };
+
+  const handleBancoCorregido = (nuevoBanco: Banco) => {
+    if (!textoRef.current) return;
+    setLoading(true);
+    void runParse(nuevoBanco, textoRef.current);
+  };
+
+  const handleGuardar = async (finalHeader: ExtractoParseHeader) => {
+    setSaving(true);
+    try {
+      const data: Record<string, any> = {
+        accountId: form.defaults?.accountId ?? '',
+        mes: finalHeader.mes,
+        anio: finalHeader.anio,
+        saldoInicial: finalHeader.saldoInicial,
+        saldoFinal: finalHeader.saldoFinal,
+        estado: 'Completado' as ExtractoEstado,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      if (file) {
+        const uploadPath = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const uploadResult = await uploadFile(file, uploadPath);
+        data.archivo = { url: uploadResult.url, path: uploadResult.path, name: file.name, uploadedAt: new Date().toISOString() };
+      }
+
+      if (movimientos.length > 0) {
+        data._pendingMovimientos = movimientos;
+        data._pendingSaldoFinal = finalHeader.saldoFinal;
+      }
+
+      await onSubmit(form, data);
+    } catch (err) {
+      console.error('Error saving extracto:', err);
+      alert('Error al guardar el extracto.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full w-[360px] absolute inset-0">
+      <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Extracto PDF</label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={(e) => { handleFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+        />
+        <div
+          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleFiles(e.dataTransfer.files); }}
+          onClick={() => fileInputRef.current?.click()}
+          className={clsx(
+            'w-full flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-10 transition-colors text-xs cursor-pointer text-center',
+            isDragOver ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-slate-300 hover:border-indigo-400 text-slate-500 hover:text-indigo-600',
+          )}
+        >
+          <Upload size={22} />
+          <p>Arrastrá el PDF del extracto acá o hacé click para seleccionarlo</p>
+        </div>
+      </div>
+
+      <ExtractoParseModal
+        open={modalOpen}
+        file={file}
+        header={header}
+        movimientos={movimientos}
+        loading={loading}
+        saving={saving}
+        progress={progress}
+        error={error}
+        onBancoChange={handleBancoCorregido}
+        onSave={handleGuardar}
+        onCancel={resetAll}
+      />
+    </div>
+  );
+}
+
 function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGoBack }: { form: ActiveForm; companyId: string; onClose: () => void; onSubmit: (f: ActiveForm, d: Record<string, any>) => Promise<void>; projects?: Project[]; onBack: () => void; canGoBack: boolean }) {
   const { user: currentUser } = useAuth();
   const { selectedCompany, companies } = useCompany();
@@ -1304,6 +1510,9 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
   }
 
   if (ft === 'extracto') {
+    // Hooks below are declared unconditionally (for both add/edit modes) to
+    // satisfy the rules of hooks — the early return for "add" mode happens
+    // AFTER all hooks are called, even though it doesn't use them.
     const extractoRecord = form.mode === 'edit' ? (form.record as ExtractoBancario) : null;
     const existingArchivo = extractoRecord?.archivo;
     const archivoEnFields = fields._archivoUploaded ? JSON.parse(fields._archivoUploaded) : null;
@@ -1313,6 +1522,23 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     const [parseoLoading, setParseoLoading] = useState(false);
     const [preParseMovs, setPreParseMovs] = useState<MovimientoBancarioInput[] | null>(null);
     const [preParseSaldoFinal, setPreParseSaldoFinal] = useState<number | null>(null);
+
+    // "Add" flow is a dedicated drop-zone + confirm-modal component (see
+    // ExtractoAddForm above). Edit mode keeps the full-fields form below
+    // unchanged — it's for viewing/editing metadata of an already-created
+    // extracto, not for the initial PDF upload.
+    if (form.mode === 'add') {
+      return (
+        <ExtractoAddForm
+          form={form}
+          companyId={companyId}
+          title={title}
+          onSubmit={onSubmit}
+          onBack={onBack}
+          onClose={onClose}
+        />
+      );
+    }
 
     // ── File select: store File reference only, NO upload yet ──
     const handlePdfSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1502,7 +1728,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         <div className="p-6 border-t border-slate-100 shrink-0">
           <button onClick={handleExtractoSubmit} disabled={saving}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
-            {saving ? 'Guardando...' : form.mode === 'add' ? 'Crear y guardar' : 'Guardar cambios'}
+            {saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
       </div>

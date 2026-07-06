@@ -2,6 +2,7 @@ import type { Banco, MovimientoBancarioInput } from '@/lib/types';
 import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
+import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
 import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
 
 export interface PipelineResult {
@@ -14,32 +15,6 @@ export interface PipelineResult {
 
 const BATCH_SIZE = 500;
 const MAX_RETRIES = 3;
-
-/**
- * Extract text content from all pages of a PDF ArrayBuffer using pdfjs-dist.
- */
-async function extractPdfTextFromBuffer(buffer: ArrayBuffer): Promise<string> {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  const loadingTask = pdfjs.getDocument({ data: buffer });
-  const pdf = await loadingTask.promise;
-
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => item.str ?? '')
-      .join(' ');
-    pages.push(pageText);
-  }
-
-  const fullText = pages.join('\n\n').trim();
-  if (!fullText) {
-    throw new Error('PDF sin contenido de texto extraíble');
-  }
-  return fullText;
-}
 
 /**
  * Retry a promise-returning function with exponential backoff.

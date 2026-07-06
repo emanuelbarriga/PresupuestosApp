@@ -51,6 +51,17 @@ Chain strategy: pending
 - [x] **3.3** `components/bancos/BankConfirmModal.tsx` + Datos.tsx: bank confirmation modal showing detected bank name; fallback dropdown if null; only fires `parsePipeline` on confirm
 - [x] **3.4** `components/forms/FormExtracto.tsx`: add "Parsear PDF" / "Volver a parsear" button; loading state; triggers extraction + detection + modal flow
 
+## Phase 4: UX Redesign — drop-zone + split-view parse modal
+
+Motivo: el flujo de creación de extracto en el Sidepanel exponía todos los campos por adelantado y requería un click extra para parsear. Se rediseña a: drop-zone único → auto-parse → modal de confirmación con preview.
+
+- [x] **4.1** `components/Sidepanel.tsx`: extracto "add" mode shows ONLY a drag & drop zone (no Mes/Año/Saldo/Estado fields upfront). On file select (click or drop), auto-detect bank and auto-run parse pipeline (client-side, no manual "extraer datos" click required).
+- [x] **4.2** New `components/bancos/ExtractoParseModal.tsx`: split-view modal — left pane: editable data table of extracted header (mes/año/saldoInicial/saldoFinal/banco) + movimientos list (reuse/adapt `MovimientosTable`); right pane: PDF preview via `<iframe>`/`<embed>` over `URL.createObjectURL(file)`. Actions: **Corregir** (re-open bank picker / allow manual edits to header fields), **Guardar** (persist), **Cancelar** (discard, close modal, reset drop-zone).
+- [x] **4.3** Add progress reporting to the parse flow: a loading state showing "Procesando X de Y" (pages extracted / movimientos reconciliados). Requires an `onProgress` callback threaded through PDF text extraction loop and reconciliation loop.
+- [x] **4.4** On **Guardar** in the modal: save extracto + movimientos (existing `_pendingMovimientos` batch path), then close modal AND close the Sidepanel (call the panel's close/onClose).
+- [x] **4.5** Remove/retire the now-unused inline "extraer datos" button + banner flow in Sidepanel's extracto form (superseded by 4.1–4.4). Keep `FormExtractoParseBtn` for the existing Datos.tsx row-level "re-parse" action untouched.
+- [x] **4.6** Tests: bank auto-detect on drop, progress callback invocation, modal save closes both modal and panel, cancel resets state without persisting.
+
 ---
 
 ## Dependencias entre tareas

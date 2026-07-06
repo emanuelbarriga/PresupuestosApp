@@ -105,36 +105,29 @@ export class BancolombiaParser implements ExtractoParser {
   }
 
   private cleanText(texto: string): string {
-    // Remove page header lines (lines starting with "ESTADO DE CUENTA")
-    // Remove "VIGILADO" lines
-    // Remove page summary blocks (lines with RESUMEN, SALDO ANTERIOR, TOTAL ABONOS, etc.)
-    // Remove "FIN ESTADO DE CUENTA" lines
-    const lines = texto.split('\n').filter(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return false;
+    // pdfjs extrae cada página como UNA línea larga (todo unido con espacios),
+    // NO como líneas separadas por \n. Por lo tanto no podemos split('\n') y
+    // filtrar líneas — remueve TODO porque la página entera empieza con
+    // "ESTADO DE CUENTA". Usamos regex sobre el texto completo en su lugar.
+    let cleaned = texto;
 
-      // Remove page headers
-      if (/^ESTADO DE CUENTA/.test(trimmed)) return false;
+    // Remove page headers: desde "ESTADO DE CUENTA" hasta la columna de datos
+    // (VALOR SALDO). Esto cubre el encabezado de página, PÁGINA:, dirección,
+    // RESUMEN summary, SALDO ANTERIOR, etc. — todo lo que está antes de los
+    // datos tabulares.
+    // Usamos lazy match para que pare en la PRIMERA columna, no en la última.
+    cleaned = cleaned.replace(/ESTADO DE CUENTA[\s\S]*?VALOR\s+SALDO\s*/g, '');
 
-      // Remove VIGILADO lines
-      if (/VIGILADO/.test(trimmed) && !/\d{1,2}\/\d{2}/.test(trimmed)) return false;
+    // Remove "FIN ESTADO DE CUENTA" y todo lo que sigue
+    cleaned = cleaned.replace(/FIN\s+ESTADO[\s\S]*$/i, '');
 
-      // Remove column header lines
-      if (/^FECHA\s+DESCRIPCI/.test(trimmed)) return false;
+    // Remaining standalone "VIGILADO" references (no date nearby)
+    cleaned = cleaned.replace(/VIGILADO/g, '');
 
-      // Remove summary blocks
-      if (/^(RESUMEN|SALDO ANTERIOR|TOTAL ABONOS|TOTAL CARGOS|SALDO ACTUAL|SALDO PROMEDIO|CUENTAS\s+X\s+COBRAR|VALOR INTERESES|RETEFUENTE)/.test(trimmed)) return false;
+    // Collapse excessive whitespace but keep minimal spacing between items
+    cleaned = cleaned.replace(/[ \t]+/g, ' ').trim();
 
-      // Remove "FIN ESTADO DE CUENTA" lines
-      if (/^FIN\s+ESTADO/.test(trimmed)) return false;
-
-      // Remove lines with only numbers and spaces (broken fragments)
-      if (/^[\d\s,.$]+$/.test(trimmed) && !/\d{1,2}\/\d{2}/.test(trimmed)) return false;
-
-      return true;
-    });
-
-    return lines.join('\n');
+    return cleaned;
   }
 
   private extractRows(texto: string, dateRange: DateRange): MovimientoBancarioInput[] {
