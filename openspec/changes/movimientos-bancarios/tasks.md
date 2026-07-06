@@ -46,10 +46,10 @@ Chain strategy: pending
 
 ## Phase 3: Pipeline + UI
 
-- [ ] **3.1** `lib/parsers/parsePipeline.ts`: async pipeline — fetch PDF URL → `pdfjs.getDocument()` → extract text → `detectarBanco` → await user confirm → `getParser().parse()` → `reconciliar()` → `detectarDuplicados()` → `batchAddMovimientos()` → update extracto estado; handle corrupt PDF → `errorParseo`; chunk >500 rows
-- [ ] **3.2** `components/Datos.tsx`: expandible extracto row with movimientos table (`fecha`, `descripcion`, `debito`/`credito`, `saldo`), badges for `requiereRevision` and `posibleDuplicado`, delete-btn per row
-- [ ] **3.3** `components/Datos.tsx`: bank confirmation modal/banner showing detected bank name; fallback dropdown if null; only fires `parsePipeline` on confirm
-- [ ] **3.4** `components/forms/FormExtracto.tsx`: add "Parsear PDF" button visible when `estado !== 'Conciliado'`; on save with `archivo.url` set auto-trigger pipeline with loading state
+- [x] **3.1** `lib/parsers/parsePipeline.ts`: async pipeline — fetch PDF URL → `pdfjs.getDocument()` → extract text → `detectarBanco` → await user confirm → `getParser().parse()` → `reconciliar()` → `detectarDuplicados()` → `batchAddMovimientos()` → update extracto estado; handle corrupt PDF → `errorParseo`; chunk >500 rows
+- [x] **3.2** `components/bancos/MovimientosTable.tsx` + Datos.tsx: expandible extracto row with movimientos table, badges for `requiereRevision` and `posibleDuplicado`, delete-btn per row
+- [x] **3.3** `components/bancos/BankConfirmModal.tsx` + Datos.tsx: bank confirmation modal showing detected bank name; fallback dropdown if null; only fires `parsePipeline` on confirm
+- [x] **3.4** `components/forms/FormExtracto.tsx`: add "Parsear PDF" / "Volver a parsear" button; loading state; triggers extraction + detection + modal flow
 
 ---
 
