@@ -19,7 +19,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Company, Client, Project, Provider, Budget, Ejecucion, EjecucionBudgetLink, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, CompanyMember, Invitacion } from './types';
+import { Company, Client, Project, Provider, Budget, Ejecucion, EjecucionBudgetLink, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, ExtractoEstado, CompanyMember, Invitacion, MovimientoBancarioInput, MovimientoBancario } from './types';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
@@ -30,6 +30,7 @@ const PROJECTS_COLLECTION = 'projects';
 const STATE_PROJECTS_COLLECTION = 'stateProject';
 const CUENTAS_BANCARIAS_COLLECTION = 'cuentasBancarias';
 const EXTRACTOS_COLLECTION = 'extractos';
+const MOVIMIENTOS_COLLECTION = 'movimientos';
 const INVITATIONS_COLLECTION = 'invitations';
 
 export async function getCompanies(): Promise<Company[]> {
@@ -517,6 +518,110 @@ export async function updateExtracto(
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EXTRACTOS_COLLECTION, extractoId), { ...data, updatedAt: serverTimestamp() });
 }
 
+// ── Movimientos Bancarios (subcollection of extractos) ──
+
+export function subscribeMovimientos(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  onData: (movimientos: MovimientoBancario[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as MovimientoBancario));
+    },
+    onError,
+  );
+}
+
+export async function batchAddMovimientos(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  movimientos: MovimientoBancarioInput[],
+): Promise<string[]> {
+  if (movimientos.length > 500) {
+    throw new Error('batchAddMovimientos: cannot write more than 500 documents in a single batch');
+  }
+
+  const batch = writeBatch(db);
+  const ids: string[] = [];
+  const movimientosRef = collection(
+    db,
+    COMPANIES_COLLECTION,
+    companyId,
+    CUENTAS_BANCARIAS_COLLECTION,
+    accountId,
+    EXTRACTOS_COLLECTION,
+    extractoId,
+    MOVIMIENTOS_COLLECTION,
+  );
+
+  for (const mov of movimientos) {
+    const ref = doc(movimientosRef);
+    batch.set(ref, { ...mov, createdAt: serverTimestamp() });
+    ids.push(ref.id);
+  }
+
+  await batch.commit();
+  return ids;
+}
+
+export async function deleteMovimiento(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  movimientoId: string,
+): Promise<void> {
+  await deleteDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION, movimientoId),
+  );
+}
+
+export async function fetchMovimientoHashes(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+): Promise<string[]> {
+  const snap = await getDocs(
+    collection(
+      db,
+      COMPANIES_COLLECTION,
+      companyId,
+      CUENTAS_BANCARIAS_COLLECTION,
+      accountId,
+      EXTRACTOS_COLLECTION,
+      extractoId,
+      MOVIMIENTOS_COLLECTION,
+    ),
+  );
+  return snap.docs
+    .map((d) => d.data().hash as string | undefined)
+    .filter((h): h is string => !!h);
+}
+
+export async function updateExtractoStatus(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  estado: ExtractoEstado,
+  meta?: { totalMovimientosParseados?: number; errorParseo?: string },
+): Promise<void> {
+  const data: Record<string, unknown> = { estado, updatedAt: serverTimestamp() };
+  if (meta?.totalMovimientosParseados !== undefined) {
+    data.totalMovimientosParseados = meta.totalMovimientosParseados;
+  }
+  if (meta?.errorParseo !== undefined) {
+    data.errorParseo = meta.errorParseo;
+  }
+  await updateDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId),
+    data,
+  );
+}
+
 // ── User Companies (Membership) ──
 
 export function subscribeUserCompanies(
@@ -688,4 +793,38 @@ export async function addMemberToCompany(
     role,
     joinedAt: new Date().toISOString(),
   });
+}
+
+// ── Budget Management ──
+
+export async function deleteBudget(companyId: string, budgetId: string): Promise<void> {
+  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId);
+  const budgetSnap = await getDoc(budgetRef);
+  if (!budgetSnap.exists()) return;
+
+  const budget = budgetSnap.data() as Budget;
+  const links = budget.linkedEjecuciones ?? [];
+
+  // Clean up budgetLinks under each linked ejecucion
+  for (const link of links) {
+    const q = query(
+      collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, link.ejecucionId, BUDGET_LINKS_COLLECTION),
+      where('budgetId', '==', budgetId),
+    );
+    const linkSnap = await getDocs(q);
+    for (const linkDoc of linkSnap.docs) {
+      await deleteDoc(linkDoc.ref);
+    }
+  }
+
+  await deleteDoc(budgetRef);
+}
+
+export async function deleteEjecucion(companyId: string, ejecucionId: string): Promise<void> {
+  const ejecucionRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId);
+  const linksSnap = await getDocs(collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION));
+  const batch = writeBatch(db);
+  linksSnap.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(ejecucionRef);
+  await batch.commit();
 }

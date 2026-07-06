@@ -110,9 +110,11 @@ describe('ExtractoEstado extensions', () => {
     const pendiente: ExtractoEstado = 'Pendiente';
     const revision: ExtractoEstado = 'En revisión';
     const conciliado: ExtractoEstado = 'Conciliado';
+    const completado: ExtractoEstado = 'Completado';
     expect(pendiente).toBe('Pendiente');
     expect(revision).toBe('En revisión');
     expect(conciliado).toBe('Conciliado');
+    expect(completado).toBe('Completado');
   });
 });
 

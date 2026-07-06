@@ -157,7 +157,7 @@ export interface MovimientoBancario extends MovimientoBancarioInput {
   createdAt: Timestamp;
 }
 
-export type ExtractoEstado = 'Pendiente' | 'En revisión' | 'Conciliado' | 'Parseando' | 'Error de parseo';
+export type ExtractoEstado = 'Pendiente' | 'En revisión' | 'Conciliado' | 'Parseando' | 'Completado' | 'Error de parseo';
 
 export interface CuentaBancaria {
   id: string;
