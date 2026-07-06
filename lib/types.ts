@@ -135,7 +135,29 @@ export interface Ejecucion {
 }
 
 export type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';
-export type ExtractoEstado = 'Pendiente' | 'En revisión' | 'Conciliado';
+export type Banco = 'Bancolombia' | 'Bancoomeva' | 'Global66' | 'No detectado';
+
+export interface MovimientoBancarioInput {
+  fecha: string; // YYYY-MM-DD
+  descripcion: string;
+  referencia?: string;
+  debito?: number;
+  credito?: number;
+  saldo: number;
+  moneda: string;
+  ordinal: number;
+  bancoOrigen: Banco;
+  horaOriginal?: string; // solo Global66
+  requiereRevision?: boolean;
+  posibleDuplicado?: boolean;
+}
+
+export interface MovimientoBancario extends MovimientoBancarioInput {
+  id: string;
+  createdAt: Timestamp;
+}
+
+export type ExtractoEstado = 'Pendiente' | 'En revisión' | 'Conciliado' | 'Parseando' | 'Error de parseo';
 
 export interface CuentaBancaria {
   id: string;
@@ -158,6 +180,8 @@ export interface ExtractoBancario {
   archivo?: { url: string; name: string; uploadedAt: string };
   estado: ExtractoEstado;
   uploadedAt: string;
+  totalMovimientosParseados?: number;
+  errorParseo?: string;
 }
 
 export type UserRole = 'admin' | 'colaborador';
