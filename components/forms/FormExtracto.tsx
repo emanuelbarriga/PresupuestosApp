@@ -37,6 +37,7 @@ export function FormExtractoParseBtn({
     try {
       // Extract PDF text using pdfjs-dist
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
       const loadingTask = pdfjs.getDocument(pdfUrl);
       const pdf = await loadingTask.promise;
       const pages: string[] = [];

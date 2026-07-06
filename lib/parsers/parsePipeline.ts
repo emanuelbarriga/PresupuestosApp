@@ -20,6 +20,7 @@ const MAX_RETRIES = 3;
  */
 async function extractPdfText(pdfUrl: string): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
   const loadingTask = pdfjs.getDocument(pdfUrl);
   const pdf = await loadingTask.promise;
 
