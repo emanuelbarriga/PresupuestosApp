@@ -37,12 +37,12 @@ Chain strategy: pending
 
 ## Phase 2: Pure Logic (each with tests)
 
-- [ ] **2.1** `lib/parsers/strategies/bancolombia.ts` + `__tests__/bancolombia.test.ts`: parse `FECHA | D/M` → YYYY-MM-DD (infer year from DESDE/HASTA, handle Dec→Jan cross); `VALOR` sign = debit(neg)/credit(pos); skip `SUCURSAL`, `DCTO.`, `VIGILADO`; tests per spec scenarios
-- [ ] **2.2** `lib/parsers/strategies/bancoomeva.ts` + `__tests__/bancoomeva.test.ts`: parse `DD-MM-YYYY`; separate `DEBITO`/`CREDITO` columns; regex unstuck `OFICINA+DESCRIPCION`; skip per-page summary blocks; test OFICINA unstick scenario
-- [ ] **2.3** `lib/parsers/strategies/global66.ts` + `__tests__/global66.test.ts`: pre-merge multi-line amounts (`$2,208,017` + `.00`); normalize `YYYY-MM-DD HH:MM:SS` → YYYY-MM-DD; preserve `horaOriginal`; test multi-line merge scenario
-- [ ] **2.4** `lib/parsers/reconciliador.ts` + `__tests__/reconciliador.test.ts`: `reconciliar(movs, saldoInicial)` — fill `requiereRevision` per row; test all-ok, one-fails, first-row-fails
-- [ ] **2.5** `lib/parsers/detectordup.ts` + `__tests__/detectordup.test.ts`: `SHA-256(fecha|descripcion|valor|saldo)` via `SubtleCrypto`; take first 16 bytes as hex; mark `posibleDuplicado`; test collision and no-collision
-- [ ] **2.6** `lib/parsers/index.ts` + `__tests__/detectarBanco.test.ts`: `detectarBanco(texto)` scanning for `bancolombia.com`, `Bancoomeva`, Global66 column header; `getParser(banco)` factory; test all 3 detections + unknown fallback
+- [x] **2.1** `lib/parsers/strategies/bancolombia.ts` + `__tests__/bancolombia.test.ts`: parse `FECHA | D/M` → YYYY-MM-DD (infer year from DESDE/HASTA, handle Dec→Jan cross); `VALOR` sign = debit(neg)/credit(pos); skip `SUCURSAL`, `DCTO.`, `VIGILADO`; tests per spec scenarios
+- [x] **2.2** `lib/parsers/strategies/bancoomeva.ts` + `__tests__/bancoomeva.test.ts`: parse `DD-MM-YYYY`; separate `DEBITO`/`CREDITO` columns; regex unstuck `OFICINA+DESCRIPCION`; skip per-page summary blocks; test OFICINA unstick scenario
+- [x] **2.3** `lib/parsers/strategies/global66.ts` + `__tests__/global66.test.ts`: pre-merge multi-line amounts (`$2,208,017` + `.00`); normalize `YYYY-MM-DD HH:MM:SS` → YYYY-MM-DD; preserve `horaOriginal`; test multi-line merge scenario
+- [x] **2.4** `lib/parsers/reconciliador.ts` + `__tests__/reconciliador.test.ts`: `reconciliar(movs, saldoInicial)` — fill `requiereRevision` per row; test all-ok, one-fails, first-row-fails
+- [x] **2.5** `lib/parsers/detectordup.ts` + `__tests__/detectordup.test.ts`: `SHA-256(fecha|descripcion|valor|saldo)` via `SubtleCrypto`; take first 16 bytes as hex; mark `posibleDuplicado`; test collision and no-collision
+- [x] **2.6** `lib/parsers/index.ts` + `__tests__/detectarBanco.test.ts`: `detectarBanco(texto)` scanning for `bancolombia.com`, `Bancoomeva`, Global66 column header; `getParser(banco)` factory; test all 3 detections + unknown fallback
 
 ## Phase 3: Pipeline + UI
 
