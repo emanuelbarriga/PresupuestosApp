@@ -3,7 +3,6 @@ import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
 import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
-import { downloadPdfBytes } from '@/lib/downloadPdf';
 
 export interface PipelineResult {
   success: boolean;
@@ -17,14 +16,12 @@ const BATCH_SIZE = 500;
 const MAX_RETRIES = 3;
 
 /**
- * Extract text content from all pages of a PDF using pdfjs-dist.
+ * Extract text content from all pages of a PDF ArrayBuffer using pdfjs-dist.
  */
-async function extractPdfText(pdfUrl: string, storagePath?: string): Promise<string> {
-  const arrayBuffer = await downloadPdfBytes(pdfUrl, storagePath);
-
+async function extractPdfTextFromBuffer(buffer: ArrayBuffer): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+  const loadingTask = pdfjs.getDocument({ data: buffer });
   const pdf = await loadingTask.promise;
 
   const pages: string[] = [];
@@ -57,7 +54,7 @@ async function withRetry<T>(
       return await fn();
     } catch (err) {
       if (attempt === maxRetries) throw err;
-      const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+      const delay = Math.pow(2, attempt) * 1000;
       console.warn(`[parsePipeline] ${label} failed (attempt ${attempt}), retrying in ${delay}ms:`, err);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -66,29 +63,31 @@ async function withRetry<T>(
 }
 
 /**
- * Run the full parse pipeline for a bank statement PDF.
+ * Run the full parse pipeline for a bank statement.
  *
- * Steps:
- * 1. Update extracto status to 'Parseando'
- * 2. Fetch and extract text from the PDF
- * 3. Detect bank (or use confirmed one)
- * 4. Parse movements using the bank-specific parser
- * 5. Reconcile balances
- * 6. Detect duplicates against existing hashes
- * 7. Batch-write movements to Firestore
- * 8. Update extracto status to 'Completado' or 'Error de parseo'
+ * @param buffer - PDF content as ArrayBuffer (from File or download)
+ * @param rest - Firestore paths and options
  */
-export async function runParsePipeline(
+export async function runParsePipelineFromBuffer(
   companyId: string,
   accountId: string,
   extractoId: string,
-  pdfUrl: string,
+  buffer: ArrayBuffer,
   bancoConfirmado: Banco | null,
-  storagePath?: string,
+): Promise<PipelineResult> {
+  return _runPipeline(companyId, accountId, extractoId, bancoConfirmado, buffer);
+}
+
+async function _runPipeline(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  bancoConfirmado: Banco | null,
+  buffer: ArrayBuffer,
 ): Promise<PipelineResult> {
   const errores: string[] = [];
 
-  console.log('[PARSE-PIPELINE] Starting', { companyId, accountId, extractoId, bancoConfirmado });
+  console.log('[PARSE-PIPELINE] Starting from buffer', { companyId, accountId, extractoId, bancoConfirmado });
 
   try {
     // Step 1: Mark as parsing
@@ -98,11 +97,11 @@ export async function runParsePipeline(
       'updateExtractoStatus(Parseando)',
     );
 
-    // Step 2: Extract PDF text
+    // Step 2: Extract PDF text from the in-memory buffer (no network needed)
     let texto: string;
     try {
-      console.log('[PARSE-PIPELINE] Step 2: extracting PDF text from', pdfUrl, { storagePath });
-      texto = await extractPdfText(pdfUrl, storagePath);
+      console.log('[PARSE-PIPELINE] Step 2: extracting text from buffer', { size: buffer.byteLength });
+      texto = await extractPdfTextFromBuffer(buffer);
       console.log('[PARSE-PIPELINE] PDF extracted', { length: texto.length, preview: texto.slice(0, 200) });
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;
@@ -160,8 +159,7 @@ export async function runParsePipeline(
       );
     }
 
-    // Step 8: Mark as completed — saldos vienen del PDF (fuente de verdad),
-    // sobrescriben cualquier valor tipeado manualmente al crear el extracto.
+    // Step 8: Mark as completed — saldos vienen del PDF (fuente de verdad)
     console.log('[PARSE-PIPELINE] Step 8: marking as Completado');
     await withRetry(
       () => updateExtractoStatus(companyId, accountId, extractoId, 'Completado', {
@@ -208,3 +206,6 @@ export async function runParsePipeline(
     };
   }
 }
+
+// Legacy export — keeps existing imports working
+export const runParsePipeline = _runPipeline;

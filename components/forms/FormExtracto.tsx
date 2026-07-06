@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import type { Banco, ExtractoEstado } from '@/lib/types';
 import { detectarBanco } from '@/lib/parsers/index';
-import { runParsePipeline } from '@/lib/parsers/parsePipeline';
+import { runParsePipelineFromBuffer } from '@/lib/parsers/parsePipeline';
 import { downloadPdfBytes } from '@/lib/downloadPdf';
 import { BankConfirmModal } from '@/components/bancos/BankConfirmModal';
 
@@ -11,21 +11,27 @@ interface FormExtractoParseBtnProps {
   companyId: string;
   accountId: string;
   extractoId: string;
-  pdfUrl: string;
+  /** URL for re-parsing existing extracts */
+  pdfUrl?: string;
+  /** File object when parsing from a freshly opened PDF (no network needed) */
+  pdfFile?: File;
   storagePath?: string;
   estado: ExtractoEstado;
   onComplete?: () => void;
 }
 
 /**
- * "Parsear PDF" button that appears after an extracto is saved with archivo.url set.
- * Handles the full flow: extract text → detect bank → confirm modal → run pipeline.
+ * "Parsear PDF" button.
+ * - If a `pdfFile` is provided (new extract in Sidepanel), reads it directly.
+ * - If only `pdfUrl` is provided (re-parse), downloads via Firebase SDK.
+ * In both cases the pipeline receives an ArrayBuffer — no CORS issues.
  */
 export function FormExtractoParseBtn({
   companyId,
   accountId,
   extractoId,
   pdfUrl,
+  pdfFile,
   storagePath,
   estado,
   onComplete,
@@ -34,16 +40,28 @@ export function FormExtractoParseBtn({
   const [showModal, setShowModal] = useState(false);
   const [detectedBank, setDetectedBank] = useState<Banco>('No detectado');
   const [selectedBank, setSelectedBank] = useState<Banco>('No detectado');
+  const [parsedBuffer, setParsedBuffer] = useState<ArrayBuffer | null>(null);
+
+  const getBuffer = useCallback(async (): Promise<ArrayBuffer> => {
+    if (pdfFile) {
+      // Read from File directly — no network, no CORS
+      return await pdfFile.arrayBuffer();
+    }
+    if (pdfUrl) {
+      return await downloadPdfBytes(pdfUrl, storagePath);
+    }
+    throw new Error('No hay PDF disponible');
+  }, [pdfFile, pdfUrl, storagePath]);
 
   const handleParseClick = useCallback(async () => {
     setLoading(true);
     try {
-      // Extract PDF text using pdfjs-dist — download via Firebase SDK (no CORS issues)
-      const arrayBuffer = await downloadPdfBytes(pdfUrl, storagePath);
+      const buffer = await getBuffer();
 
+      // Extract text to detect bank
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+      const loadingTask = pdfjs.getDocument({ data: buffer });
       const pdf = await loadingTask.promise;
       const pages: string[] = [];
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -57,6 +75,7 @@ export function FormExtractoParseBtn({
       const banco = detectarBanco(texto);
       setDetectedBank(banco);
       setSelectedBank(banco);
+      setParsedBuffer(buffer);
       setShowModal(true);
     } catch (err) {
       console.error('Error extracting PDF text:', err);
@@ -64,20 +83,20 @@ export function FormExtractoParseBtn({
     } finally {
       setLoading(false);
     }
-  }, [pdfUrl, storagePath]);
+  }, [getBuffer]);
 
   const handleConfirm = useCallback(async () => {
+    if (!parsedBuffer) return;
     setLoading(true);
     setShowModal(false);
 
     try {
-      const result = await runParsePipeline(
+      const result = await runParsePipelineFromBuffer(
         companyId,
         accountId,
         extractoId,
-        pdfUrl,
+        parsedBuffer,
         selectedBank,
-        storagePath,
       );
 
       if (result.success) {
@@ -91,11 +110,12 @@ export function FormExtractoParseBtn({
     } finally {
       setLoading(false);
     }
-  }, [companyId, accountId, extractoId, pdfUrl, selectedBank, storagePath, onComplete]);
+  }, [companyId, accountId, extractoId, parsedBuffer, selectedBank, onComplete]);
 
   const handleCancel = useCallback(() => {
     setShowModal(false);
     setDetectedBank('No detectado');
+    setParsedBuffer(null);
   }, []);
 
   const isReparse = estado === 'Completado';

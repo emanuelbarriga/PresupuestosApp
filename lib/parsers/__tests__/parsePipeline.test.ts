@@ -23,10 +23,6 @@ vi.mock('@/lib/firestore', () => ({
   doc: vi.fn(),
 }));
 
-vi.mock('@/lib/downloadPdf', () => ({
-  downloadPdfBytes: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
-}));
-
 vi.mock('@/lib/types', () => ({}));
 
 // We need to mock pdfjs-dist too
@@ -35,7 +31,7 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
 }));
 
-import { runParsePipeline } from '@/lib/parsers/parsePipeline';
+import { runParsePipelineFromBuffer } from '@/lib/parsers/parsePipeline';
 import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
@@ -46,6 +42,7 @@ describe('runParsePipeline', () => {
   const accountId = 'account-1';
   const extractoId = 'extracto-1';
   const pdfUrl = 'https://example.com/extracto.pdf';
+  const mockBuffer = new ArrayBuffer(10);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -96,7 +93,7 @@ describe('runParsePipeline', () => {
     // Mock batch write
     vi.mocked(batchAddMovimientos).mockResolvedValue(['id-1', 'id-2']);
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, 'Bancolombia');
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, 'Bancolombia');
 
     expect(result.success).toBe(true);
     expect(result.totalMovimientos).toBe(2);
@@ -136,7 +133,7 @@ describe('runParsePipeline', () => {
     vi.mocked(detectarDuplicados).mockImplementation(async (movs) => movs);
     vi.mocked(batchAddMovimientos).mockResolvedValue([]);
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, null);
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, null);
 
     expect(result.success).toBe(true);
     expect(detectarBanco).toHaveBeenCalled();
@@ -156,7 +153,7 @@ describe('runParsePipeline', () => {
 
     vi.mocked(detectarBanco).mockReturnValue('No detectado');
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, null);
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, null);
 
     expect(result.success).toBe(false);
     expect(result.errores).toContain('Banco no reconocido');
@@ -170,7 +167,7 @@ describe('runParsePipeline', () => {
     const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     (pdfjsModule.getDocument as any).mockImplementation(mockGetDocument);
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, 'Bancolombia');
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, 'Bancolombia');
 
     expect(result.success).toBe(false);
     expect(result.errores).toHaveLength(1);
@@ -210,7 +207,7 @@ describe('runParsePipeline', () => {
     vi.mocked(detectarDuplicados).mockImplementation(async (movs) => movs);
     vi.mocked(batchAddMovimientos).mockResolvedValue([]);
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, 'Bancolombia');
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, 'Bancolombia');
 
     expect(result.success).toBe(true);
     expect(result.totalMovimientos).toBe(750);
@@ -247,7 +244,7 @@ describe('runParsePipeline', () => {
     );
     vi.mocked(batchAddMovimientos).mockResolvedValue(['id-1', 'id-2']);
 
-    const result = await runParsePipeline(companyId, accountId, extractoId, pdfUrl, 'Bancolombia');
+    const result = await runParsePipelineFromBuffer(companyId, accountId, extractoId, mockBuffer, 'Bancolombia');
 
     expect(result.success).toBe(true);
     expect(result.requiereRevision).toBe(1);

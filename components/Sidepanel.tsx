@@ -1309,6 +1309,7 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
     const archivoEnFields = fields._archivoUploaded ? JSON.parse(fields._archivoUploaded) : null;
     const currentArchivo = archivoEnFields || existingArchivo;
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [archivoFile, setArchivoFile] = useState<File | null>(null);
     const [uploadingPdf, setUploadingPdf] = useState(false);
 
     const handlePdfSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1316,6 +1317,8 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
       if (!file) return;
       if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
       if (file.size > 10 * 1024 * 1024) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
+
+      // Upload immediately so the extracto save has the URL
       setUploadingPdf(true);
       try {
         const path = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
@@ -1329,10 +1332,14 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         setUploadingPdf(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
+
+      // Keep the File reference for direct parsing (no need to re-download)
+      setArchivoFile(file);
     };
 
     const removeArchivo = () => {
       set('_archivoUploaded', '');
+      setArchivoFile(null);
     };
 
     return (
@@ -1392,14 +1399,15 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
             )}
           </div>
 
-          {form.mode === 'edit' && currentArchivo?.url && f('estado') !== 'Conciliado' && (
+          {(currentArchivo?.url || archivoFile) && f('estado') !== 'Conciliado' && (
             <div className="flex justify-center pt-2">
               <FormExtractoParseBtn
                 companyId={companyId}
-                accountId={extractoRecord!.accountId}
-                extractoId={extractoRecord!.id}
-                pdfUrl={currentArchivo.url}
-                storagePath={currentArchivo.path}
+                accountId={extractoRecord?.accountId ?? ''}
+                extractoId={extractoRecord?.id ?? ''}
+                pdfUrl={currentArchivo?.url}
+                pdfFile={archivoFile ?? undefined}
+                storagePath={currentArchivo?.path}
                 estado={f('estado') as ExtractoEstado}
               />
             </div>
