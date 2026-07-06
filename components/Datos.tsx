@@ -229,16 +229,26 @@ export function Datos({
       }
       // Find the extracto to get accountId
       const ext = extractos.find(e => e.id === extractoId);
-      if (!ext) return extractoId;
-      // Subscribe to movimientos
+      if (!ext) {
+        console.warn('[MOVS] Extracto not found for expand:', extractoId, { available: extractos.map(e => ({ id: e.id, accountId: e.accountId })) });
+        return extractoId;
+      }
+      console.log('[MOVS] Subscribing to movimientos', { companyId, accountId: ext.accountId, extractoId });
       const unsub = subscribeMovimientos(
         companyId,
         ext.accountId,
         extractoId,
         (movs) => {
-          setMovimientosPorExtracto(prev => ({ ...prev, [extractoId]: movs }));
+          console.log('[MOVS] Subscription received', { extractoId, count: movs.length, sample: movs[0] });
+          setMovimientosPorExtracto(prev => {
+            const current = prev[extractoId]?.length ?? 0;
+            if (current !== movs.length) {
+              console.log('[MOVS] Updating movimientosPorExtracto', { extractoId, prevCount: current, newCount: movs.length });
+            }
+            return { ...prev, [extractoId]: movs };
+          });
         },
-        (err) => console.error('Error loading movimientos:', err),
+        (err) => console.error('[MOVS] Subscription error:', err),
       );
       extractoUnsubRef.current.set(extractoId, unsub);
       return extractoId;

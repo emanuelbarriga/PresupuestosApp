@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { BancolombiaParser } from '@/lib/parsers/strategies/bancolombia';
 import { Banco } from '@/lib/types';
+
+function readFixture(name: string): string {
+  return readFileSync(resolve(__dirname, '..', '__fixtures__', `${name}.txt`), 'utf-8');
+}
 
 describe('BancolombiaParser', () => {
   const parser = new BancolombiaParser();
@@ -172,6 +178,13 @@ FECHA   DESCRIPCIÓN   SUCURSAL   DCTO.   VALOR   SALDO
       expect(result.movimientos[2].debito).toBe(2304.26);
       expect(result.movimientos[2].credito).toBeUndefined();
       expect(result.movimientos[2].descripcion).toContain('IMPTO GOBIERNO');
+    });
+
+    it('extracts saldoInicial and saldoFinal from the RESUMEN block of the real fixture', () => {
+      const text = readFixture('bancolombia');
+      const result = parser.parse(text);
+      expect(result.context.saldoInicial).toBe(1478.29);
+      expect(result.context.saldoFinal).toBe(70565811.95);
     });
   });
 });

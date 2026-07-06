@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { Global66Parser } from '@/lib/parsers/strategies/global66';
 import { Banco } from '@/lib/types';
+
+function readFixture(name: string): string {
+  return readFileSync(resolve(__dirname, '..', '__fixtures__', `${name}.txt`), 'utf-8');
+}
 
 describe('Global66Parser', () => {
   const parser = new Global66Parser();
@@ -154,6 +160,13 @@ Fecha   Descripción   Movimiento   Tarjeta   Débito   Abono   Saldo
       // Check second transaction
       expect(result.movimientos[1].debito).toBe(22303.00);
       expect(result.movimientos[1].saldo).toBe(40807789.81);
+    });
+
+    it('extracts saldoInicial and saldoFinal from "Inicio/Final de período" of the real fixture', () => {
+      const text = readFixture('global66');
+      const result = parser.parse(text);
+      expect(result.context.saldoInicial).toBe(43038109.81);
+      expect(result.context.saldoFinal).toBe(3352614.80);
     });
   });
 });

@@ -56,19 +56,26 @@ export class Global66Parser implements ExtractoParser {
   }
 
   private extractContext(lines: string[]): ParseContext {
-    for (const line of lines) {
-      const match = line.match(/Desde:\s*(\d{2}-[A-Za-z]{3}-\d{4})\s+Hasta:\s*(\d{2}-[A-Za-z]{3}-\d{4})/i);
-      if (match) {
-        return {
-          banco: this.banco,
-          saldoInicial: 0,
-          saldoFinal: 0,
-          periodoDesde: this.normalizePeriodDate(match[1]),
-          periodoHasta: this.normalizePeriodDate(match[2]),
-        };
-      }
+    const fullText = lines.join('  ');
+
+    let periodoDesde: string | undefined;
+    let periodoHasta: string | undefined;
+    const periodMatch = fullText.match(/Desde:\s*(\d{2}-[A-Za-z]{3}-\d{4})\s+Hasta:\s*(\d{2}-[A-Za-z]{3}-\d{4})/i);
+    if (periodMatch) {
+      periodoDesde = this.normalizePeriodDate(periodMatch[1]);
+      periodoHasta = this.normalizePeriodDate(periodMatch[2]);
     }
-    return { banco: this.banco, saldoInicial: 0, saldoFinal: 0 };
+
+    const saldoInicialMatch = fullText.match(/Inicio de per[íi]odo:\s*\$([\d,]+\.\d{2})/i);
+    const saldoFinalMatch = fullText.match(/Final de per[íi]odo:\s*\$([\d,]+\.\d{2})/i);
+
+    return {
+      banco: this.banco,
+      saldoInicial: saldoInicialMatch ? parseMonto(saldoInicialMatch[1]) : 0,
+      saldoFinal: saldoFinalMatch ? parseMonto(saldoFinalMatch[1]) : 0,
+      periodoDesde,
+      periodoHasta,
+    };
   }
 
   private normalizePeriodDate(dateStr: string): string {

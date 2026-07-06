@@ -527,12 +527,19 @@ export function subscribeMovimientos(
   onData: (movimientos: MovimientoBancario[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const path = `companies/${companyId}/cuentasBancarias/${accountId}/extractos/${extractoId}/movimientos`;
+  console.log('[FIRESTORE] subscribeMovimientos path:', path);
   return onSnapshot(
     collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as MovimientoBancario));
+      const movs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as MovimientoBancario);
+      console.log('[FIRESTORE] subscribeMovimientos snapshot', { path, count: movs.length });
+      onData(movs);
     },
-    onError,
+    (err) => {
+      console.error('[FIRESTORE] subscribeMovimientos error', { path, error: err.message });
+      onError?.(err);
+    },
   );
 }
 
@@ -545,6 +552,9 @@ export async function batchAddMovimientos(
   if (movimientos.length > 500) {
     throw new Error('batchAddMovimientos: cannot write more than 500 documents in a single batch');
   }
+
+  const path = `companies/${companyId}/cuentasBancarias/${accountId}/extractos/${extractoId}/movimientos`;
+  console.log('[FIRESTORE] batchAddMovimientos', { path, count: movimientos.length, sample: movimientos[0] });
 
   const batch = writeBatch(db);
   const ids: string[] = [];
@@ -566,6 +576,7 @@ export async function batchAddMovimientos(
   }
 
   await batch.commit();
+  console.log('[FIRESTORE] batchAddMovimientos ✅ committed', { path, idsCount: ids.length });
   return ids;
 }
 
@@ -607,7 +618,12 @@ export async function updateExtractoStatus(
   accountId: string,
   extractoId: string,
   estado: ExtractoEstado,
-  meta?: { totalMovimientosParseados?: number; errorParseo?: string },
+  meta?: {
+    totalMovimientosParseados?: number;
+    errorParseo?: string;
+    saldoInicial?: number;
+    saldoFinal?: number;
+  },
 ): Promise<void> {
   const data: Record<string, unknown> = { estado, updatedAt: serverTimestamp() };
   if (meta?.totalMovimientosParseados !== undefined) {
@@ -615,6 +631,13 @@ export async function updateExtractoStatus(
   }
   if (meta?.errorParseo !== undefined) {
     data.errorParseo = meta.errorParseo;
+  }
+  // Saldos parsed from the PDF are the source of truth — overwrite any manual entry.
+  if (meta?.saldoInicial !== undefined) {
+    data.saldoInicial = meta.saldoInicial;
+  }
+  if (meta?.saldoFinal !== undefined) {
+    data.saldoFinal = meta.saldoFinal;
   }
   await updateDoc(
     doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId),

@@ -27,11 +27,11 @@ describe('reconciliar', () => {
     expect(result[2].requiereRevision).toBeFalsy();
   });
 
-  it('marks row as requiereRevision when saldo does not match', () => {
+  it('marks row as requiereRevision when saldo does not match, and the next row recovers using ITS reported saldo (no cascade)', () => {
     const movs: MovimientoBancarioInput[] = [
       makeMov({ ordinal: 1, debito: 100, saldo: 900 }),   // 1000 - 100 = 900 ✓
-      makeMov({ ordinal: 2, credito: 200, saldo: 1300 }), // 900 + 200 = 1100 ≠ 1300 ✗
-      makeMov({ ordinal: 3, debito: 50, saldo: 1050 }),
+      makeMov({ ordinal: 2, credito: 200, saldo: 1300 }), // 900 + 200 = 1100 ≠ 1300 ✗ (flagged)
+      makeMov({ ordinal: 3, debito: 50, saldo: 1250 }),   // base = row2's REPORTED 1300 (not the wrong 1100): 1300 - 50 = 1250 ✓
     ];
     const result = reconciliar(movs, 1000);
     expect(result[1].requiereRevision).toBe(true);
@@ -39,13 +39,28 @@ describe('reconciliar', () => {
     expect(result[2].requiereRevision).toBeFalsy();
   });
 
-  it('marks first row as requiereRevision when it fails', () => {
+  it('marks first row as requiereRevision when it fails, and the second row recovers (no cascade)', () => {
     const movs: MovimientoBancarioInput[] = [
-      makeMov({ ordinal: 1, debito: 100, saldo: 800 }),   // 1000 - 100 = 900 ≠ 800 ✗
-      makeMov({ ordinal: 2, credito: 200, saldo: 1000 }),
+      makeMov({ ordinal: 1, debito: 100, saldo: 800 }),   // 1000 - 100 = 900 ≠ 800 ✗ (flagged)
+      makeMov({ ordinal: 2, credito: 200, saldo: 1000 }), // base = row1's REPORTED 800: 800 + 200 = 1000 ✓
     ];
     const result = reconciliar(movs, 1000);
     expect(result[0].requiereRevision).toBe(true);
+    expect(result[1].requiereRevision).toBeFalsy();
+  });
+
+  it('does NOT cascade a failure across multiple subsequent rows (regression: previous impl used the calculated saldo, not the reported one, causing every following row to fail)', () => {
+    const movs: MovimientoBancarioInput[] = [
+      makeMov({ ordinal: 1, debito: 100, saldo: 900 }),    // 1000 - 100 = 900 ✓
+      makeMov({ ordinal: 2, credito: 500, saldo: 2000 }),  // 900 + 500 = 1400 ≠ 2000 ✗ (flagged — e.g. a row our parser skipped)
+      makeMov({ ordinal: 3, debito: 300, saldo: 1700 }),   // base = row2's REPORTED 2000: 2000 - 300 = 1700 ✓ (recovers)
+      makeMov({ ordinal: 4, credito: 100, saldo: 1800 }),  // base = row3's REPORTED 1700: 1700 + 100 = 1800 ✓ (stays recovered)
+    ];
+    const result = reconciliar(movs, 1000);
+    expect(result[1].requiereRevision).toBe(true);
+    expect(result[0].requiereRevision).toBeFalsy();
+    expect(result[2].requiereRevision).toBeFalsy();
+    expect(result[3].requiereRevision).toBeFalsy();
   });
 
   it('uses default tolerance of 0.01', () => {

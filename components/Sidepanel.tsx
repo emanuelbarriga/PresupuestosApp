@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria } from '@/lib/types';
+import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado } from '@/lib/types';
+import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
@@ -1125,6 +1126,25 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         if (data.unidades === '__custom__') data.unidades = '';
         data.soloEgresos = data.soloEgresos === 'true';
       }
+      if (ft === 'cuenta') {
+        data.saldoInicial = Number(data.saldoInicial) || 0;
+        // saldoActual is not a form field; default to saldoInicial only when
+        // creating a brand-new account (no movements yet, so both match).
+        if (form.mode === 'add') data.saldoActual = data.saldoInicial;
+      }
+      if (ft === 'extracto') {
+        data.anio = Number(data.anio) || new Date().getFullYear();
+        data.saldoInicial = Number(data.saldoInicial) || 0;
+        data.saldoFinal = Number(data.saldoFinal) || 0;
+
+        // Convert _archivoUploaded (JSON string) into archivo object
+        if (data._archivoUploaded) {
+          try {
+            data.archivo = JSON.parse(data._archivoUploaded);
+          } catch { /* ignore parse errors */ }
+          delete data._archivoUploaded;
+        }
+      }
 
       entries.push(data);
     }
@@ -1282,6 +1302,37 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
   }
 
   if (ft === 'extracto') {
+    const extractoRecord = form.mode === 'edit' ? (form.record as ExtractoBancario) : null;
+    const existingArchivo = extractoRecord?.archivo;
+    const archivoEnFields = fields._archivoUploaded ? JSON.parse(fields._archivoUploaded) : null;
+    const currentArchivo = archivoEnFields || existingArchivo;
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadingPdf, setUploadingPdf] = useState(false);
+
+    const handlePdfSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
+      if (file.size > 10 * 1024 * 1024) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
+      setUploadingPdf(true);
+      try {
+        const path = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const result = await uploadFile(file, path);
+        const archivoData = { url: result.url, name: file.name, uploadedAt: new Date().toISOString() };
+        set('_archivoUploaded', JSON.stringify(archivoData));
+      } catch (err) {
+        console.error('Error uploading PDF:', err);
+        alert('Error al subir el PDF. Intentá de nuevo.');
+      } finally {
+        setUploadingPdf(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    const removeArchivo = () => {
+      set('_archivoUploaded', '');
+    };
+
     return (
       <div className="flex flex-col h-full w-[360px] absolute inset-0">
         <PanelHeader title={title} canGoBack={true} onBack={onBack} onClose={onClose} />
@@ -1296,7 +1347,52 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
               { value: 'Pendiente', label: 'Pendiente' },
               { value: 'En revisión', label: 'En revisión' },
               { value: 'Conciliado', label: 'Conciliado' },
+              { value: 'Completado', label: 'Completado' },
+              { value: 'Error de parseo', label: 'Error de parseo' },
             ]} />
+
+          {/* PDF Upload */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Extracto PDF</label>
+            <input ref={fileInputRef} type="file" accept=".pdf"
+              onChange={handlePdfSelected} className="hidden" />
+            {currentArchivo ? (
+              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText size={16} className="text-indigo-500 shrink-0" />
+                  <span className="text-xs text-indigo-700 truncate">{currentArchivo.name}</span>
+                </div>
+                <button onClick={removeArchivo}
+                  className="p-1 hover:bg-indigo-100 rounded-lg transition-colors shrink-0 ml-2">
+                  <X size={14} className="text-indigo-400 hover:text-rose-500" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPdf}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-400 disabled:border-slate-200 rounded-lg p-3 transition-colors text-xs text-slate-500 hover:text-indigo-600 disabled:text-slate-300"
+              >
+                {uploadingPdf ? (
+                  <><span className="inline-block w-3 h-3 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin" /> Subiendo...</>
+                ) : (
+                  <><Upload size={14} /> Seleccionar PDF del extracto</>
+                )}
+              </button>
+            )}
+          </div>
+
+          {form.mode === 'edit' && currentArchivo?.url && f('estado') !== 'Conciliado' && (
+            <div className="flex justify-center pt-2">
+              <FormExtractoParseBtn
+                companyId={companyId}
+                accountId={extractoRecord!.accountId}
+                extractoId={extractoRecord!.id}
+                pdfUrl={currentArchivo.url}
+                estado={f('estado') as ExtractoEstado}
+              />
+            </div>
+          )}
         </div>
         <div className="p-6 border-t border-slate-100 shrink-0">
           <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">

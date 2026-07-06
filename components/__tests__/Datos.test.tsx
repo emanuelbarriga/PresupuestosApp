@@ -224,18 +224,14 @@ describe('Datos — PR2 Comprobantes state badge', () => {
     expect(screen.getByText('ConComprobantesSI')).toBeInTheDocument();
     expect(screen.getByText('SinComprobantesNO')).toBeInTheDocument();
 
-    // Find the comprobante filter select
-    const selects = screen.getAllByRole('combobox');
-    const compFilter = selects.find(s => {
-      const opts = s.querySelectorAll('option');
-      return Array.from(opts).some(o => o.value === 'Completada');
-    });
-    expect(compFilter).toBeTruthy();
+    // Find the Comp. filter buttons (TriStateSwitch)
+    const compLabel = screen.getAllByText('Comp.')[0];
+    const compContainer = compLabel.closest('.flex')!;
+    const compButtons = compContainer.querySelectorAll('button');
+    expect(compButtons.length).toBeGreaterThanOrEqual(2);
 
-    // Filter to show only Completada
-    if (compFilter) {
-      fireEvent.change(compFilter, { target: { value: 'Completada' } });
-    }
+    // Click the "Completada" button (second button)
+    fireEvent.click(compButtons[1]);
 
     // Only the completada row should be visible
     expect(screen.getByText('ConComprobantesSI')).toBeInTheDocument();

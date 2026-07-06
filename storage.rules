@@ -14,6 +14,14 @@ service firebase.storage {
       allow list: if true;
     }
 
+    // Extractos bancarios (PDF) — desarrollo: sin auth, tipo & tamaño validados
+    match /{companyId}/extractos/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf');
+      allow delete: if true;
+    }
+
     // Deny everything else
     match /{allPaths=**} {
       allow read, write: if false;

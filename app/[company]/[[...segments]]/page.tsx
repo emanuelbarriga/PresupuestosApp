@@ -28,6 +28,7 @@ import {
   updateCuentaBancaria,
   addExtracto,
   updateExtracto,
+  deleteBudget, deleteEjecucion,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
@@ -399,6 +400,24 @@ export default function CompanyPage({ params }: Props) {
     pushScreen({ id: crypto.randomUUID(), type: 'form', form });
   };
 
+  const handleDeleteBudget = async (budgetId: string) => {
+    try {
+      await deleteBudget(companyId, budgetId);
+    } catch (err) {
+      console.error('Error deleting budget:', err);
+      alert('Error al borrar el presupuesto. Intentá de nuevo.');
+    }
+  };
+
+  const handleDeleteEjecucion = async (ejecucionId: string) => {
+    try {
+      await deleteEjecucion(companyId, ejecucionId);
+    } catch (err) {
+      console.error('Error deleting ejecucion:', err);
+      alert('Error al borrar la ejecución. Intentá de nuevo.');
+    }
+  };
+
   const handleTerceroClick = (detail: RecordDetail) => {
     if (isConjunto) return;
     pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
@@ -541,7 +560,9 @@ export default function CompanyPage({ params }: Props) {
             {activeView === 'Datos' && (
               <Datos budgets={budgets} ejecuciones={ejecuciones} activeTab={activeTab}
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
-                onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord} />
+                companyName={companies.find(c => c.id === companyId)?.name}
+                onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord}
+                onDeleteBudget={handleDeleteBudget} onDeleteEjecucion={handleDeleteEjecucion} />
             )}
             {activeView === 'EstadoResultados' && (
               <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />

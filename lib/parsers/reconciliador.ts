@@ -25,10 +25,11 @@ export function reconciliar(
 
     const requiereRevision = diff > tolerancia;
 
-    // When a row fails, use the EXPECTED saldo (not the reported one) as base
-    // for the next row. This prevents cascading failures — only the truly
-    // problematic row gets flagged.
-    saldoAnterior = requiereRevision ? expectedSaldo : mov.saldo;
+    // ALWAYS use the bank's own reported saldo (not our calculated expectation)
+    // as the base for the next row. The reported saldo is ground truth from the
+    // bank, so a single bad row doesn't cascade — the next row is checked
+    // against reality, not against our (possibly wrong) running calculation.
+    saldoAnterior = mov.saldo;
 
     return {
       ...mov,

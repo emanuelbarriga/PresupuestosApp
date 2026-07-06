@@ -106,7 +106,10 @@ describe('runParsePipeline', () => {
     expect(fetchMovimientoHashes).toHaveBeenCalledWith(companyId, accountId, extractoId);
     expect(detectarDuplicados).toHaveBeenCalled();
     expect(batchAddMovimientos).toHaveBeenCalledWith(companyId, accountId, extractoId, expect.any(Array));
-    expect(updateExtractoStatus).toHaveBeenLastCalledWith(companyId, accountId, extractoId, 'Completado', { totalMovimientosParseados: 2 });
+    expect(updateExtractoStatus).toHaveBeenLastCalledWith(
+      companyId, accountId, extractoId, 'Completado',
+      expect.objectContaining({ totalMovimientosParseados: 2 }),
+    );
   });
 
   it('should detect bank when bancoConfirmado is null', async () => {

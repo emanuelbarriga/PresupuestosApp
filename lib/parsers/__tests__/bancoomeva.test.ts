@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { BancoomevaParser } from '@/lib/parsers/strategies/bancoomeva';
 import { Banco } from '@/lib/types';
+
+function readFixture(name: string): string {
+  return readFileSync(resolve(__dirname, '..', '__fixtures__', `${name}.txt`), 'utf-8');
+}
 
 describe('BancoomevaParser', () => {
   const parser = new BancoomevaParser();
@@ -76,6 +82,9 @@ describe('BancoomevaParser', () => {
       const result = parser.parse(text);
       expect(result.movimientos).toHaveLength(1);
       expect(result.movimientos[0].descripcion).toContain('TRANSFERENCIA');
+      // The summary block also carries the real saldoInicial/saldoFinal for the extracto
+      expect(result.context.saldoInicial).toBe(9673999.80);
+      expect(result.context.saldoFinal).toBe(27261685.20);
     });
   });
 
@@ -102,6 +111,35 @@ describe('BancoomevaParser', () => {
       const result = parser.parse(text);
       expect(result.context.periodoDesde).toBe('2026-01-01');
       expect(result.context.periodoHasta).toBe('2026-01-30');
+    });
+  });
+
+  describe('parse real fixture text', () => {
+    it('parses transactions from the real bancoomeva fixture', () => {
+      const text = readFixture('bancoomeva');
+      const result = parser.parse(text);
+
+      // The real fixture is a dense multi-page extract with ~100 rows
+      expect(result.movimientos.length).toBeGreaterThanOrEqual(20);
+
+      // First transaction on the fixture
+      const first = result.movimientos[0];
+      expect(first.fecha).toBe('2026-01-02');
+      expect(first.descripcion).toMatch(/N\/C/);
+      expect(first.credito).toBe(58.04);
+      expect(first.saldo).toBe(9674057.84);
+
+      // No row should have both debito and credito unset
+      for (const mov of result.movimientos) {
+        expect(mov.debito !== undefined || mov.credito !== undefined).toBe(true);
+      }
+    });
+
+    it('extracts saldoInicial and saldoFinal from the real fixture', () => {
+      const text = readFixture('bancoomeva');
+      const result = parser.parse(text);
+      expect(result.context.saldoInicial).toBe(9673999.80);
+      expect(result.context.saldoFinal).toBe(27261685.20);
     });
   });
 });

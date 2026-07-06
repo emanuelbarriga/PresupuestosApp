@@ -36,6 +36,19 @@ function parseFechaBancolombia(fechaStr: string, range: DateRange): string {
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
+function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
+  // RESUMEN block: "SALDO ANTERIOR  TOTAL ABONOS  TOTAL CARGOS  SALDO ACTUAL  $ $ $ $  V1 V2 V3 V4"
+  // V1 = SALDO ANTERIOR (saldoInicial), V4 = SALDO ACTUAL (saldoFinal)
+  const match = text.match(
+    /SALDO ANTERIOR\s+TOTAL ABONOS\s+TOTAL CARGOS\s+SALDO ACTUAL\s+\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
+  );
+  if (!match) return null;
+  return {
+    saldoInicial: parseMonto(match[1]),
+    saldoFinal: parseMonto(match[4]),
+  };
+}
+
 function extractDateRange(text: string): DateRange | null {
   const match = text.match(/DESDE:\s*(\d{4})\/(\d{2})\/(\d{2})\s+HASTA:\s*(\d{4})\/(\d{2})\/(\d{2})/);
   if (!match) return null;
@@ -64,10 +77,11 @@ export class BancolombiaParser implements ExtractoParser {
 
   parse(texto: string): ParseResult {
     const dateRange = extractDateRange(texto);
+    const saldos = extractSaldos(texto);
     const context: ParseContext = {
       banco: this.banco,
-      saldoInicial: 0,
-      saldoFinal: 0,
+      saldoInicial: saldos?.saldoInicial ?? 0,
+      saldoFinal: saldos?.saldoFinal ?? 0,
       periodoDesde: dateRange ? this.formatDate(dateRange.desde) : undefined,
       periodoHasta: dateRange ? this.formatDate(dateRange.hasta) : undefined,
     };
