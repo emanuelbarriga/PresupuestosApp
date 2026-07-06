@@ -1410,20 +1410,14 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
           data.archivo = { url: uploadResult.url, path: uploadResult.path, name: archivoFile.name, uploadedAt: new Date().toISOString() };
         }
 
-        // Save extracto (creates the Firestore doc)
-        await onSubmit(form, data);
-
-        // If we have pre-parsed movements, save them now
-        if (preParseMovs && preParseMovs.length > 0 && data.archivo?.url) {
-          const accountId = data.accountId || (form.mode === 'edit' ? extractoRecord?.accountId : '');
-          if (accountId) {
-            // We need the extractoId — it was created by onSubmit which does popScreen().
-            // Since we can't get it synchronously, we store it in a temp field
-            // and let the page.tsx handler deal with it.
-            data._pendingMovimientos = preParseMovs;
-            data._pendingSaldoFinal = preParseSaldoFinal;
-          }
+        // Attach pre-parsed movements to data BEFORE onSubmit so page.tsx can save them
+        if (preParseMovs && preParseMovs.length > 0) {
+          data._pendingMovimientos = preParseMovs;
+          data._pendingSaldoFinal = preParseSaldoFinal;
         }
+
+        // Save extracto (page.tsx handler saves movements from _pendingMovimientos)
+        await onSubmit(form, data);
       } catch (err) {
         console.error('Error saving extracto:', err);
         alert('Error al guardar el extracto.');
@@ -1455,16 +1449,22 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Extracto PDF</label>
             <input ref={fileInputRef} type="file" accept=".pdf"
               onChange={handlePdfSelected} className="hidden" />
-            {archivoFile ? (
+            {archivoFile || (currentArchivo?.url && form.mode === 'edit') ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
                   <div className="flex items-center gap-2 min-w-0">
                     <FileText size={16} className="text-indigo-500 shrink-0" />
-                    <span className="text-xs text-indigo-700 truncate">{archivoFile.name}</span>
+                    <span className="text-xs text-indigo-700 truncate">{archivoFile?.name ?? currentArchivo?.name ?? 'PDF'}</span>
                     {preParseMovs && <span className="text-[9px] text-emerald-600 font-bold ml-1">✓ {preParseMovs.length} movs</span>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={handleExtraerDatos} disabled={parseoLoading}
+                    {currentArchivo?.url && !archivoFile && (
+                      <a href={currentArchivo.url} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all" title="Ver PDF">
+                        <Eye size={14} />
+                      </a>
+                    )}
+                    <button onClick={archivoFile ? handleExtraerDatos : undefined} disabled={parseoLoading || !archivoFile}
                       className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all disabled:opacity-50" title="Extraer datos del PDF">
                       {parseoLoading
                         ? <span className="inline-block w-3 h-3 border-2 border-indigo-400 border-t-indigo-600 rounded-full animate-spin" />
