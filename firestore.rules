@@ -42,6 +42,7 @@ service cloud.firestore {
       match /ejecuciones/{doc} { allow read, write: if isMember(companyId); }
       match /projects/{doc} { allow read, write: if isMember(companyId); }
       match /cuentasBancarias/{doc} { allow read, write: if isMember(companyId); }
+      match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
 
       // BudgetLinks subcollection — same access as ejecuciones
