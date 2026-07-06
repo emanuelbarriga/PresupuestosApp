@@ -34,7 +34,7 @@ interface AggregatedInvitation extends Invitacion {
 }
 
 interface ConfiguracionProps {
-  onAddNew?: (type: FormType) => void;
+  onAddNew?: (type: FormType, defaults?: Record<string, string>) => void;
   onEditRecord?: (form: ActiveForm) => void;
 }
 

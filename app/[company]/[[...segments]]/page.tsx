@@ -392,8 +392,8 @@ export default function CompanyPage({ params }: Props) {
     pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
   };
 
-  const handleAddNew = (type: FormType) => {
-    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type } });
+  const handleAddNew = (type: FormType, defaults?: Record<string, string>) => {
+    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type, defaults } });
   };
 
   const handleEditRecord = (form: ActiveForm) => {

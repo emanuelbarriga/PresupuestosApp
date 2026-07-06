@@ -15,14 +15,15 @@ function parseMonto(text: string): number {
 
 // Repeats verbatim on every page — strip entirely (dotall so it spans the
 // embedded newlines between page blocks in the extracted text).
-const DISCLAIMER_PATTERN = /Nuestra línea de Atención.*?autónoma de Bancoomeva\./gs;
+// Use [\\s\\S] instead of dotAll (/s) flag — target is ES2017
+const DISCLAIMER_PATTERN = /Nuestra línea de Atención[\s\S]*?autónoma de Bancoomeva\./g;
 
 // Running summary block repeated at the top of every page after page 1.
-const SUMMARY_PATTERN = /SALDO INICIAL\s+\$\s*[\d,]+\.\d{2}.*?SALDO FINAL\s+\$\s*[\d,]+\.\d{2}/gs;
+const SUMMARY_PATTERN = /SALDO INICIAL\s+\$\s*[\d,]+\.\d{2}[\s\S]*?SALDO FINAL\s+\$\s*[\d,]+\.\d{2}/g;
 
 // Anchor for a transaction row: a date followed by "OFICINA", capturing
 // everything up to (but not including) the next such anchor or the end.
-const ROW_PATTERN = /(\d{2}-\d{2}-\d{4})\s+(OFICINA\s+.*?)(?=\d{2}-\d{2}-\d{4}\s+OFICINA|$)/gs;
+const ROW_PATTERN = /(\d{2}-\d{2}-\d{4})\s+(OFICINA[\s\S]*?)(?=\d{2}-\d{2}-\d{4}\s+OFICINA|$)/g;
 
 export class BancoomevaParser implements ExtractoParser {
   readonly banco: Banco = 'Bancoomeva';

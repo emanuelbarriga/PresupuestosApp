@@ -991,6 +991,8 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         init.tipo = 'cliente';
       } else if (form.type === 'provider') {
         init.tipo = 'proveedor';
+      } else if (form.type === 'extracto') {
+        init.estado = 'Pendiente';
       }
       // 'project' type has no automatic defaults — all fields come from the form
       if (form.defaults) Object.assign(init, form.defaults);

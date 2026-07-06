@@ -101,7 +101,7 @@ export function Datos({
   companyId: string;
   companyName?: string;
   onViewRecord?: (detail: RecordDetail) => void;
-  onAddNew?: (type: FormType) => void;
+  onAddNew?: (type: FormType, defaults?: Record<string, string>) => void;
   onEditRecord?: (form: any) => void;
   onDeleteBudget?: (budgetId: string) => void;
   onDeleteEjecucion?: (ejecucionId: string) => void;
@@ -1147,7 +1147,7 @@ export function Datos({
                                 </span>
                               </td>
                               <td className="p-3 text-slate-600">{cuenta.numero}</td>
-                              <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(cuenta.saldoActual)}</td>
+                              <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(cuenta.saldoActual ?? cuenta.saldoInicial ?? 0)}</td>
                               <td className="p-3 text-center text-slate-600">
                                 {ejecucionCountByCuenta.get(cuenta.id) ?? 0}
                               </td>
@@ -1250,7 +1250,7 @@ export function Datos({
                                     </table>
                                     <div className="p-2 flex justify-center border-t border-slate-200">
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); onAddNew?.('extracto'); }}
+                                        onClick={(e) => { e.stopPropagation(); onAddNew?.('extracto', { accountId: cuenta.id }); }}
                                         className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
                                       >
                                         <Plus size={12} /> Agregar extracto
