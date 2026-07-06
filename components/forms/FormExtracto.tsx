@@ -60,9 +60,6 @@ export function FormExtractoParseBtn({
     }
   }, [pdfUrl]);
 
-  // Don't show button for conciliated extracts
-  if (estado === 'Conciliado') return null;
-
   const handleConfirm = useCallback(async () => {
     setLoading(true);
     setShowModal(false);
@@ -101,6 +98,9 @@ export function FormExtractoParseBtn({
       handleParseClick();
     }
   }, [handleParseClick]);
+
+  // Don't show button for conciliated extracts
+  if (estado === 'Conciliado') return null;
 
   return (
     <>
