@@ -7,7 +7,7 @@ import { ExtractoParseModal, type ExtractoParseHeader, type ExtractoParseProgres
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
-import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2, Eye } from 'lucide-react';
+import { X, FileText, Bell, Settings, Filter, ChevronDown, ChevronUp, Plus, Search, Link2, Unlink, Save, Trash2, Download, Upload, Paperclip, ArrowLeft, Shield, User, Send, Mail, Clock, Ban, Pencil, Building2, Eye, RefreshCw, Undo2 } from 'lucide-react';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -1616,6 +1616,61 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
       }
     };
 
+    // ── Re-parse an existing extracto (download PDF from Storage, parse, auto-fill) ──
+    const handleReparseExistente = async () => {
+      if (!currentArchivo?.url) return;
+      setParseoLoading(true);
+      try {
+        const { downloadPdfBytes } = await import('@/lib/downloadPdf');
+        const buffer = await downloadPdfBytes(currentArchivo.url, currentArchivo.path);
+
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+        const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map((item: any) => item.str ?? '').join(' '));
+        }
+        const texto = pages.join('\n\n').trim();
+        if (!texto) throw new Error('PDF sin texto extraíble');
+
+        const { detectarBanco, getParser } = await import('@/lib/parsers/index');
+        const banco = detectarBanco(texto);
+        if (banco === 'No detectado') {
+          alert('No se pudo detectar el banco automáticamente.');
+          setParseoLoading(false);
+          return;
+        }
+        const parser = getParser(banco);
+        const result = parser.parse(texto);
+
+        // Auto-fill
+        if (result.context.periodoDesde) {
+          const parts = result.context.periodoDesde.split('-');
+          const mesNum = parseInt(parts[1], 10);
+          set('mes', MONTHS[mesNum - 1] || '');
+          set('anio', parts[0]);
+        }
+        set('saldoInicial', String(result.context.saldoInicial));
+        set('saldoFinal', String(result.context.saldoFinal));
+        set('estado', 'Completado');
+
+        const { reconciliar } = await import('@/lib/parsers/reconciliador');
+        const movs = reconciliar(result.movimientos, result.context.saldoInicial);
+        setPreParseMovs(movs);
+        setPreParseSaldoFinal(result.context.saldoFinal);
+
+        alert(`Re-parseado: ${result.movimientos.length} movimientos, saldo final $${result.context.saldoFinal.toLocaleString('es-CO')}`);
+      } catch (err) {
+        console.error('Error re-parsing PDF:', err);
+        alert('Error al re-parsear el PDF.');
+      } finally {
+        setParseoLoading(false);
+      }
+    };
+
     // ── Override handleSubmit for extracto: upload → save → batch movements ──
     const handleExtractoSubmit = async () => {
       setSaving(true);
@@ -1691,8 +1746,22 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
                         <Eye size={14} />
                       </a>
                     )}
+                    {/* Re-parse existing extracto (edit mode, no new file selected) */}
+                    {form.mode === 'edit' && currentArchivo?.url && !archivoFile && (
+                      <button onClick={handleReparseExistente} disabled={parseoLoading}
+                        className="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-all disabled:opacity-50" title="Volver a parsear el PDF existente">
+                        {parseoLoading
+                          ? <span className="inline-block w-3 h-3 border-2 border-amber-400 border-t-amber-600 rounded-full animate-spin" />
+                          : <RefreshCw size={14} />
+                        }
+                      </button>
+                    )}
                     <button onClick={archivoFile ? handleExtraerDatos : undefined} disabled={parseoLoading || !archivoFile}
-                      className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all disabled:opacity-50" title="Extraer datos del PDF">
+                      className={`p-1.5 rounded-lg transition-all disabled:opacity-50 ${
+                        archivoFile
+                          ? 'text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100'
+                          : 'text-slate-300 cursor-not-allowed'
+                      }`} title={archivoFile ? 'Extraer datos del PDF' : 'Seleccioná un PDF primero'}>
                       {parseoLoading
                         ? <span className="inline-block w-3 h-3 border-2 border-indigo-400 border-t-indigo-600 rounded-full animate-spin" />
                         : <FileText size={14} />
