@@ -120,11 +120,6 @@ export class BancolombiaParser implements ExtractoParser {
     const allRows = [...rowRows];
     let ordinal = allRows.length;
     for (const row of colRows) {
-      // Skip rows where the amount is suspicious (value > 10M, likely a saldo
-      // leaked into the amounts array at the page boundary).
-      const valor = row.debito ?? row.credito ?? 0;
-      if (valor > 10_000_000 && row.saldo > 10_000_000) continue;
-
       // Skip rows that are duplicate dates already captured by row-by-row
       const isDuplicate = allRows.some(
         r => r.fecha === row.fecha && r.saldo === row.saldo

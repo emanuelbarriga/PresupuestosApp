@@ -1195,7 +1195,14 @@ export function Datos({
                     ) : (
                       paginate(filteredCuentas).map((cuenta) => {
                         const isExpanded = expandedRows.has(cuenta.id);
-                        const cuentaExtractos = extractos.filter(e => e.accountId === cuenta.id);
+                        const MONTH_ORDER: Record<string, number> = {
+                          Enero: 1, Febrero: 2, Marzo: 3, Abril: 4,
+                          Mayo: 5, Junio: 6, Julio: 7, Agosto: 8,
+                          Septiembre: 9, Octubre: 10, Noviembre: 11, Diciembre: 12,
+                        };
+                        const cuentaExtractos = extractos
+                          .filter(e => e.accountId === cuenta.id)
+                          .sort((a, b) => (b.anio ?? 0) - (a.anio ?? 0) || (MONTH_ORDER[a.mes] ?? 0) - (MONTH_ORDER[b.mes] ?? 0));
                         return (
                           <React.Fragment key={cuenta.id}>
                             <tr
