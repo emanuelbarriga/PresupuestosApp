@@ -26,7 +26,22 @@ export function reconciliar(
     const expectedSaldo = saldoAnterior - (mov.debito ?? 0) + (mov.credito ?? 0);
     const diff = Math.abs(expectedSaldo - mov.saldo);
 
-    const requiereRevision = diff > tolerancia;
+    let requiereRevision = false;
+    let revisionMotivo: string | undefined;
+
+    if (diff > tolerancia) {
+      requiereRevision = true;
+      // Check for specific issues
+      if (mov.debito == null && mov.credito == null) {
+        revisionMotivo = `Sin débito ni crédito — saldo esperado ${expectedSaldo.toFixed(2)}, obtenido ${mov.saldo.toFixed(2)}`;
+      } else if (mov.debito === 0 && mov.credito === 0) {
+        revisionMotivo = `Monto 0 — saldo esperado ${expectedSaldo.toFixed(2)}, obtenido ${mov.saldo.toFixed(2)}`;
+      } else if (diff > 1000000) {
+        revisionMotivo = `Diferencia grande (${diff.toFixed(2)}) — monto o saldo posiblemente incorrecto`;
+      } else {
+        revisionMotivo = `Saldo esperado ${expectedSaldo.toFixed(2)}, obtenido ${mov.saldo.toFixed(2)} (dif: ${diff.toFixed(2)})`;
+      }
+    }
 
     // ALWAYS use the bank's own reported saldo (not our calculated expectation)
     // as the base for the next row. The reported saldo is ground truth from the
@@ -39,6 +54,7 @@ export function reconciliar(
     return {
       ...mov,
       requiereRevision: requiereRevision || undefined,
+      revisionMotivo,
     };
   });
 }

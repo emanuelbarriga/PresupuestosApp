@@ -173,7 +173,7 @@ export class BancolombiaParser implements ExtractoParser {
     const withoutDates = texto.replace(/\b\d{1,2}\/\d{1,2}\b/g, ' ').replace(/\s+/g, ' ').trim();
 
     // 3. Find ALL numbers (amounts + saldos) in order of appearance
-    const numRegex = /(-?[\d,]+\.\d{2})/g;
+    const numRegex = /(-?[\d,]*\.\d{2})/g;
     const allNumbers: number[] = [];
     while ((m = numRegex.exec(withoutDates)) !== null) {
       allNumbers.push(parseMonto(m[1]));
@@ -216,7 +216,7 @@ export class BancolombiaParser implements ExtractoParser {
     }
 
     // 4. Description text: everything before the first number in withoutDates
-    const firstNumIdx = withoutDates.search(/(-?[\d,]+\.\d{2})/);
+    const firstNumIdx = withoutDates.search(/(-?[\d,]*\.\d{2})/);
     let descText = '';
     if (firstNumIdx > -1) {
       descText = withoutDates.slice(0, firstNumIdx).trim();
@@ -230,7 +230,7 @@ export class BancolombiaParser implements ExtractoParser {
     // SERVICIO, TRANSFERENCIA, o "0" (items de mantenimiento del banco).
     // pdfjs join(' ') aplana todo a espacios simples, así que no podemos
     // usar split(/\s{3,}/). Pero estas anclas marcan boundaries reales.
-    const anchorRegex = /(ABONO|AJUSTE|COBRO|COMPRA|CUOTA|IMPTO|PAGO|SERVICIO|TRANSFERENCIA|INTERBANC|\b0\b)\s*/gi;
+    const anchorRegex = /\b(ABONO|AJUSTE|COBRO|COMPRA|CUOTA|IMPTO|PAGO|SERVICIO|TRANSFERENCIA|INTERBANC|0)\b\s*/gi;
     const descParts: string[] = [];
     // split con capturing group: [before, capture1, between1, capture2, ...]
     const tokens = descText.split(anchorRegex);
@@ -241,6 +241,25 @@ export class BancolombiaParser implements ExtractoParser {
       const rest = (tokens[i + 1] ?? '').trim();
       descParts.push((anchor + ' ' + rest).trim());
       i += 2;
+    }
+    // El split por anclas puede producir más de N partes cuando una palabra
+    // clave aparece dentro de una descripción existente. Ej: "SERVICIO
+    // TRANSFERENCIA VIRTUAL" → "SERVICIO" + "TRANSFERENCIA VIRTUAL" porque
+    // TRANSFERENCIA es ancla. En vez de fusionar desde el final (que desfasa),
+    // buscamos el par adyacente con MENOS palabras totales — es el candidato
+    // más probable de falso split:
+    //   "SERVICIO"(1) + "TRANSFERENCIA VIRTUAL"(2) = 3 palabras
+    //   "TRANSFERENCIA VIRTUAL"(2) + "IMPTO..."(3) = 5 palabras
+    // → fusionamos el par de 3 palabras = "SERVICIO TRANSFERENCIA VIRTUAL".
+    while (descParts.length > n) {
+      let bestIdx = 0;
+      let bestLen = Infinity;
+      for (let mi = 0; mi < descParts.length - 1; mi++) {
+        const combined = descParts[mi].split(/\s+/).length + descParts[mi + 1].split(/\s+/).length;
+        if (combined < bestLen) { bestLen = combined; bestIdx = mi; }
+      }
+      descParts[bestIdx] = (descParts[bestIdx] + ' ' + descParts[bestIdx + 1]).trim();
+      descParts.splice(bestIdx + 1, 1);
     }
     // Rellenar si faltan partes
     while (descParts.length < n) descParts.push('');
@@ -360,7 +379,7 @@ export class BancolombiaParser implements ExtractoParser {
       start: number;
       end: number;
     }
-    const numberPattern = /(-?[\d,]+\.\d{2})/g;
+    const numberPattern = /(-?[\d,]*\.\d{2})/g;
     const numbers: NumberMatch[] = [];
     let numMatch: RegExpExecArray | null;
 

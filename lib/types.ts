@@ -149,6 +149,8 @@ export interface MovimientoBancarioInput {
   bancoOrigen: Banco;
   horaOriginal?: string; // solo Global66
   requiereRevision?: boolean;
+  /** Por qué falló la reconciliación (solo en memoria, no se persiste a Firestore) */
+  revisionMotivo?: string;
   posibleDuplicado?: boolean;
 }
 

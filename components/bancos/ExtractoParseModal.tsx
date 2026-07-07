@@ -167,7 +167,25 @@ export function ExtractoParseModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl w-[95vw] max-w-[1600px] mx-4 h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-          <h3 className="text-sm font-bold text-slate-800">Confirmar extracto</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-bold text-slate-800">Confirmar extracto</h3>
+            {corrigiendo && (() => {
+              const ords = editMovimientos.map(m => m.ordinal).sort((a, b) => a - b);
+              const gaps: string[] = [];
+              for (let gi = 1; gi < ords.length; gi++) {
+                if (ords[gi] !== ords[gi - 1] + 1) gaps.push(`${ords[gi - 1]}→${ords[gi]}`);
+              }
+              if (gaps.length > 0) {
+                return <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-lg">Saltos en ordinales: {gaps.join(', ')}</span>;
+              }
+              // Re-numbering needed after deletions
+              const totalOrd = editMovimientos.length;
+              if (ords.length > 0 && ords[ords.length - 1] !== totalOrd) {
+                return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">{totalOrd} movs, último ordinal {ords[ords.length - 1]}</span>;
+              }
+              return null;
+            })()}
+          </div>
           <button onClick={onCancel} className="p-1 rounded text-slate-400 hover:text-slate-600 transition-colors">
             <X size={18} />
           </button>
@@ -421,13 +439,21 @@ function PreviewMovimientosTable({
                 formatCurrency(mov.saldo)
               )}
             </td>
-            <td className="p-2 text-center">
+            <td className="p-2 text-center relative group">
               {mov.requiereRevision ? (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap cursor-help">
                   ⚠ Revisión
                 </span>
               ) : (
                 <span className="text-slate-300 text-[9px]">—</span>
+              )}
+              {mov.revisionMotivo && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
+                  <div className="bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg whitespace-nowrap max-w-[300px] text-left">
+                    {mov.revisionMotivo}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+                  </div>
+                </div>
               )}
             </td>
             {editable && onDelete && (
