@@ -82,30 +82,33 @@ export function ExtractoParseModal({
     setLocalHeader(header);
   }
 
-  const [prevMovs, setPrevMovs] = useState(movimientos);
-  if (movimientos !== prevMovs) {
-    setPrevMovs(movimientos);
-    setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
-  }
-
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (!open) setCorrigiendo(false);
   }
 
+  // Sync editMovimientos when movimientos prop changes (new parse result)
+  const movsKey = useMemo(() => movimientos.map(m => `${m.ordinal}|${m.fecha}|${m.saldo}`).join(','), [movimientos]);
+  useEffect(() => {
+    setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movsKey]);
+
   const updateMovimiento = (ordinal: number, field: 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
-    setEditMovimientos(prev => {
-      const next = prev.map(m => {
-        if (m.ordinal !== ordinal) return m;
-        if (field === 'descripcion') return { ...m, descripcion: rawValue };
-        const parsed = rawValue === '' ? undefined : Number(rawValue.replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
-        return { ...m, [field]: parsed };
-      });
-      onMovimientosChange?.(next);
-      return next;
-    });
+    setEditMovimientos(prev => prev.map(m => {
+      if (m.ordinal !== ordinal) return m;
+      if (field === 'descripcion') return { ...m, descripcion: rawValue };
+      const parsed = rawValue === '' ? undefined : Number(rawValue.replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+      return { ...m, [field]: parsed };
+    }));
   };
+  // Sync editMovimientos back to parent after state settles
+  useEffect(() => {
+    if (!open) return;
+    onMovimientosChange?.(editMovimientos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMovimientos, open]);
 
   // PDF preview: prefer direct URL (existing extractos), fallback to blob(file)
   const previewUrl = useMemo(
@@ -138,13 +141,10 @@ export function ExtractoParseModal({
   };
 
   const handleDeleteMovimiento = (ordinal: number) => {
-    setEditMovimientos(prev => {
-      const next = prev
-        .filter(m => m.ordinal !== ordinal)
-        .map((m, i) => ({ ...m, ordinal: i + 1 }));
-      onMovimientosChange?.(next);
-      return next;
-    });
+    setEditMovimientos(prev => prev
+      .filter(m => m.ordinal !== ordinal)
+      .map((m, i) => ({ ...m, ordinal: i + 1 })),
+    );
   };
 
   const handleGuardarClick = () => {
