@@ -91,7 +91,7 @@ export function ExtractoParseModal({
     if (!open) setCorrigiendo(false);
   }
 
-  const updateMovimiento = (ordinal: number, field: 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
+  const updateMovimiento = (ordinal: number, field: 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
     setEditMovimientos(prev => {
       const next = prev.map(m => {
         if (m.ordinal !== ordinal) return m;
@@ -155,7 +155,7 @@ export function ExtractoParseModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-7xl mx-4 h-[85vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-[95vw] max-w-[1600px] mx-4 h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h3 className="text-sm font-bold text-slate-800">Confirmar extracto</h3>
           <button onClick={onCancel} className="p-1 rounded text-slate-400 hover:text-slate-600 transition-colors">
@@ -316,6 +316,8 @@ function HeaderField({ label, children }: { label: string; children: React.React
   );
 }
 
+type MovField = 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo';
+
 function PreviewMovimientosTable({
   movimientos,
   editable,
@@ -323,7 +325,7 @@ function PreviewMovimientosTable({
 }: {
   movimientos: MovimientoBancarioInput[];
   editable?: boolean;
-  onEdit?: (ordinal: number, field: 'descripcion' | 'debito' | 'credito' | 'saldo', value: string) => void;
+  onEdit?: (ordinal: number, field: MovField, value: string) => void;
 }) {
   if (movimientos.length === 0) {
     return <div className="p-4 text-center text-[10px] text-slate-400 italic">Sin movimientos extraídos</div>;
@@ -347,7 +349,17 @@ function PreviewMovimientosTable({
       <tbody className="text-[11px] divide-y divide-slate-200">
         {sorted.map(mov => (
           <tr key={mov.ordinal} className={mov.requiereRevision ? 'bg-amber-50' : ''}>
-            <td className="p-2 pl-3 whitespace-nowrap text-slate-600">{mov.fecha}</td>
+            <td className="p-2 pl-3 whitespace-nowrap">
+              {editable && onEdit ? (
+                <input
+                  value={mov.fecha ?? ''}
+                  onChange={(e) => onEdit(mov.ordinal, 'fecha', e.target.value)}
+                  className="w-24 border border-slate-200 rounded p-1 text-[11px]"
+                />
+              ) : (
+                <span className="text-slate-600">{mov.fecha}</span>
+              )}
+            </td>
             <td className="p-2 max-w-[160px]">
               {editable && onEdit ? (
                 <input
