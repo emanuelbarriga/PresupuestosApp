@@ -107,7 +107,7 @@ export function ExtractoParseModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl mx-4 h-[80vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-7xl mx-4 h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h3 className="text-sm font-bold text-slate-800">Confirmar extracto</h3>
           <button onClick={onCancel} className="p-1 rounded text-slate-400 hover:text-slate-600 transition-colors">
@@ -117,7 +117,7 @@ export function ExtractoParseModal({
 
         <div className="flex-1 flex overflow-hidden">
           {/* Left pane: data */}
-          <div className="w-1/2 border-r border-slate-100 overflow-y-auto p-5 space-y-4">
+          <div className="w-1/2 border-r border-slate-100 overflow-y-auto overflow-x-auto p-5 space-y-4">
             {loading && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                 <span className="inline-block w-6 h-6 border-2 border-indigo-400/40 border-t-indigo-600 rounded-full animate-spin" />

@@ -574,7 +574,11 @@ export async function batchAddMovimientos(
 
   for (const mov of movimientos) {
     const ref = doc(movimientosRef);
-    batch.set(ref, { ...mov, createdAt: serverTimestamp() });
+    // Firestore no acepta undefined — limpiar campos undefined antes de escribir
+    const cleanMov = Object.fromEntries(
+      Object.entries(mov).filter(([_, v]) => v !== undefined),
+    );
+    batch.set(ref, { ...cleanMov, createdAt: serverTimestamp() });
     ids.push(ref.id);
   }
 
