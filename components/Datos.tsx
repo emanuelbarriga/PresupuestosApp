@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto } from '@/lib/firestore';
+import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText } from 'lucide-react';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
 import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
@@ -124,13 +124,16 @@ export function Datos({
   const [movimientosPorExtracto, setMovimientosPorExtracto] = useState<Record<string, MovimientoBancario[]>>({});
   const extractoUnsubRef = useRef<Map<string, () => void>>(new Map());
 
-  // View modal: show an existing extracto's data in read-only mode
+  // View/Edit modal for existing extractos
   const [viewModalData, setViewModalData] = useState<{
     open: boolean;
+    extractoId: string;
+    accountId: string;
     header: ExtractoParseHeader | null;
-    movimientos: MovimientoBancario[];
+    movimientos: MovimientoBancarioInput[];
     pdfUrl?: string;
-  }>({ open: false, header: null, movimientos: [] });
+  }>({ open: false, extractoId: '', accountId: '', header: null, movimientos: [] });
+  const [viewModalSaving, setViewModalSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -321,6 +324,8 @@ export function Datos({
     }
     setViewModalData({
       open: true,
+      extractoId: ext.id,
+      accountId: ext.accountId,
       header: {
         mes: (ext.mes as any) ?? '',
         anio: ext.anio ?? new Date().getFullYear(),
@@ -343,6 +348,66 @@ export function Datos({
       alert('Error al borrar el extracto.');
     }
   }, [companyId]);
+
+  const handleViewSave = useCallback(async (header: ExtractoParseHeader) => {
+    if (!viewModalData.extractoId || !viewModalData.accountId) return;
+    setViewModalSaving(true);
+    try {
+      const eid = viewModalData.extractoId;
+      const aid = viewModalData.accountId;
+      const movs = viewModalData.movimientos ?? [];
+
+      // Build clean movimiento objects
+      const cleanMovs = movs.map((m, i) => ({
+        fecha: m.fecha,
+        descripcion: m.descripcion,
+        debito: m.debito,
+        credito: m.credito,
+        saldo: m.saldo,
+        moneda: m.moneda ?? 'COP',
+        ordinal: i + 1,
+        bancoOrigen: m.bancoOrigen ?? (header.banco as any),
+      }));
+
+      // 1. Update extracto header
+      await updateExtracto(companyId, aid, eid, {
+        mes: header.mes,
+        anio: header.anio,
+        saldoInicial: header.saldoInicial,
+        saldoFinal: header.saldoFinal,
+        estado: 'Completado',
+        totalMovimientosParseados: cleanMovs.length,
+      } as any);
+
+      // 2. Delete old movements using Firebase SDK directly (keep extracto doc)
+      const { collection: fsCollection, getDocs, writeBatch } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      const movRef = fsCollection(
+        db, 'companies', companyId,
+        'cuentasBancarias', aid,
+        'extractos', eid,
+        'movimientos',
+      );
+      const snap = await getDocs(movRef);
+      if (snap.docs.length > 0) {
+        const batch = writeBatch(db);
+        for (const d of snap.docs) batch.delete(d.ref);
+        await batch.commit();
+      }
+
+      // 3. Add edited movements
+      if (cleanMovs.length > 0) {
+        await batchAddMovimientos(companyId, aid, eid, cleanMovs);
+      }
+
+      setViewModalData(prev => ({ ...prev, open: false }));
+    } catch (err) {
+      console.error('Error saving extracto from view modal:', err);
+      alert('Error al guardar los cambios.');
+    } finally {
+      setViewModalSaving(false);
+    }
+  }, [companyId, viewModalData.extractoId, viewModalData.accountId, viewModalData.movimientos]);
 
   const ActionCell = ({ children }: { children: React.ReactNode }) => (
     <td className="p-2 text-center">{children}</td>
@@ -1461,12 +1526,13 @@ export function Datos({
           header={viewModalData.header}
           movimientos={viewModalData.movimientos}
           loading={false}
-          readOnly={true}
+          saving={viewModalSaving}
+          readOnly={false}
           progress={null}
           error={null}
           onBancoChange={() => {}}
-          onMovimientosChange={() => {}}
-          onSave={() => {}}
+          onMovimientosChange={(movs) => setViewModalData(prev => ({ ...prev, movimientos: movs }))}
+          onSave={handleViewSave}
           onCancel={() => setViewModalData(prev => ({ ...prev, open: false }))}
         />
       </div>
