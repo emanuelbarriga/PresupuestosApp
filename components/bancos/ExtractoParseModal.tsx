@@ -66,6 +66,7 @@ export function ExtractoParseModal({
   onCancel,
 }: ExtractoParseModalProps) {
   const savingRef = useRef(false);
+  const syncedRef = useRef(false);
   // Reset savingRef when the parent's saving prop goes back to false (save failed)
   if (saving === false && savingRef.current) savingRef.current = false;
   const [corrigiendo, setCorrigiendo] = useState(false);
@@ -86,11 +87,16 @@ export function ExtractoParseModal({
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (!open) setCorrigiendo(false);
-    // Sync movimientos → editMovimientos ONLY when modal opens (not on every prop change)
-    if (open) {
-      setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
-    }
   }
+
+  // Sync movimientos → editMovimientos once per modal session:
+  // catches async parse data arriving after modal opens (movimientos=[] → data)
+  if (open && movimientos.length > 0 && !syncedRef.current) {
+    syncedRef.current = true;
+    setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
+  }
+  // Reset syncedRef when modal closes
+  if (!open && syncedRef.current) syncedRef.current = false;
 
   const updateMovimiento = (ordinal: number, field: 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
     setEditMovimientos(prev => prev.map(m => {
