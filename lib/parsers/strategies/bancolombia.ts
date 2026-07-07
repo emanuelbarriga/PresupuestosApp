@@ -194,13 +194,25 @@ export class BancolombiaParser implements ExtractoParser {
       amounts = allNumbers.slice(0, n);
       saldos = allNumbers.slice(totalNums - n);
     } else {
-      // Menos de 2n números: repartimos sin traslapar
-      // amounts = first k, saldos = last n, donde k = totalNums - n
+      // Menos de 2n números: el límite entre amounts y saldos no está claro.
+      // Usamos magnitud como desempate: en Bancolombia los saldos son siempre
+      // >= 5M, los montos (débitos/créditos) son menores a 2M.
+      // El número en posición k = totalNums-n define de qué lado cae.
       const k = Math.max(0, totalNums - n);
-      amounts = allNumbers.slice(0, k);
-      saldos = allNumbers.slice(k);
-      // Rellenar amounts con 0 si k < n (traslape inevitable)
-      while (amounts.length < n) amounts.push(0);
+      const overlapNum = k > 0 && k < allNumbers.length ? allNumbers[k] : 0;
+      const isOverlapSaldo = overlapNum >= 5_000_000;
+
+      if (isOverlapSaldo) {
+        // El número k es un saldo → amounts son first k, saldos desde k
+        amounts = allNumbers.slice(0, k);
+        saldos = allNumbers.slice(k);
+        while (amounts.length < n) amounts.push(0); // última fila sin amount
+      } else {
+        // El número k es un amount → amounts son first k+1, saldos desde k+1
+        amounts = allNumbers.slice(0, k + 1);
+        saldos = allNumbers.slice(k + 1);
+        while (saldos.length < n) saldos.push(0); // última fila sin saldo
+      }
     }
 
     // 4. Description text: everything before the first number in withoutDates
@@ -212,19 +224,23 @@ export class BancolombiaParser implements ExtractoParser {
       descText = withoutDates;
     }
 
-    // 5. Split descriptions usando conteo de palabras.
-    // pdfjs join(' ') convierte todo a espacios simples, por lo que no podemos
-    // usar split(/\s{3,}/) para separar descripciones. En su lugar, dividimos
-    // el bloque de texto en N partes con ~W/N palabras cada una, que se aproxima
-    // a la longitud típica de cada descripción (2-6 palabras en Bancolombia).
-    const descriptionWords = descText.split(/\s+/).filter(Boolean);
-    const wordsPerPart = Math.max(1, Math.round(descriptionWords.length / Math.max(1, n)));
+    // 5. Split descriptions usando palabras ancla.
+    // Todas las descripciones de Bancolombia empiezan con una de estas
+    // palabras clave: ABONO, AJUSTE, COBRO, COMPRA, CUOTA, IMPTO, PAGO,
+    // SERVICIO, TRANSFERENCIA, o "0" (items de mantenimiento del banco).
+    // pdfjs join(' ') aplana todo a espacios simples, así que no podemos
+    // usar split(/\s{3,}/). Pero estas anclas marcan boundaries reales.
+    const anchorRegex = /(ABONO|AJUSTE|COBRO|COMPRA|CUOTA|IMPTO|PAGO|SERVICIO|TRANSFERENCIA|INTERBANC|\b0\b)\s*/gi;
     const descParts: string[] = [];
-    for (let di = 0; di < n; di++) {
-      const start = di * wordsPerPart;
-      const end = Math.min(start + wordsPerPart, descriptionWords.length);
-      descParts.push(descriptionWords.slice(start, end).join(' '));
-      if (end >= descriptionWords.length) break;
+    // split con capturing group: [before, capture1, between1, capture2, ...]
+    const tokens = descText.split(anchorRegex);
+    // Pair each anchor with its following text
+    let i = 1; // Start at index 1 (first element is text before first anchor)
+    while (i < tokens.length && descParts.length < n) {
+      const anchor = tokens[i] ?? '';
+      const rest = (tokens[i + 1] ?? '').trim();
+      descParts.push((anchor + ' ' + rest).trim());
+      i += 2;
     }
     // Rellenar si faltan partes
     while (descParts.length < n) descParts.push('');
