@@ -212,19 +212,22 @@ export class BancolombiaParser implements ExtractoParser {
       descText = withoutDates;
     }
 
-    // 5. Split descriptions: within-description gaps have 2+ spaces (from PDF column
-    // spacing), between-description gaps have 1 space (from pdfjs join(' '))
-    const rawParts = descText.split(/\s{3,}/).filter(Boolean);
-    // Further split by known patterns (each description is 2-6 words)
-    // If 3+ space split didn't give enough parts, try 2+ spaces
-    let descParts: string[];
-    if (rawParts.length >= n * 0.8) {
-      // Close enough — use raw parts, they may overlap boundaries slightly
-      descParts = rawParts;
-    } else {
-      // Not enough parts — try harder: split by 2+ spaces
-      descParts = descText.split(/\s{2,}/).filter(Boolean);
+    // 5. Split descriptions usando conteo de palabras.
+    // pdfjs join(' ') convierte todo a espacios simples, por lo que no podemos
+    // usar split(/\s{3,}/) para separar descripciones. En su lugar, dividimos
+    // el bloque de texto en N partes con ~W/N palabras cada una, que se aproxima
+    // a la longitud típica de cada descripción (2-6 palabras en Bancolombia).
+    const descriptionWords = descText.split(/\s+/).filter(Boolean);
+    const wordsPerPart = Math.max(1, Math.round(descriptionWords.length / Math.max(1, n)));
+    const descParts: string[] = [];
+    for (let di = 0; di < n; di++) {
+      const start = di * wordsPerPart;
+      const end = Math.min(start + wordsPerPart, descriptionWords.length);
+      descParts.push(descriptionWords.slice(start, end).join(' '));
+      if (end >= descriptionWords.length) break;
     }
+    // Rellenar si faltan partes
+    while (descParts.length < n) descParts.push('');
 
     // 6. Zip into rows
     const rows: MovimientoBancarioInput[] = [];
