@@ -86,14 +86,11 @@ export function ExtractoParseModal({
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (!open) setCorrigiendo(false);
+    // Sync movimientos → editMovimientos ONLY when modal opens (not on every prop change)
+    if (open) {
+      setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
+    }
   }
-
-  // Sync editMovimientos when movimientos prop changes (new parse result)
-  const movsKey = useMemo(() => movimientos.map(m => `${m.ordinal}|${m.fecha}|${m.saldo}`).join(','), [movimientos]);
-  useEffect(() => {
-    setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movsKey]);
 
   const updateMovimiento = (ordinal: number, field: 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
     setEditMovimientos(prev => prev.map(m => {
