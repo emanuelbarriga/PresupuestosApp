@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Banco, Month, MovimientoBancarioInput } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 
 export interface ExtractoParseHeader {
   mes: Month | '';
@@ -134,6 +134,16 @@ export function ExtractoParseModal({
     onBancoChange(banco);
   };
 
+  const handleDeleteMovimiento = (ordinal: number) => {
+    setEditMovimientos(prev => {
+      const next = prev
+        .filter(m => m.ordinal !== ordinal)
+        .map((m, i) => ({ ...m, ordinal: i + 1 }));
+      onMovimientosChange?.(next);
+      return next;
+    });
+  };
+
   const handleGuardarClick = () => {
     if (!localHeader) return;
     // Pass current movimientos (possibly edited) to the parent
@@ -252,6 +262,7 @@ export function ExtractoParseModal({
                     movimientos={corrigiendo ? editMovimientos : movimientos}
                     editable={corrigiendo}
                     onEdit={corrigiendo ? updateMovimiento : undefined}
+                    onDelete={corrigiendo ? handleDeleteMovimiento : undefined}
                   />
                 </div>
               </>
@@ -322,10 +333,12 @@ function PreviewMovimientosTable({
   movimientos,
   editable,
   onEdit,
+  onDelete,
 }: {
   movimientos: MovimientoBancarioInput[];
   editable?: boolean;
   onEdit?: (ordinal: number, field: MovField, value: string) => void;
+  onDelete?: (ordinal: number) => void;
 }) {
   if (movimientos.length === 0) {
     return <div className="p-4 text-center text-[10px] text-slate-400 italic">Sin movimientos extraídos</div>;
@@ -344,6 +357,7 @@ function PreviewMovimientosTable({
           <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-right">Crédito</th>
           <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-right">Saldo</th>
           <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-center w-20">Estado</th>
+          {editable && <th className="p-2 text-[9px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>}
         </tr>
       </thead>
       <tbody className="text-[11px] divide-y divide-slate-200">
@@ -416,6 +430,17 @@ function PreviewMovimientosTable({
                 <span className="text-slate-300 text-[9px]">—</span>
               )}
             </td>
+            {editable && onDelete && (
+              <td className="p-2 text-center">
+                <button
+                  onClick={() => onDelete(mov.ordinal)}
+                  className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
+                  title="Eliminar este movimiento"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
