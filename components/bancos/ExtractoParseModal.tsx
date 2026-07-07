@@ -34,6 +34,8 @@ interface ExtractoParseModalProps {
   progress: ExtractoParseProgress | null;
   error: string | null;
   onBancoChange: (banco: Banco) => void;
+  /** Called when the user edits a movimiento field in Corregir mode */
+  onMovimientosChange?: (movimientos: MovimientoBancarioInput[]) => void;
   onSave: (header: ExtractoParseHeader) => void;
   onCancel: () => void;
 }
@@ -41,7 +43,11 @@ interface ExtractoParseModalProps {
 const BANCOS_CONOCIDOS: Banco[] = ['Bancolombia', 'Bancoomeva', 'Global66'];
 
 const formatCurrency = (val: number) =>
-  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2 }).format(val);
+
+// Raw number formatting (no currency symbol) for editable inputs
+const formatNumber = (val: number) =>
+  new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
 export function ExtractoParseModal({
   open,
@@ -55,11 +61,15 @@ export function ExtractoParseModal({
   progress,
   error,
   onBancoChange,
+  onMovimientosChange,
   onSave,
   onCancel,
 }: ExtractoParseModalProps) {
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [localHeader, setLocalHeader] = useState<ExtractoParseHeader | null>(header);
+  const [editMovimientos, setEditMovimientos] = useState<MovimientoBancarioInput[]>(() =>
+    movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })),
+  );
 
   // Adjust local state during render when props change, instead of syncing
   // via useEffect (see https://react.dev/learn/you-might-not-need-an-effect).
@@ -69,11 +79,30 @@ export function ExtractoParseModal({
     setLocalHeader(header);
   }
 
+  const [prevMovs, setPrevMovs] = useState(movimientos);
+  if (movimientos !== prevMovs) {
+    setPrevMovs(movimientos);
+    setEditMovimientos(movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })));
+  }
+
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (!open) setCorrigiendo(false);
   }
+
+  const updateMovimiento = (ordinal: number, field: 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
+    setEditMovimientos(prev => {
+      const next = prev.map(m => {
+        if (m.ordinal !== ordinal) return m;
+        if (field === 'descripcion') return { ...m, descripcion: rawValue };
+        const parsed = rawValue === '' ? undefined : Number(rawValue.replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+        return { ...m, [field]: parsed };
+      });
+      onMovimientosChange?.(next);
+      return next;
+    });
+  };
 
   // PDF preview: prefer direct URL (existing extractos), fallback to blob(file)
   const previewUrl = useMemo(
@@ -107,7 +136,15 @@ export function ExtractoParseModal({
 
   const handleGuardarClick = () => {
     if (!localHeader) return;
+    // Pass current movimientos (possibly edited) to the parent
     onSave(localHeader);
+    // The parent extracto data will include the edited movimientos via
+    // the ExtractoAddForm's movimientos state, which is synced back
+    // from editMovimientos when the modal closes on save
+    if (corrigiendo) {
+      // Reset corrigiendo after save
+      setCorrigiendo(false);
+    }
   };
 
   const progressLabel = progress
@@ -211,7 +248,11 @@ export function ExtractoParseModal({
                 </div>
 
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <PreviewMovimientosTable movimientos={movimientos} />
+                  <PreviewMovimientosTable
+                    movimientos={corrigiendo ? editMovimientos : movimientos}
+                    editable={corrigiendo}
+                    onEdit={corrigiendo ? updateMovimiento : undefined}
+                  />
                 </div>
               </>
             )}
@@ -275,11 +316,22 @@ function HeaderField({ label, children }: { label: string; children: React.React
   );
 }
 
-function PreviewMovimientosTable({ movimientos }: { movimientos: MovimientoBancarioInput[] }) {
+function PreviewMovimientosTable({
+  movimientos,
+  editable,
+  onEdit,
+}: {
+  movimientos: MovimientoBancarioInput[];
+  editable?: boolean;
+  onEdit?: (ordinal: number, field: 'descripcion' | 'debito' | 'credito' | 'saldo', value: string) => void;
+}) {
   if (movimientos.length === 0) {
     return <div className="p-4 text-center text-[10px] text-slate-400 italic">Sin movimientos extraídos</div>;
   }
   const sorted = [...movimientos].sort((a, b) => a.ordinal - b.ordinal);
+
+  const cellCls = "w-full border border-slate-200 rounded p-1 text-[11px] text-right";
+
   return (
     <table className="w-full text-left border-collapse">
       <thead>
@@ -294,12 +346,55 @@ function PreviewMovimientosTable({ movimientos }: { movimientos: MovimientoBanca
       </thead>
       <tbody className="text-[11px] divide-y divide-slate-200">
         {sorted.map(mov => (
-          <tr key={mov.ordinal}>
-            <td className="p-2 pl-3 whitespace-nowrap">{mov.fecha}</td>
-            <td className="p-2 truncate max-w-[160px]" title={mov.descripcion}>{mov.descripcion}</td>
-            <td className="p-2 text-right">{mov.debito != null ? formatCurrency(mov.debito) : '—'}</td>
-            <td className="p-2 text-right">{mov.credito != null ? formatCurrency(mov.credito) : '—'}</td>
-            <td className="p-2 text-right font-semibold">{formatCurrency(mov.saldo)}</td>
+          <tr key={mov.ordinal} className={mov.requiereRevision ? 'bg-amber-50' : ''}>
+            <td className="p-2 pl-3 whitespace-nowrap text-slate-600">{mov.fecha}</td>
+            <td className="p-2 max-w-[160px]">
+              {editable && onEdit ? (
+                <input
+                  value={mov.descripcion ?? ''}
+                  onChange={(e) => onEdit(mov.ordinal, 'descripcion', e.target.value)}
+                  className="w-full border border-slate-200 rounded p-1 text-[11px]"
+                />
+              ) : (
+                <span className="truncate block" title={mov.descripcion}>{mov.descripcion}</span>
+              )}
+            </td>
+            <td className="p-2 text-right">
+              {editable && onEdit ? (
+                <input
+                  value={mov.debito != null ? formatNumber(mov.debito) : ''}
+                  onChange={(e) => onEdit(mov.ordinal, 'debito', e.target.value)}
+                  className={cellCls}
+                  placeholder="0.00"
+                />
+              ) : (
+                mov.debito != null ? formatCurrency(mov.debito) : '—'
+              )}
+            </td>
+            <td className="p-2 text-right">
+              {editable && onEdit ? (
+                <input
+                  value={mov.credito != null ? formatNumber(mov.credito) : ''}
+                  onChange={(e) => onEdit(mov.ordinal, 'credito', e.target.value)}
+                  className={cellCls}
+                  placeholder="0.00"
+                />
+              ) : (
+                mov.credito != null ? formatCurrency(mov.credito) : '—'
+              )}
+            </td>
+            <td className="p-2 text-right font-semibold">
+              {editable && onEdit ? (
+                <input
+                  value={mov.saldo != null ? formatNumber(mov.saldo) : ''}
+                  onChange={(e) => onEdit(mov.ordinal, 'saldo', e.target.value)}
+                  className={cellCls}
+                  placeholder="0.00"
+                />
+              ) : (
+                formatCurrency(mov.saldo)
+              )}
+            </td>
             <td className="p-2 text-center">
               {mov.requiereRevision ? (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap">

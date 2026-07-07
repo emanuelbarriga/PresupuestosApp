@@ -1458,6 +1458,7 @@ export function Datos({
           progress={null}
           error={null}
           onBancoChange={() => {}}
+          onMovimientosChange={() => {}}
           onSave={() => {}}
           onCancel={() => setViewModalData(prev => ({ ...prev, open: false }))}
         />

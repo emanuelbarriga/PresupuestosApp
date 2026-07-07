@@ -1097,6 +1097,7 @@ export function ExtractoAddForm({
         progress={progress}
         error={error}
         onBancoChange={handleBancoCorregido}
+        onMovimientosChange={setMovimientos}
         onSave={handleGuardar}
         onCancel={resetAll}
       />
