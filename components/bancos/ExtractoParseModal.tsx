@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Banco, Month, MovimientoBancarioInput } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
 import { X, Trash2 } from 'lucide-react';
@@ -65,6 +65,9 @@ export function ExtractoParseModal({
   onSave,
   onCancel,
 }: ExtractoParseModalProps) {
+  const savingRef = useRef(false);
+  // Reset savingRef when the parent's saving prop goes back to false (save failed)
+  if (saving === false && savingRef.current) savingRef.current = false;
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [localHeader, setLocalHeader] = useState<ExtractoParseHeader | null>(header);
   const [editMovimientos, setEditMovimientos] = useState<MovimientoBancarioInput[]>(() =>
@@ -145,16 +148,14 @@ export function ExtractoParseModal({
   };
 
   const handleGuardarClick = () => {
-    if (!localHeader) return;
-    // Pass current movimientos (possibly edited) to the parent
-    onSave(localHeader);
-    // The parent extracto data will include the edited movimientos via
-    // the ExtractoAddForm's movimientos state, which is synced back
-    // from editMovimientos when the modal closes on save
-    if (corrigiendo) {
-      // Reset corrigiendo after save
-      setCorrigiendo(false);
-    }
+    if (!localHeader || savingRef.current) return;
+    savingRef.current = true;
+
+    // Close modal immediately so the user sees feedback
+    // The async save runs in background and closes the Sidepanel on completion
+    const headerToSave = localHeader;
+    setCorrigiendo(false);
+    onSave(headerToSave);
   };
 
   const progressLabel = progress
