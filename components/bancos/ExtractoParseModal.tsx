@@ -21,7 +21,10 @@ export interface ExtractoParseProgress {
 
 interface ExtractoParseModalProps {
   open: boolean;
-  file: File | null;
+  /** File object for creating a blob URL (new uploads) */
+  file?: File | null;
+  /** Direct URL for PDF preview (existing extractos, read-only view) */
+  pdfUrl?: string | null;
   header: ExtractoParseHeader | null;
   movimientos: MovimientoBancarioInput[];
   loading: boolean;
@@ -43,6 +46,7 @@ const formatCurrency = (val: number) =>
 export function ExtractoParseModal({
   open,
   file,
+  pdfUrl,
   header,
   movimientos,
   loading,
@@ -71,10 +75,14 @@ export function ExtractoParseModal({
     if (!open) setCorrigiendo(false);
   }
 
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  // PDF preview: prefer direct URL (existing extractos), fallback to blob(file)
+  const previewUrl = useMemo(
+    () => pdfUrl ?? (file ? URL.createObjectURL(file) : null),
+    [file, pdfUrl],
+  );
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
 

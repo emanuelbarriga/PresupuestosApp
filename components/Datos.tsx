@@ -129,37 +129,8 @@ export function Datos({
     open: boolean;
     header: ExtractoParseHeader | null;
     movimientos: MovimientoBancario[];
+    pdfUrl?: string;
   }>({ open: false, header: null, movimientos: [] });
-
-  const handleViewExtracto = useCallback((ext: ExtractoBancario, movs: MovimientoBancario[]) => {
-    // Map cuenta banco → Banco type for the header. If unknown, use a fallback.
-    const cuenta = cuentas.find(c => c.id === ext.accountId);
-    const banco = (cuenta?.banco as any) ?? 'No detectado';
-    setViewModalData({
-      open: true,
-      header: {
-        mes: (ext.mes as any) ?? '',
-        anio: ext.anio ?? new Date().getFullYear(),
-        banco,
-        saldoInicial: ext.saldoInicial ?? 0,
-        saldoFinal: ext.saldoFinal ?? 0,
-      },
-      movimientos: movs,
-    });
-  }, [cuentas]);
-
-  const handleDeleteExtracto = useCallback(async (ext: ExtractoBancario) => {
-    const ok = window.confirm(
-      `¿Borrar extracto de ${ext.mes} ${ext.anio}?\nSe eliminarán todos los movimientos asociados.`,
-    );
-    if (!ok) return;
-    try {
-      await deleteExtracto(companyId, ext.accountId, ext.id);
-    } catch (err) {
-      console.error('Error deleting extracto:', err);
-      alert('Error al borrar el extracto.');
-    }
-  }, [companyId]);
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -339,6 +310,39 @@ export function Datos({
       console.error('Error deleting movimiento:', err);
     }
   }, [companyId, extractoExpandido, extractos]);
+
+  const handleViewExtracto = useCallback((ext: ExtractoBancario, movs: MovimientoBancario[]) => {
+    const cuenta = cuentas.find(c => c.id === ext.accountId);
+    const banco = (cuenta?.banco as any) ?? 'No detectado';
+    // Subscribe movimientos if not already loaded
+    if (extractoExpandido !== ext.id &&
+        (ext.estado === 'Completado' || ext.estado === 'Error de parseo')) {
+      toggleExtractoMovimientos(ext.id);
+    }
+    setViewModalData({
+      open: true,
+      header: {
+        mes: (ext.mes as any) ?? '',
+        anio: ext.anio ?? new Date().getFullYear(),
+        banco,
+        saldoInicial: ext.saldoInicial ?? 0,
+        saldoFinal: ext.saldoFinal ?? 0,
+      },
+      movimientos: movs,
+      pdfUrl: ext.archivo?.url,
+    });
+  }, [cuentas, extractoExpandido, toggleExtractoMovimientos]);
+
+  const handleDeleteExtracto = useCallback(async (ext: ExtractoBancario) => {
+    const ok = window.confirm(`¿Borrar extracto de ${ext.mes} ${ext.anio}?\nSe eliminarán todos los movimientos asociados.`);
+    if (!ok) return;
+    try {
+      await deleteExtracto(companyId, ext.accountId, ext.id);
+    } catch (err) {
+      console.error('Error deleting extracto:', err);
+      alert('Error al borrar el extracto.');
+    }
+  }, [companyId]);
 
   const ActionCell = ({ children }: { children: React.ReactNode }) => (
     <td className="p-2 text-center">{children}</td>
@@ -1446,6 +1450,7 @@ export function Datos({
         <ExtractoParseModal
           open={viewModalData.open}
           file={null}
+          pdfUrl={viewModalData.pdfUrl}
           header={viewModalData.header}
           movimientos={viewModalData.movimientos}
           loading={false}
