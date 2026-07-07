@@ -26,6 +26,8 @@ interface ExtractoParseModalProps {
   movimientos: MovimientoBancarioInput[];
   loading: boolean;
   saving?: boolean;
+  /** When true, hide all actions and show only a Cerrar button */
+  readOnly?: boolean;
   progress: ExtractoParseProgress | null;
   error: string | null;
   onBancoChange: (banco: Banco) => void;
@@ -45,6 +47,7 @@ export function ExtractoParseModal({
   movimientos,
   loading,
   saving = false,
+  readOnly = false,
   progress,
   error,
   onBancoChange,
@@ -217,27 +220,38 @@ export function ExtractoParseModal({
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
-          <button
-            onClick={onCancel}
-            disabled={saving}
-            className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-40"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={() => setCorrigiendo(c => !c)}
-            disabled={loading || !!error || saving || !localHeader}
-            className="px-4 py-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40"
-          >
-            {corrigiendo ? 'Listo' : 'Corregir'}
-          </button>
-          <button
-            onClick={handleGuardarClick}
-            disabled={loading || !!error || saving || !localHeader}
-            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:bg-indigo-400 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
+          {readOnly ? (
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+            >
+              Cerrar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={onCancel}
+                disabled={saving}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => setCorrigiendo(c => !c)}
+                disabled={loading || !!error || saving || !localHeader}
+                className="px-4 py-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-40"
+              >
+                {corrigiendo ? 'Listo' : 'Corregir'}
+              </button>
+              <button
+                onClick={handleGuardarClick}
+                disabled={loading || !!error || saving || !localHeader}
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:bg-indigo-400 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

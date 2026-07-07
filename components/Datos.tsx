@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento } from '@/lib/firestore';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye } from 'lucide-react';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto } from '@/lib/firestore';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText } from 'lucide-react';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
-import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
+import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
 
@@ -123,6 +123,43 @@ export function Datos({
   const [extractoExpandido, setExtractoExpandido] = useState<string | null>(null);
   const [movimientosPorExtracto, setMovimientosPorExtracto] = useState<Record<string, MovimientoBancario[]>>({});
   const extractoUnsubRef = useRef<Map<string, () => void>>(new Map());
+
+  // View modal: show an existing extracto's data in read-only mode
+  const [viewModalData, setViewModalData] = useState<{
+    open: boolean;
+    header: ExtractoParseHeader | null;
+    movimientos: MovimientoBancario[];
+  }>({ open: false, header: null, movimientos: [] });
+
+  const handleViewExtracto = useCallback((ext: ExtractoBancario, movs: MovimientoBancario[]) => {
+    // Map cuenta banco → Banco type for the header. If unknown, use a fallback.
+    const cuenta = cuentas.find(c => c.id === ext.accountId);
+    const banco = (cuenta?.banco as any) ?? 'No detectado';
+    setViewModalData({
+      open: true,
+      header: {
+        mes: (ext.mes as any) ?? '',
+        anio: ext.anio ?? new Date().getFullYear(),
+        banco,
+        saldoInicial: ext.saldoInicial ?? 0,
+        saldoFinal: ext.saldoFinal ?? 0,
+      },
+      movimientos: movs,
+    });
+  }, [cuentas]);
+
+  const handleDeleteExtracto = useCallback(async (ext: ExtractoBancario) => {
+    const ok = window.confirm(
+      `¿Borrar extracto de ${ext.mes} ${ext.anio}?\nSe eliminarán todos los movimientos asociados.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteExtracto(companyId, ext.accountId, ext.id);
+    } catch (err) {
+      console.error('Error deleting extracto:', err);
+      alert('Error al borrar el extracto.');
+    }
+  }, [companyId]);
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1253,25 +1290,28 @@ export function Datos({
                                                     </span>
                                                   </td>
                                                   <td className="p-2 text-center">
-                                                    {ext.archivo?.url && ext.estado !== 'Conciliado' && (
-                                                      <FormExtractoParseBtn
-                                                        companyId={companyId}
-                                                        accountId={ext.accountId}
-                                                        extractoId={ext.id}
-                                                        pdfUrl={ext.archivo.url}
-                                                        estado={ext.estado}
-                                                      />
-                                                    )}
-                                                  </td>
-                                                  <td className="p-2 text-center">
                                                     <div className="flex items-center justify-center gap-1">
+                                                      <button
+                                                        onClick={(e) => { e.stopPropagation(); handleViewExtracto(ext, movimientos); }}
+                                                        className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                                                        title="Ver movimientos"
+                                                      >
+                                                        <Eye size={14} />
+                                                      </button>
                                                       {ext.archivo?.url && (
                                                         <a href={ext.archivo.url} target="_blank" rel="noopener noreferrer"
-                                                          className="text-slate-400 hover:text-indigo-600 transition-colors p-1" title="Ver PDF">
-                                                          <Eye size={14} />
+                                                          className="text-slate-400 hover:text-indigo-600 transition-colors p-1" title="Abrir PDF">
+                                                          <FileText size={14} />
                                                         </a>
                                                       )}
                                                       <EditBtn onClick={() => edit('extracto', ext)} />
+                                                      <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteExtracto(ext); }}
+                                                        className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+                                                        title="Borrar extracto"
+                                                      >
+                                                        <Trash2 size={14} />
+                                                      </button>
                                                     </div>
                                                   </td>
                                                 </tr>
@@ -1401,6 +1441,21 @@ export function Datos({
           )}
 
         </div>
+
+        {/* View extracto modal (read-only) */}
+        <ExtractoParseModal
+          open={viewModalData.open}
+          file={null}
+          header={viewModalData.header}
+          movimientos={viewModalData.movimientos}
+          loading={false}
+          readOnly={true}
+          progress={null}
+          error={null}
+          onBancoChange={() => {}}
+          onSave={() => {}}
+          onCancel={() => setViewModalData(prev => ({ ...prev, open: false }))}
+        />
       </div>
     </div>
   );

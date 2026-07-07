@@ -620,6 +620,42 @@ export async function fetchMovimientoHashes(
     .filter((h): h is string => !!h);
 }
 
+/**
+ * Delete an extracto and ALL its movimientos (subcollection).
+ * Uses batched writes to delete all movimientos first, then the extracto itself.
+ */
+export async function deleteExtracto(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+): Promise<void> {
+  const extractoRef = doc(
+    db, COMPANIES_COLLECTION, companyId,
+    CUENTAS_BANCARIAS_COLLECTION, accountId,
+    EXTRACTOS_COLLECTION, extractoId,
+  );
+  const movimientosRef = collection(extractoRef, MOVIMIENTOS_COLLECTION);
+
+  // Fetch all movimiento IDs
+  const snap = await getDocs(movimientosRef);
+  const ids = snap.docs.map(d => d.id);
+
+  // Delete in batches of 500 (Firestore limit)
+  if (ids.length > 0) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const batch = writeBatch(db);
+      const chunk = ids.slice(i, i + 500);
+      for (const movId of chunk) {
+        batch.delete(doc(movimientosRef, movId));
+      }
+      await batch.commit();
+    }
+  }
+
+  // Delete the extracto document itself
+  await deleteDoc(extractoRef);
+}
+
 export async function updateExtractoStatus(
   companyId: string,
   accountId: string,
