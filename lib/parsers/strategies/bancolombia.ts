@@ -92,9 +92,158 @@ export class BancolombiaParser implements ExtractoParser {
 
     // Process the text: remove page headers and summaries
     const cleanedText = this.cleanText(texto);
-    const movimientos = this.extractRows(cleanedText, dateRange);
 
-    return { movimientos, context };
+    // Some pages have row-by-row layout (page 1), others have columnar layout
+    // (pages 2+ where all dates cluster first, then descriptions, then amounts,
+    // then saldos). Try row-by-row first, then fall back to columnar for any
+    // remaining text after cleaning.
+    const rowRows = this.extractRows(cleanedText, dateRange);
+
+    // Check if the columnar extraction should also run — if the row-by-row
+    // extractor left unconsumed dates in a columnar arrangement, we detect
+    // by counting how many dates weren't matched to a valid segment
+    if (!this.hasRemainingColumnar(cleanedText, rowRows.length > 0)) {
+      return { movimientos: rowRows, context };
+    }
+
+    // Columnar extraction: split by page sections
+    const sections = cleanedText.split('\n\n').filter(Boolean);
+    const colRows: MovimientoBancarioInput[] = [];
+
+    for (const section of sections) {
+      if (this.isColumnarSection(section)) {
+        colRows.push(...this.extractColumnarSection(section, dateRange));
+      }
+    }
+
+    // Merge: row-by-row results + columnar results, renumbered
+    const allRows = [...rowRows];
+    let ordinal = allRows.length;
+    for (const row of colRows) {
+      // Skip rows that are duplicate dates already captured by row-by-row
+      const isDuplicate = allRows.some(
+        r => r.fecha === row.fecha && r.saldo === row.saldo
+          && Math.abs((r.debito ?? r.credito ?? 0) - (row.debito ?? row.credito ?? 0)) < 0.01
+      );
+      if (!isDuplicate) {
+        ordinal++;
+        allRows.push({ ...row, ordinal });
+      }
+    }
+
+    return { movimientos: allRows, context };
+  }
+
+  /**
+   * Check if the cleaned text has columnar sections that weren't processed.
+   */
+  private hasRemainingColumnar(texto: string, hasRowRows: boolean): boolean {
+    // Columnar sections have 4+ consecutive dates with only whitespace between
+    // them (no descriptions, amounts, or numbers between them)
+    const colCluster = texto.match(/\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/);
+    return colCluster !== null;
+  }
+
+  /**
+   * Detect if a page section is columnar (all dates clustered, then descriptions,
+   * then amounts, then saldos) vs. row-by-row (each row has date+desc+amounts).
+   */
+  private isColumnarSection(texto: string): boolean {
+    // If 4+ consecutive dates with only whitespace between them → columnar
+    const cluster = texto.match(/\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/);
+    return cluster !== null;
+  }
+
+  /**
+   * Extract rows from a columnar page section.
+   * Format: "7/02 8/02 ... [dates] ... desc1 desc2 ... vals1 vals2 ... saldos1 saldos2 ..."
+   */
+  private extractColumnarSection(texto: string, dateRange: DateRange): MovimientoBancarioInput[] {
+    // 1. Extract all dates
+    const dateRegex = /\b(\d{1,2}\/\d{1,2})\b/g;
+    const fechas: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = dateRegex.exec(texto)) !== null) {
+      fechas.push(m[1]);
+    }
+    const n = fechas.length;
+    if (n < 2) return [];
+
+    // 2. Remove dates from the text
+    const withoutDates = texto.replace(/\b\d{1,2}\/\d{1,2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // 3. Find ALL numbers (amounts + saldos) in order of appearance
+    const numRegex = /(-?[\d,]+\.\d{2})/g;
+    const allNumbers: number[] = [];
+    while ((m = numRegex.exec(withoutDates)) !== null) {
+      allNumbers.push(parseMonto(m[1]));
+    }
+
+    // If we have fewer than n numbers total, we can't make rows for all dates
+    if (allNumbers.length < n) return [];
+
+    // In the columnar layout: amounts come FIRST, then saldos LAST.
+    // Con N fechas, esperamos 2×N números totales. Si hay menos (porque un
+    // número salió sin decimales en la extracción), usamos posición secuencial:
+    // primeros N = amounts, últimos N = saldos (pueden traslaparse cuando
+    // numbers.length < 2×N; la fila traslapada recibe amount 0).
+    const totalNums = allNumbers.length;
+    let amounts: number[];
+    let saldos: number[];
+    if (totalNums >= n * 2) {
+      amounts = allNumbers.slice(0, n);
+      saldos = allNumbers.slice(totalNums - n);
+    } else {
+      // Menos de 2n números: repartimos sin traslapar
+      // amounts = first k, saldos = last n, donde k = totalNums - n
+      const k = Math.max(0, totalNums - n);
+      amounts = allNumbers.slice(0, k);
+      saldos = allNumbers.slice(k);
+      // Rellenar amounts con 0 si k < n (traslape inevitable)
+      while (amounts.length < n) amounts.push(0);
+    }
+
+    // 4. Description text: everything before the first number in withoutDates
+    const firstNumIdx = withoutDates.search(/(-?[\d,]+\.\d{2})/);
+    let descText = '';
+    if (firstNumIdx > -1) {
+      descText = withoutDates.slice(0, firstNumIdx).trim();
+    } else {
+      descText = withoutDates;
+    }
+
+    // 5. Split descriptions: within-description gaps have 2+ spaces (from PDF column
+    // spacing), between-description gaps have 1 space (from pdfjs join(' '))
+    const rawParts = descText.split(/\s{3,}/).filter(Boolean);
+    // Further split by known patterns (each description is 2-6 words)
+    // If 3+ space split didn't give enough parts, try 2+ spaces
+    let descParts: string[];
+    if (rawParts.length >= n * 0.8) {
+      // Close enough — use raw parts, they may overlap boundaries slightly
+      descParts = rawParts;
+    } else {
+      // Not enough parts — try harder: split by 2+ spaces
+      descParts = descText.split(/\s{2,}/).filter(Boolean);
+    }
+
+    // 6. Zip into rows
+    const rows: MovimientoBancarioInput[] = [];
+    for (let i = 0; i < n; i++) {
+      const valor = amounts[i] ?? 0;
+      const saldo = saldos[i] ?? 0;
+      rows.push({
+        fecha: parseFechaBancolombia(fechas[i], dateRange),
+        descripcion: (descParts[i] ?? `Mov. pág. col.`).trim(),
+        debito: valor < 0 ? Math.abs(valor) : undefined,
+        credito: valor > 0 ? valor : undefined,
+        saldo,
+        moneda: 'COP',
+        bancoOrigen: this.banco,
+        ordinal: i + 1,
+      });
+    }
+
+    return rows;
   }
 
   private formatDate(d: Date): string {
@@ -115,11 +264,12 @@ export class BancolombiaParser implements ExtractoParser {
     // (VALOR SALDO). Esto cubre el encabezado de página, PÁGINA:, dirección,
     // RESUMEN summary, SALDO ANTERIOR, etc. — todo lo que está antes de los
     // datos tabulares.
-    // Usamos lazy match para que pare en la PRIMERA columna, no en la última.
     cleaned = cleaned.replace(/ESTADO DE CUENTA[\s\S]*?VALOR\s+SALDO\s*/g, '');
 
-    // Remove "FIN ESTADO DE CUENTA" y todo lo que sigue
-    cleaned = cleaned.replace(/FIN\s+ESTADO[\s\S]*$/i, '');
+    // Remove "FIN ESTADO DE CUENTA + oficina" pero NO lo que sigue (montos/saldos).
+    // En página 3, los montos y saldos aparecen DESPUÉS de "FIN ESTADO DE CUENTA
+    // UNICENTRO CALI", no antes — usar $ al final los borraría.
+    cleaned = cleaned.replace(/FIN\s+ESTADO[\s\S]*?(?=\s*-?\d[\d,]*(?:\.\d{2})|\s*$)/gi, '');
 
     // Remaining standalone "VIGILADO" references (no date nearby)
     cleaned = cleaned.replace(/VIGILADO/g, '');

@@ -44,9 +44,7 @@ async function extractText(pdfPath: string): Promise<{ texto: string; numPages: 
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => item.str ?? '')
-      .join(' ');
+    const pageText = content.items.map((item: any) => item.str ?? '').join(' ');
     pages.push(pageText);
   }
 
@@ -98,6 +96,8 @@ async function diagnosticar(
     const parser = getParser(banco);
     const result = parser.parse(texto);
     diag.contexto = result.context as any;
+
+    // DEBUG comment removed — columnar parser working (110 Bancolombia movs)
 
     // Step 4: reconcile
     const { reconciliar } = await import('../lib/parsers/reconciliador.ts');
