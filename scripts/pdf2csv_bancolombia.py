@@ -94,16 +94,20 @@ def extract_date_range(text: str):
 
 
 def extract_saldos(text: str):
-    """Extract SALDO ANTERIOR and SALDO ACTUAL from RESUMEN block."""
-    # Match numbers in either es-CO or en format
-    num_pat = r'[\d,]+\.\d{2}|[\d.]+\,\d{2}'
-    m = re.search(
-        r'SALDO ANTERIOR\s+TOTAL ABONOS\s+TOTAL CARGOS\s+SALDO ACTUAL\s*\$\s*\$\s*\$\s*\$\s*'
-        rf'({num_pat})\s+({num_pat})\s+({num_pat})\s+({num_pat})',
-        text,
-    )
-    if m:
-        return {'saldoInicial': parse_monto(m[1]), 'saldoFinal': parse_monto(m[4])}
+    """Extract SALDO ANTERIOR and SALDO ACTUAL from RESUMEN block.
+    
+    Both pdfjs and pypdf place these values with their labels:
+    pdfjs: 'SALDO ANTERIOR ... $ 1,478.29 ... SALDO ACTUAL ... $ 70,565,811.95'
+    pypdf: 'SALDO ANTERIOR $ 1,478.29 ... SALDO ACTUAL $ 70,565,811.95'
+    """
+    num = r'[\d,]+\.\d{2}|[\d.]+\,\d{2}'
+    saldo_ant = re.search(rf'SALDO ANTERIOR[^$]*\$\s*({num})', text)
+    saldo_act = re.search(rf'SALDO ACTUAL[^$]*\$\s*({num})', text)
+    if saldo_ant and saldo_act:
+        return {
+            'saldoInicial': parse_monto(saldo_ant[1]),
+            'saldoFinal': parse_monto(saldo_act[1]),
+        }
     return None
 
 
