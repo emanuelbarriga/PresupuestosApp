@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { SidepanelData, Budget, Ejecucion, Comprobante, RecordDetail, ActiveForm, NavScreen, MONTHS, Month, Project, Client, Tercero, SettingsCategorias, SettingsItem, DetalleTerceroGroup, Invitacion, CuentaBancaria, ExtractoBancario, ExtractoEstado, MovimientoBancarioInput, Banco } from '@/lib/types';
-import { FormExtractoParseBtn } from '@/components/forms/FormExtracto';
 import { ExtractoParseModal, type ExtractoParseHeader, type ExtractoParseProgress } from '@/components/bancos/ExtractoParseModal';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, subscribeEjecucionesByBudget, removeBudgetLink, updateEjecucion, updateBudget, addEjecucion, addClient, addProject, addTercero, updateSettings, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
@@ -1621,16 +1620,8 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         const { downloadPdfBytes } = await import('@/lib/downloadPdf');
         const buffer = await downloadPdfBytes(currentArchivo.url, currentArchivo.path);
 
-        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        const pdf = await pdfjs.getDocument({ data: buffer }).promise;
-        const pages: string[] = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          pages.push(content.items.map((item: any) => item.str ?? '').join(' '));
-        }
-        const texto = pages.join('\n\n').trim();
+        const { extractPdfTextFromBuffer } = await import('@/lib/parsers/pdfText');
+        const texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
         if (!texto) throw new Error('PDF sin texto extraíble');
 
         const { detectarBanco, getParser } = await import('@/lib/parsers/index');
