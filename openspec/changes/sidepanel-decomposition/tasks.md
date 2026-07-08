@@ -27,11 +27,11 @@ Chain strategy: pending
 
 ## Phase 1: Leaf — primitives, widgets, utils (PR #1)
 
-- [ ] 1.1 RED: `components/utils/__tests__/groupByEntity.test.ts`; then create `components/utils/groupByEntity.ts` generic
-- [ ] 1.2 Create `components/forms/{FormInput,FormSelect}.tsx` primitives (move :2058-2170)
-- [ ] 1.3 Create `components/forms/{SearchableSelect,ColorSelect,TipoSwitch}.tsx`
-- [ ] 1.4 Create `components/shared/{EntityTypeBadge,PanelHeader,DF}.tsx`
-- [ ] 1.5 Add `*.smoke.test.tsx` per leaf; update god file to import new leaves; `npm test` green
+- [x] 1.1 RED: `components/utils/__tests__/groupByEntity.test.ts`; then create `components/utils/groupByEntity.ts` generic
+- [x] 1.2 Create `components/forms/{FormInput,FormSelect}.tsx` primitives (move :2058-2170)
+- [x] 1.3 Create `components/forms/{SearchableSelect,ColorSelect,TipoSwitch}.tsx`
+- [x] 1.4 Create `components/shared/{EntityTypeBadge,PanelHeader,DF}.tsx`
+- [x] 1.5 Add `*.smoke.test.tsx` per leaf; update god file to import new leaves; `npm test` green
 
 ## Phase 2: Forms — standalone forms, ExtractoAdd, hook fix (PR #2)
 
