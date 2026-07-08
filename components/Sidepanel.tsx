@@ -11,6 +11,8 @@ import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/com
 import clsx from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
+import { groupByEntity } from '@/components/utils/groupByEntity';
+import { EntityTypeBadge as EntityTypeBadgePrimitive } from '@/components/shared/EntityTypeBadge';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
