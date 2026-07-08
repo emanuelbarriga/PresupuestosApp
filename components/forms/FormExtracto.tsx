@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import type { Banco, ExtractoEstado } from '@/lib/types';
 import { detectarBanco } from '@/lib/parsers/index';
 import { runParsePipelineFromBuffer } from '@/lib/parsers/parsePipeline';
@@ -78,7 +79,7 @@ export function FormExtractoParseBtn({
       setParsedBuffer(buffer);
       setShowModal(true);
     } catch (err) {
-      alert('Error al leer el PDF. Verificá que el archivo sea válido.');
+      toast.error('Error al leer el PDF. Verificá que el archivo sea válido.');
     } finally {
       setLoading(false);
     }
@@ -101,10 +102,10 @@ export function FormExtractoParseBtn({
       if (result.success) {
         onComplete?.();
       } else {
-        alert(`Error al parsear el extracto:\n${result.errores.join('\n')}`);
+        toast.error(`Error al parsear el extracto:\n${result.errores.join('\n')}`);
       }
     } catch (err) {
-      alert('Error al ejecutar el pipeline de parseo.');
+      toast.error('Error al ejecutar el pipeline de parseo.');
     } finally {
       setLoading(false);
     }

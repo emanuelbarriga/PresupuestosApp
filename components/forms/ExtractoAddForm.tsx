@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import toast from 'react-hot-toast';
 import type { Banco, ExtractoEstado, MovimientoBancarioInput, ActiveForm } from '@/lib/types';
 import { parseForPreview } from '@/lib/parsers/parsePipeline';
 import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
@@ -119,8 +120,8 @@ export function ExtractoAddForm({
   const handleFiles = (fileList: FileList | null) => {
     const selected = fileList?.[0];
     if (!selected) return;
-    if (selected.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
-    if (selected.size > MAX_EXTRACTO_SIZE) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
+    if (selected.type !== 'application/pdf') { toast.error('Solo se permiten archivos PDF.'); return; }
+    if (selected.size > MAX_EXTRACTO_SIZE) { toast.error('El archivo es demasiado grande. Máximo 10MB.'); return; }
     void startParsing(selected);
   };
 
@@ -155,7 +156,7 @@ export function ExtractoAddForm({
 
       await onSubmit(form, data);
     } catch (err) {
-      alert('Error al guardar el extracto.');
+      toast.error('Error al guardar el extracto.');
     } finally {
       setSaving(false);
     }

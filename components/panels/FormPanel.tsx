@@ -8,6 +8,7 @@ import { X, ChevronDown, ChevronUp, Save, Send, Shield, Mail, Clock, User, Penci
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
 import { PanelHeader } from '@/components/shared/PanelHeader';
@@ -626,7 +627,7 @@ export function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack
       const totalLinks = selectedBudgetLinks.reduce((s, l) => s + (Number(l.monto) || 0), 0);
       if (Math.abs(montoEj - totalLinks) > 1) {
         setSaving(false);
-        alert(`La suma de los montos vinculados (${totalLinks}) no coincide con el monto ejecutado (${montoEj}). Ajustá los montos o eliminá los vínculos.`);
+        toast.error(`La suma de los montos vinculados (${totalLinks}) no coincide con el monto ejecutado (${montoEj}). Ajustá los montos o eliminá los vínculos.`);
         return;
       }
     }

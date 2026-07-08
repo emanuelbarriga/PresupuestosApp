@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import toast from 'react-hot-toast';
 import type { Banco, Month, MovimientoBancarioInput, ExtractoEstado } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
 import { parseForPreview } from '@/lib/parsers/parsePipeline';
@@ -63,8 +64,8 @@ export function FormExtractoEdit({
   const handlePdfSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF.'); return; }
-    if (file.size > 10 * 1024 * 1024) { alert('El archivo es demasiado grande. Máximo 10MB.'); return; }
+    if (file.type !== 'application/pdf') { toast.error('Solo se permiten archivos PDF.'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('El archivo es demasiado grande. Máximo 10MB.'); return; }
     setArchivoFile(file);
     onFieldChange('_archivoPendiente', JSON.stringify({ name: file.name }));
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -96,9 +97,9 @@ export function FormExtractoEdit({
       setPreParseMovs(preview.movimientos);
       setPreParseSaldoFinal(preview.header.saldoFinal);
 
-      alert(`Datos extraídos: ${preview.movimientos.length} movimientos, saldo inicial $${preview.header.saldoInicial.toLocaleString('es-CO')}`);
+      toast.success(`Datos extraídos: ${preview.movimientos.length} movimientos, saldo inicial $${preview.header.saldoInicial.toLocaleString('es-CO')}`);
     } catch (err) {
-      alert('Error al leer el PDF. Verificá que el archivo sea válido.');
+      toast.error('Error al leer el PDF. Verificá que el archivo sea válido.');
     } finally {
       setParseoLoading(false);
     }
@@ -121,9 +122,9 @@ export function FormExtractoEdit({
       setPreParseMovs(preview.movimientos);
       setPreParseSaldoFinal(preview.header.saldoFinal);
 
-      alert(`Re-parseado: ${preview.movimientos.length} movimientos, saldo final $${preview.header.saldoFinal.toLocaleString('es-CO')}`);
+      toast.success(`Re-parseado: ${preview.movimientos.length} movimientos, saldo final $${preview.header.saldoFinal.toLocaleString('es-CO')}`);
     } catch (err) {
-      alert('Error al re-parsear el PDF.');
+      toast.error('Error al re-parsear el PDF.');
     } finally {
       setParseoLoading(false);
     }
