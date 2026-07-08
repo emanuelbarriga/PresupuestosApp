@@ -1,9 +1,16 @@
-import type { Banco, MovimientoBancarioInput } from '@/lib/types';
+import type { Banco, Month, MovimientoBancarioInput } from '@/lib/types';
 import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
 import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
+import { derivarMesAnio } from '@/lib/parsers/periodo';
 import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
+
+export interface ParsePreviewResult {
+  movimientos: MovimientoBancarioInput[];
+  header: { mes: Month; anio: number; banco: Banco; saldoInicial: number; saldoFinal: number };
+  detectedBanco: Banco;
+}
 
 export interface PipelineResult {
   success: boolean;
@@ -159,6 +166,52 @@ async function _runPipeline(
       duplicados: 0,
     };
   }
+}
+
+/**
+ * Non-persisting preview adapter: extract, detect, parse, and reconcile
+ * from a PDF buffer WITHOUT writing to Firestore.
+ *
+ * Returns preview data for the user to review before committing.
+ */
+export async function parseForPreview(
+  buffer: ArrayBuffer,
+  bancoConfirmado?: Banco | null,
+): Promise<ParsePreviewResult> {
+  // Step 1: Extract PDF text
+  const texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
+
+  // Step 2: Detect bank
+  const banco = bancoConfirmado ?? detectarBanco(texto);
+  if (banco === 'No detectado') {
+    throw new Error('Banco no reconocido');
+  }
+
+  // Step 3: Parse
+  const parser = getParser(banco);
+  const parseResult = parser.parse(texto);
+
+  // Step 4: Reconcile
+  const movsReconciliados = reconciliar(
+    parseResult.movimientos,
+    parseResult.context.saldoInicial,
+  );
+
+  // Step 5: Derive month/year from periodo
+  const periodoFecha = parseResult.context.periodoHasta ?? parseResult.context.periodoDesde;
+  const { mes, anio } = derivarMesAnio(periodoFecha);
+
+  return {
+    movimientos: movsReconciliados,
+    header: {
+      mes: mes || 'Enero',
+      anio: anio ?? new Date().getFullYear(),
+      banco,
+      saldoInicial: parseResult.context.saldoInicial,
+      saldoFinal: parseResult.context.saldoFinal,
+    },
+    detectedBanco: banco,
+  };
 }
 
 // Legacy export — keeps existing imports working
