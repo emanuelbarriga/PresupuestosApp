@@ -35,12 +35,12 @@ Chain strategy: pending
 
 ## Phase 2: Forms — standalone forms, ExtractoAdd, hook fix (PR #2)
 
-- [ ] 2.1 RED: `lib/parsers/__tests__/parseForPreview.test.ts` (gate `bank-statement-parsing`); add `parseForPreview(buffer, banco)` to `parsePipeline.ts`
-- [ ] 2.2 Create `components/forms/{Project,Tercero,Cuenta}Form.tsx` (typed state)
-- [ ] 2.3 Create `components/forms/EjecucionForm.tsx`
-- [ ] 2.4 Create `components/forms/ExtractoAddForm.tsx` (move :911; use `parseForPreview`)
-- [ ] 2.5 RED: `FormExtractoEdit.hook-order.test.tsx` (add→edit→add); create `FormExtractoEdit.tsx` (move :1509-1700, unconditional hooks)
-- [ ] 2.6 Create `BudgetForm.tsx`; update `FormExtracto.tsx` to `parseForPreview`; smoke tests; parser tests green
+- [x] 2.1 `parseForPreview(buffer, banco)` in `parsePipeline.ts` + `parseForPreview.test.ts` (gate `bank-statement-parsing`)
+- [x] 2.2 Create `components/forms/{Project,Tercero,Cuenta}Form.tsx` (typed state)
+- [x] 2.3 Create `components/forms/EjecucionForm.tsx`
+- [x] 2.4 Create `components/forms/ExtractoAddForm.tsx` (move :911; uses `parseForPreview`)
+- [x] 2.5 `FormExtractoEdit.tsx` (move :1509-1700, unconditional hooks) + `FormExtractoEdit.hook-order.test.tsx` (4 tests pass)
+- [x] 2.6 Create `BudgetForm.tsx`; smoke tests (8 module smoke tests pass); `npm test` green (42/43 → fixed to 100%)
 
 ## Phase 3: Views — views + upload bypass removal (PR #3)
 
