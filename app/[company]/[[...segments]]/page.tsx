@@ -428,6 +428,10 @@ export default function CompanyPage({ params }: Props) {
     popScreen();
   };
 
+  const handleSaveComprobantes = useCallback(async (ejecucionId: string, comprobantes: Comprobante[]) => {
+    await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(comprobantes)) });
+  }, [companyId]);
+
   const handleSidepanelClose = () => closePanel();
 
   const handleSidepanelBack = () => popScreen();
@@ -470,7 +474,8 @@ export default function CompanyPage({ params }: Props) {
             selectedProjects={selectedProjects}
             projectSearch={projectSearch}
             onProjectsChange={setSelectedProjects}
-            onSearchChange={setProjectSearch} />
+            onSearchChange={setProjectSearch}
+            onSaveComprobantes={handleSaveComprobantes} />
         </main>
       </div>
   );

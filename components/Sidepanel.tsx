@@ -53,6 +53,9 @@ interface SidepanelProps {
   canGoBack: boolean;
   onBack: () => void;
   onNavigate: (screen: NavScreen) => void;
+
+  /** NEW: replaces direct updateEjecucion from ComprobanteUploader. Parent owns the Firestore write. */
+  onSaveComprobantes?: (ejecucionId: string, comprobantes: Comprobante[]) => Promise<void>;
 }
 
 function PanelHeader({ title, canGoBack, onBack, onClose }: { title: string; canGoBack: boolean; onBack: () => void; onClose: () => void }) {
