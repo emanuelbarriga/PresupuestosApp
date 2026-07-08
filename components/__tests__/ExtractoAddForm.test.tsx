@@ -81,7 +81,7 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
 }));
 
-import { ExtractoAddForm } from '@/components/Sidepanel';
+import { ExtractoAddForm } from '@/components/forms/ExtractoAddForm';
 import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { uploadFile } from '@/lib/fileUpload';
 
