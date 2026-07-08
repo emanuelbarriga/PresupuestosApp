@@ -349,14 +349,14 @@ export function Datos({
       const movs = viewModalData.movimientos ?? [];
 
       // Build clean movimiento objects
-      const cleanMovs = movs.map((m, i) => ({
+      const cleanMovs = movs.map((m) => ({
         fecha: m.fecha,
         descripcion: m.descripcion,
         debito: m.debito,
         credito: m.credito,
         saldo: m.saldo,
         moneda: m.moneda ?? 'COP',
-        ordinal: i + 1,
+        ordinal: m.ordinal,
         bancoOrigen: m.bancoOrigen ?? (header.banco as any),
       }));
 
