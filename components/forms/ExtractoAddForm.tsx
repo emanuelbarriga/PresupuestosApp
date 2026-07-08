@@ -71,6 +71,8 @@ export function ExtractoAddForm({
 
     try {
       const buffer = await selected.arrayBuffer();
+      // Clone before passing to extractPdfTextFromBuffer — pdfjs detaches it
+      const bufferClone = buffer.slice(0);
       lastBufferRef.current = buffer;
 
       // Extract text with progress callback
@@ -89,8 +91,8 @@ export function ExtractoAddForm({
         return;
       }
 
-      // Run full preview pipeline (non-persisting)
-      const preview = await parseForPreview(buffer, bancoDetectado);
+      // Run full preview pipeline (non-persisting) with clone — pdfjs detaches the original
+      const preview = await parseForPreview(bufferClone, bancoDetectado);
 
       setHeader({
         mes: preview.header.mes,
