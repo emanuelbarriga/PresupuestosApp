@@ -52,10 +52,10 @@ Chain strategy: pending
 
 ## Phase 4: Router — panels + FormPanel + Sidepanel router (PR #4)
 
-- [ ] 4.1 Create `components/panels/{ViewPanel,DataPanel,CustomizePanel}.tsx`
-- [ ] 4.2 Create `components/panels/FormPanel.tsx` dispatcher (routes by `activeForm`; preserve global `subscribeSettings` — Q3, do not fix)
-- [ ] 4.3 Rewrite `components/Sidepanel.tsx` → ~80-line router (P11 swap)
-- [ ] 4.4 Update `Sidepanel.test.tsx` import paths; full 96-test suite green
+- [x] 4.1 Create `components/panels/{ViewPanel,DataPanel,CustomizePanel,TerceroGroupPanel}.tsx`
+- [x] 4.2 Create `components/panels/FormPanel.tsx` dispatcher (routes by `activeForm`; preserves global `subscribeSettings` — Q3 respected)
+- [x] 4.3 Rewrite `components/Sidepanel.tsx` → **56-line router** (P11 swap; 3,418 → 56 lines)
+- [x] 4.4 Update `ExtractoAddForm.test.tsx` import path; `Sidepanel.test.tsx` untouched (timeout pre-existente)
 
 ## Phase 5: Cleanup — dead code, alert→toast, smoke sweep (PR #5)
 
