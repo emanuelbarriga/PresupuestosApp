@@ -18,7 +18,7 @@ Bottom-up extraction of the 3,418-line `components/Sidepanel.tsx` into ~25 singl
 | 6 | Chained PR slices | **5: Leaf\|Forms\|Views\|Router\|Cleanup** — not single/stacked | Each < 400 lines, autonomous, independently revertable. |
 | 7 | God file retention | **Keep until P11 swap green; delete in P12** — not per-phase delete | Coverage protection mid-extraction; matches rollback plan. |
 | 8 | Shared utils | **`groupByEntity<T>` in `utils/`; `EntityTypeBadge` in `shared/`** — not duplicate 4x | Eliminates 4x duplication; generic enables unit test. |
-| 9 | `alert`/`prompt` → toast | **⚠ BLOCKED — `react-hot-toast` NOT installed** (verified absent) | See Open Questions Q1. |
+| 9 | `alert`/`prompt` → toast | **`react-hot-toast` (installed)** — `toast.error()`/`toast.success()`; `<Toaster />` in root layout | Minimal dep (4.8kB), zero deps, SSR-safe. API matches existing code patterns. |
 | 10 | Tests | **Vitest smoke per component; keep `Sidepanel.test.tsx` (96 tests) green; gate PDF on `lib/parsers/__tests__/*`** — not E2E | Smoke catches breakage cheaply; parser tests guard consolidation; E2E out of scope. |
 
 ## Data Flow
@@ -109,6 +109,6 @@ Rollback: `git revert` per PR; god file intact through P11.
 
 ## Open Questions
 
-- [ ] **Q1 (BLOCKER, Decision 9 & Slice 5)**: `react-hot-toast` is NOT installed (verified absent from `package.json`+`node_modules`) — proposal's claim is false. Options: (a) add the dep; (b) minimal custom `<ToastProvider>`; (c) defer alert→toast to a follow-up. **Needs user decision before Slice 5.**
+- [x] **Q1 (RESOLVED)**: `react-hot-toast` installed. Slice 5 proceeds with `toast.error()`/`toast.success()` + `<Toaster />` in root layout.
 - [ ] **Q2**: `components/bancos/*` came from active `openspec/changes/bancos` — confirm it's stable before Slices 2-3 depend on its layout.
 - [ ] **Q3**: `subscribeSettings` uses GLOBAL settings doc (:1148, no `companyId`) — out of scope; extracted `FormPanel` must preserve this exact call (don't "fix" mid-refactor).
