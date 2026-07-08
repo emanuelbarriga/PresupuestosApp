@@ -1,10 +1,3 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-
 /** Format a number string with Colombian thousands separator (dots) */
 export function formatThousands(value: string): string {
   if (!value) return value;

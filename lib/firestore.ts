@@ -91,19 +91,6 @@ export function subscribeProviders(
   );
 }
 
-export function subscribeStateProjects(
-  onData: (states: StateProject[]) => void,
-  onError?: (err: Error) => void,
-): Unsubscribe {
-  return onSnapshot(
-    collection(db, STATE_PROJECTS_COLLECTION),
-    (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as StateProject));
-    },
-    onError,
-  );
-}
-
 export function subscribeTerceros(
   onData: (terceros: Tercero[]) => void,
   onError?: (err: Error) => void,

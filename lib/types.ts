@@ -134,7 +134,7 @@ export interface Ejecucion {
   archivado?: boolean;
 }
 
-export type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';
+type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';
 export type Banco = 'Bancolombia' | 'Bancoomeva' | 'Global66' | 'No detectado';
 
 export interface MovimientoBancarioInput {
@@ -187,14 +187,6 @@ export interface ExtractoBancario {
 }
 
 export type UserRole = 'admin' | 'colaborador';
-
-/** Perfil global del usuario — agnóstico a la empresa */
-export interface UserProfile {
-  id: string;          // Firebase Auth UID
-  email: string;
-  displayName?: string;
-  createdAt: string;
-}
 
 /** Membresía del usuario dentro de una empresa específica */
 export interface CompanyMember {

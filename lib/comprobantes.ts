@@ -1,7 +1,7 @@
 import type { Comprobante } from './types';
 
-export type ComprobanteState = 'Completada' | 'Falta un comprobante' | 'Sin comprobantes';
-export type ComprobanteGranularity = 'falta_pago' | 'falta_cuenta_cobro' | null;
+type ComprobanteState = 'Completada' | 'Falta un comprobante' | 'Sin comprobantes';
+type ComprobanteGranularity = 'falta_pago' | 'falta_cuenta_cobro' | null;
 
 export interface ComprobanteStateResult {
   estado: ComprobanteState;
