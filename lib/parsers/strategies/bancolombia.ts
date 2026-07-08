@@ -95,34 +95,31 @@ export class BancolombiaParser implements ExtractoParser {
     // Process the text: remove page headers and summaries
     const cleanedText = this.cleanText(texto);
 
-    // Some pages have row-by-row layout (page 1), others have columnar layout
-    // (pages 2+ where all dates cluster first, then descriptions, then amounts,
-    // then saldos). Try row-by-row first, then fall back to columnar for any
-    // remaining text after cleaning.
-    const rowRows = this.extractRows(cleanedText, dateRange);
-
-    // Check if the columnar extraction should also run — if the row-by-row
-    // extractor left unconsumed dates in a columnar arrangement, we detect
-    // by counting how many dates weren't matched to a valid segment
-    if (!this.hasRemainingColumnar(cleanedText, rowRows.length > 0)) {
-      return { movimientos: rowRows, context };
-    }
-
-    // Columnar extraction: split by page sections
+    // Split into sections (by page breaks) — each section is either row-by-row
+    // (page 1) or columnar (pages 2+ where dates cluster, then descriptions,
+    // then amounts, then saldos). Process each section with the appropriate
+    // parser; NEVER run row-by-row on columnar text (produces bogus rows).
     const sections = cleanedText.split('\n\n').filter(Boolean);
+    const rowRows: MovimientoBancarioInput[] = [];
     const colRows: MovimientoBancarioInput[] = [];
 
     for (const section of sections) {
       if (this.isColumnarSection(section)) {
         colRows.push(...this.extractColumnarSection(section, dateRange));
+      } else {
+        rowRows.push(...this.extractRows(section, dateRange));
       }
     }
 
-    // Merge: row-by-row results + columnar results, renumbered
-    const allRows = [...rowRows];
-    let ordinal = allRows.length;
+    // Renumber all rows sequentially
+    const allRows: MovimientoBancarioInput[] = [];
+    let ordinal = 0;
+    for (const row of rowRows) {
+      ordinal++;
+      allRows.push({ ...row, ordinal });
+    }
     for (const row of colRows) {
-      // Skip rows that are duplicate dates already captured by row-by-row
+      // Skip columnar duplicates of row-by-row rows
       const isDuplicate = allRows.some(
         r => r.fecha === row.fecha && r.saldo === row.saldo
           && Math.abs((r.debito ?? r.credito ?? 0) - (row.debito ?? row.credito ?? 0)) < 0.01
@@ -139,13 +136,6 @@ export class BancolombiaParser implements ExtractoParser {
   /**
    * Check if the cleaned text has columnar sections that weren't processed.
    */
-  private hasRemainingColumnar(texto: string, hasRowRows: boolean): boolean {
-    // Columnar sections have 4+ consecutive dates with only whitespace between
-    // them (no descriptions, amounts, or numbers between them)
-    const colCluster = texto.match(/\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/);
-    return colCluster !== null;
-  }
-
   /**
    * Detect if a page section is columnar (all dates clustered, then descriptions,
    * then amounts, then saldos) vs. row-by-row (each row has date+desc+amounts).
@@ -320,9 +310,8 @@ export class BancolombiaParser implements ExtractoParser {
     return cleaned;
   }
 
-  private extractRows(texto: string, dateRange: DateRange): MovimientoBancarioInput[] {
-    const movimientos: MovimientoBancarioInput[] = [];
-    let ordinal = 0;
+  private extractRows(texto: string, dateRange: DateRange): Omit<MovimientoBancarioInput, 'ordinal'>[] {
+    const movimientos: Omit<MovimientoBancarioInput, 'ordinal'>[] = [];
 
     // Remove DCTO. column reference lines
     // The column header is already removed, but we need to process the data
@@ -361,8 +350,7 @@ export class BancolombiaParser implements ExtractoParser {
     for (const segment of segments) {
       const row = this.parseSegment(segment.date, segment.text, dateRange);
       if (row) {
-        ordinal++;
-        movimientos.push({ ...row, ordinal });
+        movimientos.push(row);
       }
     }
 
