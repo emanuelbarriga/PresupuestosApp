@@ -368,7 +368,9 @@ function PreviewMovimientosTable({
   if (movimientos.length === 0) {
     return <div className="p-4 text-center text-[10px] text-slate-400 italic">Sin movimientos extraídos</div>;
   }
-  const sorted = [...movimientos].sort((a, b) => a.ordinal - b.ordinal);
+  const sorted = [...movimientos].sort((a, b) =>
+    (a.ordinal ?? 0) - (b.ordinal ?? 0) || a.fecha.localeCompare(b.fecha),
+  );
 
   const cellCls = "w-full border border-slate-200 rounded p-1 text-[11px] text-right";
 

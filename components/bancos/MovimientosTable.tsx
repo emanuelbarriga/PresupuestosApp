@@ -21,7 +21,9 @@ export function MovimientosTable({ movimientos, onDelete }: MovimientosTableProp
     );
   }
 
-  const sorted = [...movimientos].sort((a, b) => a.ordinal - b.ordinal);
+  const sorted = [...movimientos].sort((a, b) =>
+    (a.ordinal ?? 0) - (b.ordinal ?? 0) || a.fecha.localeCompare(b.fecha),
+  );
 
   return (
     <table className="w-full text-left border-collapse">
