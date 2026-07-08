@@ -44,11 +44,11 @@ Chain strategy: pending
 
 ## Phase 3: Views — views + upload bypass removal (PR #3)
 
-- [ ] 3.1 Create `components/views/{Project,Budget}View.tsx` (move :2350,:2516)
-- [ ] 3.2 Create `components/views/EjecucionView.tsx` (move :2914)
-- [ ] 3.3 Create `components/upload/ComprobanteUploader.tsx` (move :2682) — drop direct `updateEjecucion`, use `onSaveComprobantes`
-- [ ] 3.4 Create `components/upload/ComprobantesViewer.tsx` (move :2593)
-- [ ] 3.5 Wire `onSaveComprobantes(ejId, comps)` in `page.tsx`; smoke tests; `comprobantes-ejecucion` spec green
+- [x] 3.1 Create `components/views/{Project,Budget}View.tsx` (move :2350,:2516)
+- [x] 3.2 Create `components/views/EjecucionView.tsx` (move :2914)
+- [x] 3.3 Create `components/upload/ComprobanteUploader.tsx` (move :2682) — drop direct `updateEjecucion`, use `onSaveComprobantes`
+- [x] 3.4 Create `components/upload/ComprobantesViewer.tsx` (move :2593)
+- [x] 3.5 Wire `onSaveComprobantes(ejId, comps)` in `page.tsx`; smoke tests; `comprobantes-ejecucion` spec green
 
 ## Phase 4: Router — panels + FormPanel + Sidepanel router (PR #4)
 
