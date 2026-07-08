@@ -78,7 +78,6 @@ export function FormExtractoParseBtn({
       setParsedBuffer(buffer);
       setShowModal(true);
     } catch (err) {
-      console.error('Error extracting PDF text:', err);
       alert('Error al leer el PDF. Verificá que el archivo sea válido.');
     } finally {
       setLoading(false);
@@ -105,7 +104,6 @@ export function FormExtractoParseBtn({
         alert(`Error al parsear el extracto:\n${result.errores.join('\n')}`);
       }
     } catch (err) {
-      console.error('Error running parse pipeline:', err);
       alert('Error al ejecutar el pipeline de parseo.');
     } finally {
       setLoading(false);

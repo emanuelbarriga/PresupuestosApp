@@ -30,7 +30,6 @@ async function withRetry<T>(
     } catch (err) {
       if (attempt === maxRetries) throw err;
       const delay = Math.pow(2, attempt) * 1000;
-      console.warn(`[parsePipeline] ${label} failed (attempt ${attempt}), retrying in ${delay}ms:`, err);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -62,11 +61,8 @@ async function _runPipeline(
 ): Promise<PipelineResult> {
   const errores: string[] = [];
 
-  console.log('[PARSE-PIPELINE] Starting from buffer', { companyId, accountId, extractoId, bancoConfirmado });
-
   try {
     // Step 1: Mark as parsing
-    console.log('[PARSE-PIPELINE] Step 1: marking as Parseando');
     await withRetry(
       () => updateExtractoStatus(companyId, accountId, extractoId, 'Parseando'),
       'updateExtractoStatus(Parseando)',
@@ -75,50 +71,38 @@ async function _runPipeline(
     // Step 2: Extract PDF text from the in-memory buffer (no network needed)
     let texto: string;
     try {
-      console.log('[PARSE-PIPELINE] Step 2: extracting text from buffer', { size: buffer.byteLength });
       // Usar row-layout (Y-grouping) para convertir páginas columnares
       // en texto fila-por-fila. Funciona para todos los bancos.
       texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
-      console.log('[PARSE-PIPELINE] PDF extracted', { length: texto.length, preview: texto.slice(0, 200) });
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;
-      console.error('[PARSE-PIPELINE] PDF extraction failed:', msg);
       throw new Error(msg);
     }
 
     // Step 3: Detect bank
-    console.log('[PARSE-PIPELINE] Step 3: detecting bank');
     const banco = bancoConfirmado ?? detectarBanco(texto);
-    console.log('[PARSE-PIPELINE] Bank detected:', banco);
     if (banco === 'No detectado') {
       throw new Error('Banco no reconocido');
     }
 
     // Step 4: Parse
-    console.log('[PARSE-PIPELINE] Step 4: parsing with', banco);
     const parser = getParser(banco);
     const parseResult = parser.parse(texto);
-    console.log('[PARSE-PIPELINE] Parse result', { movimientos: parseResult.movimientos.length, saldoInicial: parseResult.context.saldoInicial, saldoFinal: parseResult.context.saldoFinal });
 
     // Step 5: Reconcile
-    console.log('[PARSE-PIPELINE] Step 5: reconciling', { total: parseResult.movimientos.length, saldoInicial: parseResult.context.saldoInicial });
     const movsReconciliados = reconciliar(
       parseResult.movimientos,
       parseResult.context.saldoInicial,
     );
     const revCount = movsReconciliados.filter(m => m.requiereRevision).length;
-    console.log('[PARSE-PIPELINE] Reconciliation done', { revisiones: revCount });
 
     // Step 6: Detect duplicates
-    console.log('[PARSE-PIPELINE] Step 6: dedup');
     const hashesExistentes = await withRetry(
       () => fetchMovimientoHashes(companyId, accountId, extractoId),
       'fetchMovimientoHashes',
     );
-    console.log('[PARSE-PIPELINE] Existing hashes', { count: hashesExistentes.length });
     const movsFinales = await detectarDuplicados(movsReconciliados, hashesExistentes);
     const dupCount = movsFinales.filter(m => m.posibleDuplicado).length;
-    console.log('[PARSE-PIPELINE] Dedup done', { duplicados: dupCount });
 
     // Step 7: Batch write (chunk if > 500)
     const totalMovimientos = movsFinales.length;
@@ -126,10 +110,7 @@ async function _runPipeline(
     for (let i = 0; i < totalMovimientos; i += BATCH_SIZE) {
       batches.push(movsFinales.slice(i, i + BATCH_SIZE));
     }
-    console.log('[PARSE-PIPELINE] Step 7: batch writing', { totalMovimientos, batches: batches.length });
-
-    for (const [idx, batch] of batches.entries()) {
-      console.log('[PARSE-PIPELINE] Writing batch', { idx, size: batch.length });
+    for (const [, batch] of batches.entries()) {
       await withRetry(
         () => batchAddMovimientos(companyId, accountId, extractoId, batch),
         'batchAddMovimientos',
@@ -137,7 +118,6 @@ async function _runPipeline(
     }
 
     // Step 8: Mark as completed — saldos vienen del PDF (fuente de verdad)
-    console.log('[PARSE-PIPELINE] Step 8: marking as Completado');
     await withRetry(
       () => updateExtractoStatus(companyId, accountId, extractoId, 'Completado', {
         totalMovimientosParseados: totalMovimientos,
@@ -149,8 +129,6 @@ async function _runPipeline(
 
     const requiereRevision = movsFinales.filter(m => m.requiereRevision).length;
     const duplicados = movsFinales.filter(m => m.posibleDuplicado).length;
-
-    console.log('[PARSE-PIPELINE] ✅ Success', { totalMovimientos, requiereRevision, duplicados });
 
     return {
       success: true,
@@ -171,7 +149,6 @@ async function _runPipeline(
         'updateExtractoStatus(Error)',
       );
     } catch (statusErr) {
-      console.error('[parsePipeline] Failed to update error status:', statusErr);
     }
 
     return {

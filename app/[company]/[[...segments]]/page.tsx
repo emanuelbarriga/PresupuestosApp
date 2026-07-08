@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
-import { ref, listAll, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
+import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
 import {
   subscribeBudgets,
   subscribeEjecuciones,
@@ -88,7 +87,7 @@ export default function CompanyPage({ params }: Props) {
     if (isConjunto) {
       const unsub = subscribeCompanies(
         (data) => setCompanies(data),
-        (err) => console.error('Error loading companies:', err),
+        () => {},
       );
       return () => unsub();
     }
@@ -110,7 +109,7 @@ export default function CompanyPage({ params }: Props) {
               return [...filtered, ...tagged];
             });
           },
-          (err) => console.error(`Error loading budgets for ${company.id}:`, err),
+          () => {},
         );
         
         const unsubEjecuciones = subscribeEjecuciones(
@@ -122,7 +121,7 @@ export default function CompanyPage({ params }: Props) {
               return [...filtered, ...tagged];
             });
           },
-          (err) => console.error(`Error loading ejecuciones for ${company.id}:`, err),
+          () => {},
         );
         
         unsubs.push(unsubBudgets, unsubEjecuciones);
@@ -132,8 +131,8 @@ export default function CompanyPage({ params }: Props) {
     } else {
       // Single company mode
       const unsubs = [
-        subscribeBudgets(companyId, setBudgets, (err) => console.error('Error loading budgets:', err)),
-        subscribeEjecuciones(companyId, setEjecuciones, (err) => console.error('Error loading ejecuciones:', err)),
+        subscribeBudgets(companyId, setBudgets, () => {}),
+        subscribeEjecuciones(companyId, setEjecuciones, () => {}),
       ];
       return () => unsubs.forEach((u) => u());
     }
@@ -142,144 +141,11 @@ export default function CompanyPage({ params }: Props) {
   // Load projects for single company mode
   useEffect(() => {
     if (isConjunto) return;
-    const unsub = subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err));
+    const unsub = subscribeProjects(companyId, setProjects, () => {});
     return () => unsub();
   }, [companyId, isConjunto]);
 
   const projectsForCompany = isConjunto ? [] : projects;
-
-  // Diagnostic & repair tools — run from browser console
-  useEffect(() => {
-    (window as any).$$scan = async () => {
-      console.log('🔍 Escaneando comprobantes...');
-      const results: any[] = [];
-      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
-      for (const d of snap.docs) {
-        const data = d.data();
-        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
-        results.push({ id: d.id, desc: data.descripcion, comprobantes: comprobantes.length, names: comprobantes.map((c: any) => c.name), sizes: comprobantes.map((c: any) => c.size) });
-      }
-      console.table(results.filter(r => r.comprobantes > 0));
-      console.log(`Total ejecuciones: ${results.length}, con comprobantes: ${results.filter(r => r.comprobantes > 0).length}`);
-
-      console.log('📁 Escaneando Storage...');
-      const storageRef = ref(storage, `${companyId}/ejecuciones`);
-      try {
-        const listResult = await listAll(storageRef);
-        const folders = listResult.prefixes;
-        console.log(`Carpetas en Storage: ${folders.length}`);
-        for (const folder of folders) {
-          const files = await listAll(folder);
-          const fileNames = files.items.map(f => f.name);
-          const ejecucion = results.find(r => r.id === folder.name);
-          if (!ejecucion) {
-            console.log(`⚠️ Sin ejecucion: ${folder.name}`, fileNames);
-          } else if (fileNames.length !== ejecucion.comprobantes) {
-            console.log(`❌ ${folder.name}: ${fileNames.length} files vs ${ejecucion.comprobantes} comprobantes`, { storage: fileNames, firestore: ejecucion.names });
-          } else {
-            console.log(`✅ ${folder.name}: ${fileNames.length} files`);
-          }
-        }
-      } catch (e) {
-        console.error('Storage scan error:', e);
-      }
-    };
-
-    (window as any).$$fix = async () => {
-      console.log('🔧 Reparando comprobantes...');
-      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
-      const ejecuciones = new Map(snap.docs.map(d => [d.id, d.data()]));
-
-      const storageRef = ref(storage, `${companyId}/ejecuciones`);
-      const listResult = await listAll(storageRef);
-      const results: string[] = [];
-
-      for (const folder of listResult.prefixes) {
-        const ejecucionId = folder.name;
-        const files = await listAll(folder);
-        const data = ejecuciones.get(ejecucionId);
-        if (!data) { results.push(`⚠️ ${ejecucionId}: carpeta sin ejecucion`); continue; }
-
-        const existing = Array.isArray(data.comprobantes) ? data.comprobantes : [];
-        const existingNames = new Set(existing.map((c: any) => c.name));
-        
-        // Detect duplicates by filename pattern (same name = duplicate)
-        const seen = new Map<string, { item: typeof files.items[0]; keep: boolean }>();
-        for (const item of files.items) {
-          const baseName = item.name.replace(/^[a-f0-9-]+-/, '');
-          if (seen.has(baseName)) {
-            // Delete duplicate
-            console.log(`🗑️ Eliminando duplicado: ${ejecucionId}/${item.name}`);
-            await deleteObject(item);
-            results.push(`🗑️ ${ejecucionId}: duplicado ${item.name} eliminado`);
-          } else {
-            seen.set(baseName, { item, keep: true });
-          }
-        }
-
-        // Build comprobantes array from remaining files (only those not already existing)
-        const newComprobantes: Comprobante[] = [];
-        for (const [baseName, { item }] of seen) {
-          if (existingNames.has(baseName)) continue; // already in Firestore
-          const meta = await getMetadata(item);
-          const url = await getDownloadURL(item);
-          newComprobantes.push({
-            id: crypto.randomUUID(),
-            name: baseName,
-            url,
-            path: item.fullPath,
-            type: meta.contentType || 'application/pdf',
-            size: meta.size || 0,
-            uploadedAt: new Date(meta.updated || meta.timeCreated || Date.now()).toISOString(),
-          });
-        }
-
-        if (newComprobantes.length > 0) {
-          const merged = [...existing, ...newComprobantes];
-          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', ejecucionId), { comprobantes: merged });
-          results.push(`✅ ${ejecucionId}: +${newComprobantes.length} comprobantes (total: ${merged.length})`);
-          console.log(`✅ ${ejecucionId}: agregados ${newComprobantes.length} comprobantes`);
-        } else {
-          results.push(`✅ ${ejecucionId}: sin cambios (${existing.length} comprobantes)`);
-        }
-      }
-      console.log('🔧 Reparación completa');
-      results.forEach(r => console.log(r));
-    };
-
-    // Fix comprobantes with 0B size by fetching real metadata from Storage
-    (window as any).$$fixSizes = async () => {
-      console.log('🔧 Reparando tamaños de comprobantes...');
-      const snap = await getDocs(collection(db, 'companies', companyId, 'ejecuciones'));
-      let fixed = 0;
-      for (const d of snap.docs) {
-        const data = d.data();
-        const comprobantes = Array.isArray(data.comprobantes) ? data.comprobantes : [];
-        let changed = false;
-        for (const c of comprobantes) {
-          if (c.size === 0 && c.path) {
-            try {
-              const fileRef = ref(storage, c.path);
-              const meta = await getMetadata(fileRef);
-              c.size = meta.size || 0;
-              c.type = meta.contentType || c.type;
-              console.log(`✅ ${d.id}: ${c.name} → ${(c.size / 1024).toFixed(0)}KB`);
-              changed = true;
-            } catch (e) {
-              console.warn(`⚠️ ${d.id}: ${c.name} no encontrado en Storage`, c.path);
-            }
-          }
-        }
-        if (changed) {
-          await updateDoc(doc(db, 'companies', companyId, 'ejecuciones', d.id), { comprobantes });
-          fixed++;
-        }
-      }
-      console.log(`🔧 ${fixed} ejecuciones con tamaños reparados`);
-    };
-
-    return () => { delete (window as any).$$scan; delete (window as any).$$fix; delete (window as any).$$fixSizes; };
-  }, [companyId]);
 
   const pushScreen = useCallback((screen: NavScreen) => {
     setNavStack(prev => [...prev, screen]);
@@ -406,7 +272,6 @@ export default function CompanyPage({ params }: Props) {
     try {
       await deleteBudget(companyId, budgetId);
     } catch (err) {
-      console.error('Error deleting budget:', err);
       alert('Error al borrar el presupuesto. Intentá de nuevo.');
     }
   };
@@ -415,7 +280,6 @@ export default function CompanyPage({ params }: Props) {
     try {
       await deleteEjecucion(companyId, ejecucionId);
     } catch (err) {
-      console.error('Error deleting ejecucion:', err);
       alert('Error al borrar la ejecución. Intentá de nuevo.');
     }
   };
@@ -429,7 +293,6 @@ export default function CompanyPage({ params }: Props) {
     // In conjunto mode, we need to determine which company to use
     // For now, disable editing in conjunto mode
     if (isConjunto) {
-      console.warn('Editing is disabled in conjunto mode');
       closePanel();
       return;
     }

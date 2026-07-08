@@ -194,11 +194,11 @@ export function Datos({
 
   useEffect(() => {
     const unsubs = [
-      subscribeProjects(companyId, setProjects, (err) => console.error('Error loading projects:', err)),
-      subscribeTerceros(setTerceros, (err) => console.error('Error loading terceros:', err)),
-      subscribeSettings(setSettingsData, (err) => console.error('Error loading settings (global fallback):', err)),
-      subscribeCompanySettings(companyId, setSettingsData, (err) => console.error('Error loading company settings:', err)),
-      subscribeCuentasBancarias(companyId, setCuentas, (err) => console.error('Error loading cuentas:', err)),
+      subscribeProjects(companyId, setProjects, () => {}),
+      subscribeTerceros(setTerceros, () => {}),
+      subscribeSettings(setSettingsData, () => {}),
+      subscribeCompanySettings(companyId, setSettingsData, () => {}),
+      subscribeCuentasBancarias(companyId, setCuentas, () => {}),
     ];
     return () => unsubs.forEach((u) => u());
   }, [companyId]);
@@ -230,7 +230,7 @@ export function Datos({
               return [...others, ...exts];
             });
           },
-          (err) => console.error('Error loading extractos for account', cuenta.id, err),
+          () => {},
         );
         currentMap.set(cuenta.id, unsub);
       }
@@ -278,25 +278,18 @@ export function Datos({
       // Find the extracto to get accountId
       const ext = extractos.find(e => e.id === extractoId);
       if (!ext) {
-        console.warn('[MOVS] Extracto not found for expand:', extractoId, { available: extractos.map(e => ({ id: e.id, accountId: e.accountId })) });
         return extractoId;
       }
-      console.log('[MOVS] Subscribing to movimientos', { companyId, accountId: ext.accountId, extractoId });
       const unsub = subscribeMovimientos(
         companyId,
         ext.accountId,
         extractoId,
         (movs) => {
-          console.log('[MOVS] Subscription received', { extractoId, count: movs.length, sample: movs[0] });
           setMovimientosPorExtracto(prev => {
-            const current = prev[extractoId]?.length ?? 0;
-            if (current !== movs.length) {
-              console.log('[MOVS] Updating movimientosPorExtracto', { extractoId, prevCount: current, newCount: movs.length });
-            }
             return { ...prev, [extractoId]: movs };
           });
         },
-        (err) => console.error('[MOVS] Subscription error:', err),
+        () => {},
       );
       extractoUnsubRef.current.set(extractoId, unsub);
       return extractoId;
@@ -310,7 +303,6 @@ export function Datos({
     try {
       await deleteMovimiento(companyId, ext.accountId, extractoExpandido, movimientoId);
     } catch (err) {
-      console.error('Error deleting movimiento:', err);
     }
   }, [companyId, extractoExpandido, extractos]);
 
@@ -344,7 +336,6 @@ export function Datos({
     try {
       await deleteExtracto(companyId, ext.accountId, ext.id);
     } catch (err) {
-      console.error('Error deleting extracto:', err);
       alert('Error al borrar el extracto.');
     }
   }, [companyId]);
@@ -402,7 +393,6 @@ export function Datos({
 
       setViewModalData(prev => ({ ...prev, open: false }));
     } catch (err) {
-      console.error('Error saving extracto from view modal:', err);
       alert('Error al guardar los cambios.');
     } finally {
       setViewModalSaving(false);

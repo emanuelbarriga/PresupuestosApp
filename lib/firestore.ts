@@ -530,17 +530,13 @@ export function subscribeMovimientos(
   onData: (movimientos: MovimientoBancario[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  const path = `companies/${companyId}/cuentasBancarias/${accountId}/extractos/${extractoId}/movimientos`;
-  console.log('[FIRESTORE] subscribeMovimientos path:', path);
   return onSnapshot(
     collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION),
     (snapshot) => {
       const movs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as MovimientoBancario);
-      console.log('[FIRESTORE] subscribeMovimientos snapshot', { path, count: movs.length });
       onData(movs);
     },
     (err) => {
-      console.error('[FIRESTORE] subscribeMovimientos error', { path, error: err.message });
       onError?.(err);
     },
   );
@@ -555,9 +551,6 @@ export async function batchAddMovimientos(
   if (movimientos.length > 500) {
     throw new Error('batchAddMovimientos: cannot write more than 500 documents in a single batch');
   }
-
-  const path = `companies/${companyId}/cuentasBancarias/${accountId}/extractos/${extractoId}/movimientos`;
-  console.log('[FIRESTORE] batchAddMovimientos', { path, count: movimientos.length, sample: movimientos[0] });
 
   const batch = writeBatch(db);
   const ids: string[] = [];
@@ -583,7 +576,6 @@ export async function batchAddMovimientos(
   }
 
   await batch.commit();
-  console.log('[FIRESTORE] batchAddMovimientos ✅ committed', { path, idsCount: ids.length });
   return ids;
 }
 

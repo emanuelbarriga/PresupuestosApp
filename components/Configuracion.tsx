@@ -65,7 +65,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
   // Subscribe to all companies the user belongs to
   useEffect(() => {
     if (!user) return;
-    return subscribeUserCompanies(user.uid, setUserCompanies, console.error);
+    return subscribeUserCompanies(user.uid, setUserCompanies, () => {});
   }, [user]);
 
   // For each company, subscribe to members + invitations
@@ -87,12 +87,12 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
       const u1 = subscribeCompanyMembers(c.id, (data) => {
         mem = data;
         updateData();
-      }, console.error);
+      }, () => {});
 
       const u2 = subscribeCompanyInvitations(c.id, (data) => {
         inv = data;
         updateData();
-      }, console.error);
+      }, () => {});
 
       unsubs.push(u1, u2);
     }
@@ -188,7 +188,6 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     try {
       await deleteMemberFromCompany(companyId, memberId);
     } catch (err) {
-      console.error('Error removing member:', err);
       alert('Error al eliminar el miembro');
     } finally {
       setDeletingMember(null);
@@ -204,7 +203,6 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
         aggregatedUser.memberships.map((m) => deleteMemberFromCompany(m.companyId, aggregatedUser.userId)),
       );
     } catch (err) {
-      console.error('Error deleting user:', err);
       alert('Error al eliminar el usuario');
     } finally {
       setDeletingMember(null);
@@ -217,7 +215,6 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     try {
       await blockMember(companyId, memberId, !currentBlocked);
     } catch (err) {
-      console.error('Error blocking/unblocking member:', err);
       alert('Error al actualizar el estado del miembro');
     } finally {
       setBlockingMember(null);
@@ -237,7 +234,6 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     try {
       await deleteInvitation(invId);
     } catch (err) {
-      console.error('Error deleting invitation:', err);
       alert('Error al eliminar la invitación');
     } finally {
       setDeletingInvitation(null);

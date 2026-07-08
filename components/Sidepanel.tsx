@@ -980,7 +980,6 @@ export function ExtractoAddForm({
       setMovimientos(movs);
       setError(null);
     } catch (err) {
-      console.error('Error running parser:', err);
       setError(err instanceof Error ? err.message : 'Error al parsear el extracto.');
     } finally {
       setLoading(false);
@@ -1008,7 +1007,6 @@ export function ExtractoAddForm({
       const banco = detectarBanco(texto);
       await runParse(banco, texto);
     } catch (err) {
-      console.error('Error parsing PDF:', err);
       setError(err instanceof Error ? err.message : 'Error al leer el PDF.');
       setLoading(false);
     }
@@ -1054,7 +1052,6 @@ export function ExtractoAddForm({
 
       await onSubmit(form, data);
     } catch (err) {
-      console.error('Error saving extracto:', err);
       alert('Error al guardar el extracto.');
     } finally {
       setSaving(false);
@@ -1211,7 +1208,6 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
   useEffect(() => {
     if (form.mode === 'edit' && form.type === 'ejecucion') {
       const c = form.record.comprobantes || [];
-      console.log('[COMPROBANTES] Form edit ejecucion', { ejecucionId: form.record.id, comprobantesCount: c.length });
       setComprobantes(c);
     } else {
       setComprobantes([]);
@@ -1611,7 +1607,6 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
 
         alert(`Datos extraídos: ${result.movimientos.length} movimientos, saldo inicial $${result.context.saldoInicial.toLocaleString('es-CO')}`);
       } catch (err) {
-        console.error('Error parsing PDF:', err);
         alert('Error al leer el PDF. Verificá que el archivo sea válido.');
       } finally {
         setParseoLoading(false);
@@ -1667,7 +1662,6 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
 
         alert(`Re-parseado: ${result.movimientos.length} movimientos, saldo final $${result.context.saldoFinal.toLocaleString('es-CO')}`);
       } catch (err) {
-        console.error('Error re-parsing PDF:', err);
         alert('Error al re-parsear el PDF.');
       } finally {
         setParseoLoading(false);
@@ -1704,7 +1698,6 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         // Save extracto (page.tsx handler saves movements from _pendingMovimientos)
         await onSubmit(form, data);
       } catch (err) {
-        console.error('Error saving extracto:', err);
         alert('Error al guardar el extracto.');
       } finally {
         setSaving(false);
@@ -2752,10 +2745,8 @@ function ComprobanteUploader({
 
   const uploadAll = async () => {
     if (!ejecucionId || selectedFiles.length === 0) {
-      console.log('[COMPROBANTES] uploadAll skipped', { ejecucionId, files: selectedFiles.length });
       return;
     }
-    console.log('[COMPROBANTES] uploadAll start', { ejecucionId, filesCount: selectedFiles.length, existingComprobantes: comprobantes.length });
     setUploading(true);
     setUploadProgress(0);
     let uploaded = 0;
@@ -2765,9 +2756,7 @@ function ComprobanteUploader({
     for (const pf of selectedFiles) {
       try {
         const path = generateFilePath(companyId, ejecucionId, pf.name);
-        console.log('[COMPROBANTES] uploading file', { name: pf.name, path });
         const result = await uploadFile(pf.file, path, (p) => setUploadProgress(((uploaded + p / 100) / total) * 100));
-        console.log('[COMPROBANTES] upload success', { name: pf.name, url: result.url });
         newComprobantes.push({
           id: crypto.randomUUID(),
           name: pf.name,
@@ -2782,20 +2771,16 @@ function ComprobanteUploader({
         uploaded++;
         setUploadProgress((uploaded / total) * 100);
       } catch (err) {
-        console.error(`[COMPROBANTES] Upload failed for ${pf.name}:`, err);
         setValidationError(prev => prev ? `${prev}; Error en ${pf.name}` : `Error en ${pf.name}`);
       }
     }
 
     if (newComprobantes.length > 0) {
       const updated = [...comprobantes, ...newComprobantes];
-      console.log('[COMPROBANTES] updating firestore', { ejecucionId, totalComprobantes: updated.length, newComprobantes: newComprobantes.length });
       onComprobantesChange(updated);
       try {
         await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
-        console.log('[COMPROBANTES] firestore update success');
       } catch (err) {
-        console.error('[COMPROBANTES] firestore update failed:', err);
       }
     }
     setSelectedFiles([]);
@@ -2822,7 +2807,6 @@ function ComprobanteUploader({
         await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(updated)) });
       }
     } catch (err) {
-      console.error('Delete failed:', err);
     }
   };
 
@@ -2937,7 +2921,6 @@ function ComprobanteUploader({
 }
 
 function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecucion; companyId: string; onClose: () => void; onNavigate: (screen: NavScreen) => void }) {
-  console.log('[COMPROBANTES] EjecucionView render', { ejecucionId: ejecucion.id, comprobantes: ejecucion.comprobantes?.length });
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
 
@@ -2966,7 +2949,6 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
     try {
       await removeBudgetLink(companyId, ejecucion.id, linkId);
     } catch (err) {
-      console.error('Error removing budget link:', err);
     }
   };
 
@@ -2977,7 +2959,6 @@ function EjecucionView({ ejecucion, companyId, onNavigate }: { ejecucion: Ejecuc
       setComprobantes(updated);
       await updateEjecucion(companyId, ejecucion.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
     } catch (err) {
-      console.error('Error deleting comprobante:', err);
     }
   };
 
@@ -3201,7 +3182,6 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
         await updateEjecucion(companyId, id, { archivado: true });
       }
     } catch (err) {
-      console.error('Archive failed:', err);
     }
     setArchiveConfirm(null);
   };
@@ -3368,7 +3348,7 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                 <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
                   {group.items.map(e => {
                     const cCount = e.comprobantes?.length || 0;
-                    if (e.id === 'ncoAgRDxY7Tx1ftrvpv0' || cCount > 0) console.log('[COMPROBANTES] DataPanel item', { id: e.id, desc: e.descripcion, cCount, comprobantes: e.comprobantes?.length });
+                    if (e.id === 'ncoAgRDxY7Tx1ftrvpv0' || cCount > 0) void 0;
                     return (
                     <div key={e.id} className="px-2 py-1.5">
                       <div className="flex items-start justify-between mb-1">
@@ -3417,7 +3397,7 @@ function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, 
                               if (comp.path) await deleteFile(comp.path);
                               const updated = e.comprobantes.filter((c: any) => c.id !== comp.id);
                               await updateEjecucion(companyId, e.id, { comprobantes: JSON.parse(JSON.stringify(updated)) });
-                            } catch (err) { console.error('Error deleting comprobante:', err); }
+                            } catch (err) {}
                           }} />
                         </div>
                       )}
