@@ -962,7 +962,8 @@ export function ExtractoAddForm({
       const result = parser.parse(texto);
 
       const { derivarMesAnio } = await import('@/lib/parsers/periodo');
-      const { mes, anio } = derivarMesAnio(result.context.periodoDesde);
+      // Usar HASTA (no DESDE): Bancolombia pone DESDE como último día del mes anterior
+      const { mes, anio } = derivarMesAnio(result.context.periodoHasta ?? result.context.periodoDesde);
 
       const { reconciliar } = await import('@/lib/parsers/reconciliador');
       const movs = reconciliar(result.movimientos, result.context.saldoInicial, 0.01, (current, tot) => {
@@ -1590,14 +1591,15 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         const parser = getParser(banco);
         const result = parser.parse(texto);
 
-        // Auto-fill form fields
-        if (result.context.periodoDesde) {
-          const parts = result.context.periodoDesde.split('-');
-          const mesNum = parseInt(parts[1], 10);
-          set('mes', MONTHS[mesNum - 1] || '');
-          set('anio', parts[0]);
-        }
-        set('saldoInicial', String(result.context.saldoInicial));
+         // Auto-fill form fields — usar HASTA (Bancolombia DESDE = último día mes ant.)
+         const periodoFecha = result.context.periodoHasta ?? result.context.periodoDesde;
+         if (periodoFecha) {
+           const parts = periodoFecha.split('-');
+           const mesNum = parseInt(parts[1], 10);
+           set('mes', MONTHS[mesNum - 1] || '');
+           set('anio', parts[0]);
+         }
+         set('saldoInicial', String(result.context.saldoInicial));
         set('saldoFinal', String(result.context.saldoFinal));
         set('estado', 'Completado');
 
@@ -1646,9 +1648,10 @@ function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack, canGo
         const parser = getParser(banco);
         const result = parser.parse(texto);
 
-        // Auto-fill
-        if (result.context.periodoDesde) {
-          const parts = result.context.periodoDesde.split('-');
+        // Auto-fill — usar HASTA (Bancolombia pone DESDE como último día del mes ant.)
+        const periodoFecha = result.context.periodoHasta ?? result.context.periodoDesde;
+        if (periodoFecha) {
+          const parts = periodoFecha.split('-');
           const mesNum = parseInt(parts[1], 10);
           set('mes', MONTHS[mesNum - 1] || '');
           set('anio', parts[0]);
