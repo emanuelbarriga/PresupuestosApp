@@ -70,8 +70,14 @@ export class BancoomevaParser implements ExtractoParser {
       periodoHasta = this.normalizeDate(periodMatch[2]);
     }
 
-    const saldoInicialMatch = fullText.match(/SALDO INICIAL\s+\$\s*([\d,]+\.\d{2})/i);
-    const saldoFinalMatch = fullText.match(/SALDO FINAL\s+\$\s*([\d,]+\.\d{2})/i);
+    // Find first SALDO INICIAL and last SALDO FINAL with their $values
+    const siRe = /SALDO INICIAL[\s\S]*?\$\s*([\d,]+\.\d{2})/gi;
+    const sfRe = /SALDO FINAL[\s\S]*?\$\s*([\d,]+\.\d{2})/gi;
+    let saldoInicialMatch: RegExpExecArray | null = null;
+    let saldoFinalMatch: RegExpExecArray | null = null;
+    let mx: RegExpExecArray | null;
+    while ((mx = siRe.exec(fullText)) !== null) { if (!saldoInicialMatch) saldoInicialMatch = mx; }
+    while ((mx = sfRe.exec(fullText)) !== null) { saldoFinalMatch = mx; }
 
     return {
       banco: this.banco,
@@ -117,7 +123,7 @@ export class BancoomevaParser implements ExtractoParser {
 
     // Find numbers (debito, credito, saldo) from the right
     // Format: ...text...  DEBITO_VAL  CREDITO_VAL  SALDO_VAL
-    const numberPattern = /(-?[\d,]+\.\d{2})/g;
+    const numberPattern = /(-?[\d,]*\.\d{2})/g;
     const numbers: Array<{ value: string; start: number; end: number }> = [];
     let numMatch: RegExpExecArray | null;
 
@@ -139,30 +145,25 @@ export class BancoomevaParser implements ExtractoParser {
     let descEndIndex = 0;
 
     if (numCount >= 3) {
-      // Bancoomeva text extraction order is ALWAYS [CREDITO, SALDO, DEBITO].
-      // The DEBITO column is the empty one ($0.00) and comes last.
-      // Credit? No — we know from the real data that the order is consistent:
+      // Flat (join(' ')) extraction order: [CREDITO, SALDO, DEBITO].
       // text order = [n1, n2, n3] where:
-      //   n1 = CREDITO (or DEBITO if credit is empty — but debit is almost always the empty column)
+      //   n1 = CREDITO (or DEBITO if credit is empty)
       //   n2 = SALDO
       //   n3 = DEBITO (usually 0.00 for empty column)
-      // We can determine DEBITO vs CREDITO from the description prefix:
+      // Determine DEBITO vs CREDITO from the description prefix:
       //   "N/C" = Nota Crédito → n1 is CREDITO, n3 is DEBITO(0)
       //   "N/D" or "N/DND" = Nota Débito → n1 is DEBITO, n3 is DEBITO(?)
-      // For safety: saldo is ALWAYS the middle number (n2). For n1 and n3,
-      // check description prefix.
-      const descPrefix = rest.slice(descEndIndex, numbers[0].start);
       const isNotaCredito = /N\/C\b/i.test(rest);
       const isNotaDebito = /N\/D\b/i.test(rest);
 
       saldoVal = parseMonto(numbers[1].value);
 
       if (isNotaCredito && !isNotaDebito) {
-        // N/C → this is a credit transaction
+        // N/C → first is CREDITO, third is DEBITO(0)
         creditoVal = parseMonto(numbers[0].value);
         debitoVal = parseMonto(numbers[2].value);
       } else {
-        // N/D or no prefix → debit transaction (or fallback)
+        // N/D or no prefix → first is DEBITO, third is CREDITO(0)
         debitoVal = parseMonto(numbers[0].value);
         creditoVal = parseMonto(numbers[2].value);
       }

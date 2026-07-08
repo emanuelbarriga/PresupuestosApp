@@ -37,16 +37,18 @@ function parseFechaBancolombia(fechaStr: string, range: DateRange): string {
 }
 
 function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
-  // RESUMEN block: "SALDO ANTERIOR  TOTAL ABONOS  TOTAL CARGOS  SALDO ACTUAL  $ $ $ $  V1 V2 V3 V4"
-  // V1 = SALDO ANTERIOR (saldoInicial), V4 = SALDO ACTUAL (saldoFinal)
-  const match = text.match(
-    /SALDO ANTERIOR\s+TOTAL ABONOS\s+TOTAL CARGOS\s+SALDO ACTUAL\s+\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
+  // 4 $values after the labels in order: SI, TA, TC, SA
+  // Pattern works for both flat and Y-grouped formats
+  const m = text.match(
+    /SALDO ANTERIOR[\s\S]*?TOTAL ABONOS[\s\S]*?TOTAL CARGOS[\s\S]*?SALDO ACTUAL[\s\S]*?\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
   );
-  if (!match) return null;
-  return {
-    saldoInicial: parseMonto(match[1]),
-    saldoFinal: parseMonto(match[4]),
-  };
+  if (m) {
+    return {
+      saldoInicial: parseMonto(m[1]),
+      saldoFinal: parseMonto(m[4]),
+    };
+  }
+  return null;
 }
 
 function extractDateRange(text: string): DateRange | null {
