@@ -1508,7 +1508,7 @@ export function Datos({
 
         </div>
 
-        {/* View extracto modal (read-only) */}
+        {/* View extracto modal — solo lectura */}
         <ExtractoParseModal
           open={viewModalData.open}
           file={null}
@@ -1517,7 +1517,7 @@ export function Datos({
           movimientos={viewModalData.movimientos}
           loading={false}
           saving={viewModalSaving}
-          readOnly={false}
+          readOnly={true}
           progress={null}
           error={null}
           onBancoChange={() => {}}
