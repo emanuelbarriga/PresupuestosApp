@@ -17,8 +17,12 @@ export async function extractPdfTextFromBuffer(
   mode: ExtractMode = 'flat',
 ): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  const loadingTask = pdfjs.getDocument({ data: buffer });
+  // Configurar worker en browser (tests usan entorno Node, no necesitan worker)
+  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  }
+  const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const loadingTask = pdfjs.getDocument({ data });
   const pdf = await loadingTask.promise;
 
   const pages: string[] = [];

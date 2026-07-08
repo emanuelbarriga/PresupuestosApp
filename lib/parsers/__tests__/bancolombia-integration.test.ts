@@ -169,20 +169,10 @@ describe('Bancolombia PDF — comparación completa contra Python CSV', () => {
       console.log(`\n📄 ${pdfFile}`);
       console.log(`  Python CSV: ${py.rows.length} movs, SI=${py.meta.saldoInicial}, SF=${py.meta.saldoFinal}, Mes=${py.meta.mes} ${py.meta.anio}`);
 
-      // 2. Parse PDF with TypeScript + pdfjs
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      const buffer = readFileSync(pdfPath);
-      const data = new Uint8Array(buffer);
-      const doc = await pdfjs.getDocument({ data }).promise;
-
-      const pages: string[] = [];
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const pageText = content.items.map((item: any) => item.str ?? '').join(' ');
-        pages.push(pageText);
-      }
-      const text = pages.join('\n\n').trim();
+      // 2. Extract with Y-grouping (row-layout) — same as browser
+      const { extractPdfTextFromBuffer } = await import('@/lib/parsers/pdfText');
+      const buffer = new Uint8Array(readFileSync(pdfPath)).buffer;
+      const text = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
 
       const parser = new BancolombiaParser();
       const result = parser.parse(text);

@@ -37,17 +37,34 @@ function parseFechaBancolombia(fechaStr: string, range: DateRange): string {
 }
 
 function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
-  // 4 $values after the labels in order: SI, TA, TC, SA
-  // Pattern works for both flat and Y-grouped formats
-  const m = text.match(
-    /SALDO ANTERIOR[\s\S]*?TOTAL ABONOS[\s\S]*?TOTAL CARGOS[\s\S]*?SALDO ACTUAL[\s\S]*?\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
-  );
-  if (m) {
+  // Extraer el bloque RESUMEN entre el encabezado y la tabla de datos.
+  const resumen = text.match(/SALDO ANTERIOR[\s\S]*?FECHA\s+DESCRIPCI[ÓO]N/);
+  if (!resumen) return null;
+  const block = resumen[0];
+
+  // Estrategia 1: Y-grouping — cada etiqueta tiene su $ en la misma línea
+  // ej: "SALDO ANTERIOR $ 1,478.29\n...\nSALDO ACTUAL $ 70,565,811.95"
+  const siY = block.match(/SALDO ANTERIOR[^$]*\$\s*([\d,]+\.\d{2})/);
+  const sfY = block.match(/SALDO ACTUAL[^$]*\$\s*([\d,]+\.\d{2})/);
+  if (siY && sfY) {
     return {
-      saldoInicial: parseMonto(m[1]),
-      saldoFinal: parseMonto(m[4]),
+      saldoInicial: parseMonto(siY[1]),
+      saldoFinal: parseMonto(sfY[1]),
     };
   }
+
+  // Estrategia 2: flat mode — 4 $ juntos, luego 4 números: SI, TA, TC, SF
+  // ej: "$  $  $  $  1,478.29  140,961,765.20  70,397,431.54  70,565,811.95"
+  const flat = block.match(
+    /\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
+  );
+  if (flat) {
+    return {
+      saldoInicial: parseMonto(flat[1]),
+      saldoFinal: parseMonto(flat[4]),
+    };
+  }
+
   return null;
 }
 
@@ -92,190 +109,32 @@ export class BancolombiaParser implements ExtractoParser {
       return { movimientos: [], context, errores: ['No se pudo extraer el rango de fechas del encabezado'] };
     }
 
-    // Process the text: remove page headers and summaries
+    // Process the text: remove page headers and summaries.
+    // El texto DEBE venir con row-layout (Y-grouping) para que cada fila
+    // del PDF sea una línea, independientemente de si la página original
+    // usaba layout row-by-row o columnar. El Y-grouping se hace en la
+    // extracción (extractPdfTextFromBuffer con mode='row-layout'), NO acá.
     const cleanedText = this.cleanText(texto);
 
-    // Split into sections (by page breaks) — each section is either row-by-row
-    // (page 1) or columnar (pages 2+ where dates cluster, then descriptions,
-    // then amounts, then saldos). Process each section with the appropriate
-    // parser; NEVER run row-by-row on columnar text (produces bogus rows).
-    const sections = cleanedText.split('\n\n').filter(Boolean);
-    const rowRows: MovimientoBancarioInput[] = [];
-    const colRows: MovimientoBancarioInput[] = [];
+    // Row-by-row extraction: funciona sobre cualquier texto donde cada fila
+    // tenga patrón "FECHA DESCRIPCIÓN VALOR SALDO". Las páginas columnares
+    // ya vienen reconstruidas fila-por-fila gracias al Y-grouping.
+    const rowRows = this.extractRows(cleanedText, dateRange);
 
-    for (const section of sections) {
-      if (this.isColumnarSection(section)) {
-        colRows.push(...this.extractColumnarSection(section, dateRange));
-      } else {
-        rowRows.push(...this.extractRows(section, dateRange));
-      }
-    }
-
-    // Renumber all rows sequentially
-    const allRows: MovimientoBancarioInput[] = [];
+    // Assign sequential ordinals
+    const movimientos: MovimientoBancarioInput[] = [];
     let ordinal = 0;
     for (const row of rowRows) {
       ordinal++;
-      allRows.push({ ...row, ordinal });
-    }
-    for (const row of colRows) {
-      // Skip columnar duplicates of row-by-row rows
-      const isDuplicate = allRows.some(
-        r => r.fecha === row.fecha && r.saldo === row.saldo
-          && Math.abs((r.debito ?? r.credito ?? 0) - (row.debito ?? row.credito ?? 0)) < 0.01
-      );
-      if (!isDuplicate) {
-        ordinal++;
-        allRows.push({ ...row, ordinal });
-      }
+      movimientos.push({ ...row, ordinal });
     }
 
-    return { movimientos: allRows, context };
+    return { movimientos, context };
   }
 
   /**
    * Check if the cleaned text has columnar sections that weren't processed.
    */
-  /**
-   * Detect if a page section is columnar (all dates clustered, then descriptions,
-   * then amounts, then saldos) vs. row-by-row (each row has date+desc+amounts).
-   */
-  private isColumnarSection(texto: string): boolean {
-    // If 4+ consecutive dates with only whitespace between them → columnar
-    const cluster = texto.match(/\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/);
-    return cluster !== null;
-  }
-
-  /**
-   * Extract rows from a columnar page section.
-   * Format: "7/02 8/02 ... [dates] ... desc1 desc2 ... vals1 vals2 ... saldos1 saldos2 ..."
-   */
-  private extractColumnarSection(texto: string, dateRange: DateRange): MovimientoBancarioInput[] {
-    // 1. Extract all dates
-    const dateRegex = /\b(\d{1,2}\/\d{1,2})\b/g;
-    const fechas: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = dateRegex.exec(texto)) !== null) {
-      fechas.push(m[1]);
-    }
-    const n = fechas.length;
-    if (n < 2) return [];
-
-    // 2. Remove dates from the text
-    const withoutDates = texto.replace(/\b\d{1,2}\/\d{1,2}\b/g, ' ').replace(/\s+/g, ' ').trim();
-
-    // 3. Find ALL numbers (amounts + saldos) in order of appearance
-    const numRegex = /(-?[\d,]*\.\d{2})/g;
-    const allNumbers: number[] = [];
-    while ((m = numRegex.exec(withoutDates)) !== null) {
-      allNumbers.push(parseMonto(m[1]));
-    }
-
-    // If we have fewer than n numbers total, we can't make rows for all dates
-    if (allNumbers.length < n) return [];
-
-    // In the columnar layout: amounts come FIRST, then saldos LAST.
-    // Con N fechas, esperamos 2×N números totales. Si hay menos (porque un
-    // número salió sin decimales en la extracción), usamos posición secuencial:
-    // primeros N = amounts, últimos N = saldos (pueden traslaparse cuando
-    // numbers.length < 2×N; la fila traslapada recibe amount 0).
-    const totalNums = allNumbers.length;
-    let amounts: number[];
-    let saldos: number[];
-    if (totalNums >= n * 2) {
-      amounts = allNumbers.slice(0, n);
-      saldos = allNumbers.slice(totalNums - n);
-    } else {
-      // Menos de 2n números: el límite entre amounts y saldos no está claro.
-      // Usamos magnitud como desempate: en Bancolombia los saldos son siempre
-      // >= 5M, los montos (débitos/créditos) son menores a 2M.
-      // El número en posición k = totalNums-n define de qué lado cae.
-      const k = Math.max(0, totalNums - n);
-      const overlapNum = k > 0 && k < allNumbers.length ? allNumbers[k] : 0;
-      const isOverlapSaldo = overlapNum >= 5_000_000;
-
-      if (isOverlapSaldo) {
-        // El número k es un saldo → amounts son first k, saldos desde k
-        amounts = allNumbers.slice(0, k);
-        saldos = allNumbers.slice(k);
-        while (amounts.length < n) amounts.push(0); // última fila sin amount
-      } else {
-        // El número k es un amount → amounts son first k+1, saldos desde k+1
-        amounts = allNumbers.slice(0, k + 1);
-        saldos = allNumbers.slice(k + 1);
-        while (saldos.length < n) saldos.push(0); // última fila sin saldo
-      }
-    }
-
-    // 4. Description text: everything before the first number in withoutDates
-    const firstNumIdx = withoutDates.search(/(-?[\d,]*\.\d{2})/);
-    let descText = '';
-    if (firstNumIdx > -1) {
-      descText = withoutDates.slice(0, firstNumIdx).trim();
-    } else {
-      descText = withoutDates;
-    }
-
-    // 5. Split descriptions usando palabras ancla.
-    // Todas las descripciones de Bancolombia empiezan con una de estas
-    // palabras clave: ABONO, AJUSTE, COBRO, COMPRA, CUOTA, IMPTO, PAGO,
-    // SERVICIO, TRANSFERENCIA, o "0" (items de mantenimiento del banco).
-    // pdfjs join(' ') aplana todo a espacios simples, así que no podemos
-    // usar split(/\s{3,}/). Pero estas anclas marcan boundaries reales.
-    const anchorRegex = /\b(ABONO|AJUSTE|COBRO|COMPRA|CUOTA|IMPTO|PAGO|SERVICIO|TRANSFERENCIA|INTERBANC|0)\b\s*/gi;
-    const descParts: string[] = [];
-    // split con capturing group: [before, capture1, between1, capture2, ...]
-    const tokens = descText.split(anchorRegex);
-    // Pair each anchor with its following text
-    let i = 1; // Start at index 1 (first element is text before first anchor)
-    while (i < tokens.length && descParts.length < n) {
-      const anchor = tokens[i] ?? '';
-      const rest = (tokens[i + 1] ?? '').trim();
-      descParts.push((anchor + ' ' + rest).trim());
-      i += 2;
-    }
-    // El split por anclas puede producir más de N partes cuando una palabra
-    // clave aparece dentro de una descripción existente. Ej: "SERVICIO
-    // TRANSFERENCIA VIRTUAL" → "SERVICIO" + "TRANSFERENCIA VIRTUAL" porque
-    // TRANSFERENCIA es ancla. En vez de fusionar desde el final (que desfasa),
-    // buscamos el par adyacente con MENOS palabras totales — es el candidato
-    // más probable de falso split:
-    //   "SERVICIO"(1) + "TRANSFERENCIA VIRTUAL"(2) = 3 palabras
-    //   "TRANSFERENCIA VIRTUAL"(2) + "IMPTO..."(3) = 5 palabras
-    // → fusionamos el par de 3 palabras = "SERVICIO TRANSFERENCIA VIRTUAL".
-    while (descParts.length > n) {
-      let bestIdx = 0;
-      let bestLen = Infinity;
-      for (let mi = 0; mi < descParts.length - 1; mi++) {
-        const combined = descParts[mi].split(/\s+/).length + descParts[mi + 1].split(/\s+/).length;
-        if (combined < bestLen) { bestLen = combined; bestIdx = mi; }
-      }
-      descParts[bestIdx] = (descParts[bestIdx] + ' ' + descParts[bestIdx + 1]).trim();
-      descParts.splice(bestIdx + 1, 1);
-    }
-    // Rellenar si faltan partes
-    while (descParts.length < n) descParts.push('');
-
-    // 6. Zip into rows
-    const rows: MovimientoBancarioInput[] = [];
-    for (let i = 0; i < n; i++) {
-      const valor = amounts[i] ?? 0;
-      const saldo = saldos[i] ?? 0;
-      rows.push({
-        fecha: parseFechaBancolombia(fechas[i], dateRange),
-        descripcion: (descParts[i] ?? `Mov. pág. col.`).trim(),
-        debito: valor < 0 ? Math.abs(valor) : undefined,
-        credito: valor > 0 ? valor : undefined,
-        saldo,
-        moneda: 'COP',
-        bancoOrigen: this.banco,
-        ordinal: i + 1,
-      });
-    }
-
-    return rows;
-  }
-
   private formatDate(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -284,10 +143,9 @@ export class BancolombiaParser implements ExtractoParser {
   }
 
   private cleanText(texto: string): string {
-    // pdfjs extrae cada página como UNA línea larga (todo unido con espacios),
-    // NO como líneas separadas por \n. Por lo tanto no podemos split('\n') y
-    // filtrar líneas — remueve TODO porque la página entera empieza con
-    // "ESTADO DE CUENTA". Usamos regex sobre el texto completo en su lugar.
+    // El texto llega con Y-grouping (row-layout mode): cada fila del PDF es
+    // una línea separada por \n. Las páginas se separan por \n\n. Usamos
+    // regex sobre el texto completo para remover encabezados y resúmenes.
     let cleaned = texto;
 
     // Remove page headers: desde "ESTADO DE CUENTA" hasta la columna de datos

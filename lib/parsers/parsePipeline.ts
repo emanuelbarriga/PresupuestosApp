@@ -76,7 +76,9 @@ async function _runPipeline(
     let texto: string;
     try {
       console.log('[PARSE-PIPELINE] Step 2: extracting text from buffer', { size: buffer.byteLength });
-      texto = await extractPdfTextFromBuffer(buffer);
+      // Usar row-layout (Y-grouping) para convertir páginas columnares
+      // en texto fila-por-fila. Funciona para todos los bancos.
+      texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
       console.log('[PARSE-PIPELINE] PDF extracted', { length: texto.length, preview: texto.slice(0, 200) });
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;

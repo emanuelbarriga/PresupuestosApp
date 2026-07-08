@@ -1001,7 +1001,7 @@ export function ExtractoAddForm({
       const { extractPdfTextFromBuffer } = await import('@/lib/parsers/pdfText');
       const texto = await extractPdfTextFromBuffer(buffer, (current, total) => {
         setProgress({ stage: 'extrayendo', current, total });
-      });
+      }, 'row-layout');
       textoRef.current = texto;
 
       const { detectarBanco } = await import('@/lib/parsers/index');
