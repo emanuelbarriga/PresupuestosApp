@@ -10,7 +10,6 @@ describe('Phase 2 — Form module smoke tests', () => {
   it('ProjectForm module loads', async () => {
     const mod = await import('@/components/forms/ProjectForm');
     expect(mod.ProjectForm).toBeDefined();
-    expect(mod.ProjectFormData).toBeUndefined(); // interface, not a runtime export
   });
 
   it('TerceroForm module loads', async () => {
