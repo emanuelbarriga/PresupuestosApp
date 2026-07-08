@@ -31,6 +31,8 @@ interface ExtractoParseModalProps {
   saving?: boolean;
   /** When true, hide all actions and show only a Cerrar button */
   readOnly?: boolean;
+  /** Custom title for the modal header */
+  title?: string;
   progress: ExtractoParseProgress | null;
   error: string | null;
   onBancoChange: (banco: Banco) => void;
@@ -58,6 +60,7 @@ export function ExtractoParseModal({
   loading,
   saving = false,
   readOnly = false,
+  title = 'Confirmar extracto',
   progress,
   error,
   onBancoChange,
@@ -172,7 +175,7 @@ export function ExtractoParseModal({
       <div className="bg-white rounded-2xl shadow-xl w-[95vw] max-w-[1600px] mx-4 h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold text-slate-800">Confirmar extracto</h3>
+            <h3 className="text-sm font-bold text-slate-800">{title}</h3>
             {corrigiendo && (() => {
               const ords = editMovimientos.map(m => m.ordinal).sort((a, b) => a - b);
               const gaps: string[] = [];
