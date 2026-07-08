@@ -22,7 +22,6 @@ interface DataPanelProps {
 }
 
 export function DataPanel({ data, companyId, onClose, onNavigate, projects, canGoBack, onBack }: DataPanelProps) {
-  const [expandedEj, setExpandedEj] = useState<string | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ type: 'budget' | 'ejecucion'; id: string } | null>(null);
 
   // Direct updateEjecucion calls preserved — will be cleaned up in Phase 5
