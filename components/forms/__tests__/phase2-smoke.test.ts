@@ -38,15 +38,9 @@ describe('Phase 2 — Form module smoke tests', () => {
     expect(mod.FormExtractoEdit).toBeDefined();
   });
 
-  it('parseForPreview module loads', async () => {
+  it('parsePipeline module exports both parseForPreview and runParsePipelineFromBuffer', async () => {
     const mod = await import('@/lib/parsers/parsePipeline');
     expect(mod.parseForPreview).toBeDefined();
     expect(mod.runParsePipelineFromBuffer).toBeDefined();
-  });
-
-  it('parseForPreview.test file exists and exports tests', async () => {
-    // The test file itself — if it doesn't parse/export, this will throw
-    const mod = await import('@/lib/parsers/__tests__/parseForPreview.test');
-    expect(mod).toBeDefined();
   });
 });
