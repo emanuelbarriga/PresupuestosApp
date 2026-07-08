@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 import { AuthProvider } from '@/context/AuthContext';
+import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
   title: 'Gestor de Presupuestos',
@@ -12,6 +13,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en">
       <body suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
+        <Toaster position="top-right" />
       </body>
     </html>
   );
