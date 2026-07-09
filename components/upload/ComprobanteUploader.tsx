@@ -51,6 +51,18 @@ export function ComprobanteUploader({
   const [newTipo, setNewTipo] = useState('');
   const [newDesc, setNewDesc] = useState('');
 
+  const applyTipoToPending = (tipo: string) => {
+    setNewTipo(tipo);
+    if (pendingComprobantes.length === 0) return;
+    onPendingChange(prev => prev.map(p => ({ ...p, tipo: tipo || undefined })));
+  };
+
+  const applyDescToPending = (desc: string) => {
+    setNewDesc(desc);
+    if (pendingComprobantes.length === 0) return;
+    onPendingChange(prev => prev.map(p => ({ ...p, descripcion: desc || undefined })));
+  };
+
   const addFilesToList = (files: FileList | null) => {
     if (!files) return;
     setValidationError('');
@@ -74,8 +86,6 @@ export function ComprobanteUploader({
     }
     if (newItems.length > 0) {
       onPendingChange(prev => [...prev, ...newItems]);
-      setNewDesc('');
-      setNewTipo('');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -113,7 +123,7 @@ export function ComprobanteUploader({
       {tiposComprobante.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           {tiposComprobante.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(t => (
-            <button key={t.name} type="button" onClick={() => setNewTipo(newTipo === t.name ? '' : t.name)}
+            <button key={t.name} type="button" onClick={() => applyTipoToPending(newTipo === t.name ? '' : t.name)}
               className={clsx("px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors",
                 newTipo === t.name ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300',
                 requiredTypes?.includes(t.name) && 'ring-1 ring-indigo-300')}>
@@ -124,7 +134,7 @@ export function ComprobanteUploader({
       )}
 
       {/* 3) Descripción */}
-      <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+      <input type="text" value={newDesc} onChange={e => applyDescToPending(e.target.value)}
         placeholder="Descripción del comprobante (opcional)"
         className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
 
