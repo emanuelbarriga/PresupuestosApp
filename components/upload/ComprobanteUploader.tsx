@@ -1,7 +1,7 @@
 'use client'
 
 /* eslint-disable @next/next/no-img-element -- dynamic user-uploaded images */
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Comprobante, SettingsItem } from '@/lib/types';
 import { validateFile, deleteFile } from '@/lib/fileUpload';
 import { Upload, FileText, Download, Trash2, X } from 'lucide-react';
@@ -48,7 +48,13 @@ export function ComprobanteUploader({
 }: ComprobanteUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState('');
-  const [newTipo, setNewTipo] = useState('');
+  // If all existing comprobantes share the same tipo, pre-select that button
+  const initialTipo = useMemo(() => {
+    if (comprobantes.length === 0) return '';
+    const tipos = [...new Set(comprobantes.map(c => c.tipo).filter(Boolean))];
+    return tipos.length === 1 ? tipos[0] : '';
+  }, [comprobantes]);
+  const [newTipo, setNewTipo] = useState(initialTipo);
   const [newDesc, setNewDesc] = useState('');
 
   const applyTipoToPending = (tipo: string) => {
