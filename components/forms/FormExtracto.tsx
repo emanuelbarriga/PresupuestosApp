@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import type { Banco, ExtractoEstado } from '@/lib/types';
 import { detectarBanco } from '@/lib/parsers/index';
+import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
 import { runParsePipelineFromBuffer } from '@/lib/parsers/parsePipeline';
 import { downloadPdfBytes } from '@/lib/downloadPdf';
 import { BankConfirmModal } from '@/components/bancos/BankConfirmModal';
@@ -59,18 +60,8 @@ export function FormExtractoParseBtn({
     try {
       const buffer = await getBuffer();
 
-      // Extract text to detect bank
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-      const loadingTask = pdfjs.getDocument({ data: buffer });
-      const pdf = await loadingTask.promise;
-      const pages: string[] = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        pages.push(content.items.map((item: any) => item.str ?? '').join(' '));
-      }
-      const texto = pages.join('\n\n').trim();
+      // Extract text to detect bank — uses shared parser lib instead of raw pdfjs
+      const texto = await extractPdfTextFromBuffer(buffer);
 
       // Detect bank
       const banco = detectarBanco(texto);

@@ -1,5 +1,6 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element -- dynamic user-uploaded images */
 import { useState } from 'react';
 import { Comprobante } from '@/lib/types';
 import { Upload, FileText, Download, Trash2, X } from 'lucide-react';

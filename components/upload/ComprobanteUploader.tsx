@@ -1,5 +1,6 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element -- dynamic user-uploaded images */
 import { useState, useRef } from 'react';
 import { Comprobante, SettingsItem } from '@/lib/types';
 import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';

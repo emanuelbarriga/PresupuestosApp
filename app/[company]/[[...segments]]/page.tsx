@@ -6,6 +6,7 @@ import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Clien
 import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
 import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
+import toast from 'react-hot-toast';
 import {
   subscribeBudgets,
   subscribeEjecuciones,
@@ -272,7 +273,7 @@ export default function CompanyPage({ params }: Props) {
     try {
       await deleteBudget(companyId, budgetId);
     } catch (err) {
-      alert('Error al borrar el presupuesto. Intentá de nuevo.');
+      toast.error('Error al borrar el presupuesto. Intentá de nuevo.');
     }
   };
 
@@ -280,7 +281,7 @@ export default function CompanyPage({ params }: Props) {
     try {
       await deleteEjecucion(companyId, ejecucionId);
     } catch (err) {
-      alert('Error al borrar la ejecución. Intentá de nuevo.');
+      toast.error('Error al borrar la ejecución. Intentá de nuevo.');
     }
   };
 
