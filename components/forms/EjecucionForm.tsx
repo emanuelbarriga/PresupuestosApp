@@ -411,7 +411,7 @@ export function EjecucionForm({
             <label className="flex items-center gap-2.5 cursor-pointer py-1 mb-3">
               <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-              <span className="text-xs font-medium text-slate-600 select-none">Gasto recurrente</span>
+              <span className="text-xs font-medium text-slate-600 select-none">Recurrente</span>
             </label>
             {recurring && (
               <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">
