@@ -8,14 +8,14 @@ import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { TipoSwitch } from '@/components/forms/TipoSwitch';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { Link2, X, Plus, Paperclip } from 'lucide-react';
+import { Link2, X, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { Calculator } from '@/components/shared/Calculator';
 import { addClient, addProject } from '@/lib/firestore';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
-// ── Inline ComprobanteUploader stubs (extracted in Phase 3) ──
+import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
 interface PendingComprobante {
   id: string;
   file: File;
@@ -24,81 +24,6 @@ interface PendingComprobante {
   size: number;
   descripcion?: string;
   tipo?: string;
-}
-
-function ComprobanteUploader({
-  companyId,
-  ejecucionId,
-  comprobantes,
-  onComprobantesChange,
-  mode,
-  pendingComprobantes,
-  onPendingChange,
-  tiposComprobante,
-  requiredTypes,
-}: {
-  companyId: string;
-  ejecucionId?: string;
-  comprobantes: Comprobante[];
-  onComprobantesChange: (c: Comprobante[]) => void;
-  mode: 'add' | 'edit';
-  pendingComprobantes: PendingComprobante[];
-  onPendingChange: (p: PendingComprobante[]) => void;
-  tiposComprobante: SettingsCategorias['tipoComprobante'];
-  requiredTypes: string[];
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFiles, setSelectedFiles] = useState<PendingComprobante[]>(pendingComprobantes);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const newItems: PendingComprobante[] = files.map(f => ({
-      id: crypto.randomUUID(),
-      file: f,
-      name: f.name,
-      type: f.type,
-      size: f.size,
-    }));
-    const updated = [...selectedFiles, ...newItems];
-    setSelectedFiles(updated);
-    onPendingChange(updated);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const removePending = (id: string) => {
-    const updated = selectedFiles.filter(p => p.id !== id);
-    setSelectedFiles(updated);
-    onPendingChange(updated);
-  };
-
-  return (
-    <div className="space-y-2">
-      <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
-      <button type="button" onClick={() => fileInputRef.current?.click()}
-        className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-lg p-3 transition-colors text-xs text-slate-500 hover:text-indigo-600">
-        <Paperclip size={14} /> Agregar archivos
-      </button>
-      {selectedFiles.length > 0 && (
-        <div className="space-y-1">
-          {selectedFiles.map(p => (
-            <div key={p.id} className="flex items-center justify-between bg-slate-50 rounded p-2 text-xs">
-              <span className="truncate text-slate-700">{p.name}</span>
-              <button onClick={() => removePending(p.id)} className="text-slate-400 hover:text-rose-500 shrink-0"><X size={12} /></button>
-            </div>
-          ))}
-        </div>
-      )}
-      {comprobantes.length > 0 && (
-        <div className="space-y-1">
-          {comprobantes.map(c => (
-            <div key={c.id} className="flex items-center justify-between bg-indigo-50 rounded p-2 text-xs">
-              <span className="truncate text-indigo-700">{c.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── EjecucionForm ──
