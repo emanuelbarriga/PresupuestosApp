@@ -226,11 +226,10 @@ export default function CompanyPage({ params }: Props) {
     }
   };
 
-  const handleEmptyCellClick = (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
+  const handleEmptyCellClick = (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
     if (isConjunto) return;
     const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
     const monthIndex = MONTHS.indexOf(month);
-    const currentYear = new Date().getFullYear();
     const defaults: Record<string, string> = {
       projectName,
       tipo,
@@ -248,11 +247,12 @@ export default function CompanyPage({ params }: Props) {
         defaults.entityType = 'client';
       }
     }
+    const fechaStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`;
     if (formType === 'budget') {
       defaults.mesPresupuestado = month;
-      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+      defaults.fechaEjecutado = fechaStr;
     } else {
-      defaults.fechaEjecutado = `${currentYear}-${String(monthIndex + 1).padStart(2, '0')}-15`;
+      defaults.fechaEjecutado = fechaStr;
     }
     pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
   };

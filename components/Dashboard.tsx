@@ -125,7 +125,7 @@ export function buildTerceroGroups(
 interface DashboardProps {
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
+  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onTerceroClick?: (detail: RecordDetail) => void;
   onCustomizeClick?: () => void;
   budgets: Budget[];
@@ -251,8 +251,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       </div>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
-        <Matrix tipo="egreso" showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="ingreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="egreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
       </div>
     </div>
   );
@@ -262,9 +262,10 @@ interface MatrixProps {
   tipo: TransactionType;
   showNegociacion: boolean;
   mode: 'Presupuestado' | 'Ejecutado';
+  year: number;
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
+  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
   onReportTotals?: (totals: { presupuestado: number; ejecutado: number }) => void;
   visibleMonths: Month[];
   budgets: Budget[];
@@ -274,7 +275,7 @@ interface MatrixProps {
   selectedProjects: Set<string>;
 }
 
-function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
+function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -694,9 +695,9 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                         <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && (showGrayPresupuestado ? "text-slate-400 hover:text-slate-600" : `font-bold ${hoverBgTheme} ${colorTheme}`), isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
                           onClick={() => {
                             if (showGrayPresupuestado) {
-                              onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado');
+                              onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado');
                             } else if (isZero) {
-                              onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode);
+                              onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, mode);
                             } else {
                               handleCellClick(row.proyecto, m, presupuestado, ejecutado, row.budgetsPorMes[m] || [], row.ejecucionesPorMes[m] || []);
                             }
@@ -736,7 +737,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                             <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && (showGrayPresupuestado ? "text-slate-400 cursor-pointer hover:text-slate-600" : `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`), isZero && !showGrayPresupuestado && "text-slate-300 cursor-pointer hover:bg-slate-50")}
                               onClick={() => {
                                 if (showGrayPresupuestado) {
-                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType);
+                                  onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType);
                                 } else if (!isZero) {
                                   const bs = t.budgetsPorMes[m] || [];
                                   const ejs = t.ejecucionesPorMes[m] || [];
@@ -754,7 +755,7 @@ function Matrix({ tipo, showNegociacion, mode, onCellClick, onProjectClick, onEm
                                     tipo,
                                   });
                                 } else {
-                                  onEmptyCellClick?.(row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
+                                  onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
                                 }
                               }}>
                               {isZero && !showGrayPresupuestado ? '-' : formatCurrency(showGrayPresupuestado ? presupuestado : val)}
