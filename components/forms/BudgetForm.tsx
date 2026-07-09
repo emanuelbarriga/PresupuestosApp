@@ -102,6 +102,7 @@ export function BudgetForm({
   const [newProjectClient, setNewProjectClient] = useState('');
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
+  const [internalSaving, setInternalSaving] = useState(false);
 
   const safeProjects = projects || [];
   const set = (k: keyof BudgetFields, v: string) => setFields(prev => ({ ...prev, [k]: v }));
@@ -167,6 +168,7 @@ export function BudgetForm({
   };
 
   const handleSubmit = async () => {
+    setInternalSaving(true);
     const data: Record<string, any> = { ...fields };
     // Strip empty optional fields to match legacy Sidepanel behavior (test expects undefined, not '')
     if (!data.mesPresupuestado) delete data.mesPresupuestado;
@@ -302,8 +304,8 @@ export function BudgetForm({
         )}
       </div>
       <div className="p-6 border-t border-slate-100 shrink-0">
-        <button onClick={handleSubmit} disabled={externalSaving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
-          {externalSaving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+        <button onClick={handleSubmit} disabled={internalSaving || externalSaving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+          {internalSaving || externalSaving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
         </button>
       </div>
     </div>

@@ -134,6 +134,7 @@ export function EjecucionForm({
   const [selectedBudgetLinks, setSelectedBudgetLinks] = useState<Array<{budgetId: string; budgetName: string; monto: string}>>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
+  const [internalSaving, setInternalSaving] = useState(false);
 
   const ejecucionId = form.mode === 'edit' ? (form as any).record?.id : undefined;
 
@@ -170,6 +171,7 @@ export function EjecucionForm({
   };
 
   const handleSubmit = async () => {
+    setInternalSaving(true);
     const data: Record<string, any> = { ...fields };
     const entries: Record<string, any>[] = [];
     const reps = recurring && form.mode === 'add' ? Math.max(1, recurringCount) : 1;
@@ -398,8 +400,8 @@ export function EjecucionForm({
         )}
       </div>
       <div className="p-6 border-t border-slate-100 shrink-0">
-        <button onClick={handleSubmit} disabled={externalSaving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
-          {externalSaving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
+        <button onClick={handleSubmit} disabled={internalSaving || externalSaving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">
+          {internalSaving || externalSaving ? 'Guardando...' : form.mode === 'add' ? 'Crear' : 'Guardar cambios'}
         </button>
       </div>
     </div>
