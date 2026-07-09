@@ -174,7 +174,12 @@ export function EjecucionForm({
           monto: Number(l.monto) || 0,
         }));
       }
-      if (form.mode === 'add' && pendingComprobantes.length > 0) {
+      // Include uploaded comprobantes (full metadata with url/path from Storage)
+      if (comprobantes.length > 0) {
+        entry.comprobantes = comprobantes;
+      }
+      // Include pending files (not yet uploaded, still need Storage upload)
+      if (pendingComprobantes.length > 0) {
         entry._pendingComprobantes = pendingComprobantes.map(pc => ({
           id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size,
         }));
