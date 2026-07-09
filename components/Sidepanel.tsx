@@ -41,9 +41,9 @@ export function Sidepanel({ data, recordDetail, activeForm, customizeOpen = fals
           <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl mt-auto"><Settings size={20} /></button>
         </div>
       ) : activeForm ? (
-        <FormPanel key={`form-${activeForm.mode}-${activeForm.type}`} form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} onBack={onBack} canGoBack={canGoBack} />
+        <FormPanel key={`form-${JSON.stringify(activeForm)}`} form={activeForm} companyId={companyId} onClose={onClose} onSubmit={onFormSubmit} projects={projects} onBack={onBack} canGoBack={canGoBack} />
       ) : recordDetail ? (
-        <ViewPanel key={`detail-${recordDetail.type}`} recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
+        <ViewPanel key={`detail-${JSON.stringify(recordDetail)}`} recordDetail={recordDetail} companyId={companyId} onClose={onClose} onFormSubmit={onFormSubmit} onCellClick={onCellClick} projects={projects} onNavigate={onNavigate} canGoBack={canGoBack} onBack={onBack} />
       ) : customizeOpen ? (
         <CustomizePanel projects={projects || []} selectedProjects={selectedProjects} projectSearch={projectSearch}
           onProjectsChange={onProjectsChange} onSearchChange={onSearchChange}
