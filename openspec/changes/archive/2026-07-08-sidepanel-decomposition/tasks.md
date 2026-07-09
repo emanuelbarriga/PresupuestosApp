@@ -59,7 +59,7 @@ Chain strategy: pending
 
 ## Phase 5: Cleanup — dead code, alert→toast, smoke sweep (PR #5)
 
-- [ ] 5.1 Remove dead `expandedEj` state + hardcoded debug ID
-- [ ] 5.2 Replace `alert()`/`prompt()` with `react-hot-toast`; add `<Toaster />` to `app/layout.tsx`
-- [ ] 5.3 Smoke sweep: ≥1 test per extracted component
-- [ ] 5.4 Success criteria: `Sidepanel.tsx` < 100 lines; `npm test`, `npx tsc --noEmit`, `npm run lint` green; no direct Firestore writes from extracted components
+- [x] 5.1 Remove dead `expandedEj` state + hardcoded debug ID
+- [x] 5.2 Replace `alert()`/`prompt()` with `react-hot-toast`; add `<Toaster />` to `app/layout.tsx`
+- [x] 5.3 Smoke sweep: ≥1 test per extracted component
+- [x] 5.4 Success criteria: `Sidepanel.tsx` < 100 lines; `npm test`, `npx tsc --noEmit`, `npm run lint` green; no direct Firestore writes from extracted components
