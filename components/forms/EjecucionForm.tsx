@@ -122,6 +122,11 @@ export function EjecucionForm({
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
 
+  const ejecucionId = form.mode === 'edit' ? (form as any).record?.id : undefined;
+  const handleSaveComprobantes = ejecucionId
+    ? async (_id: string, comps: Comprobante[]) => { await onSubmit(form, { comprobantes: comps }); }
+    : undefined;
+
   const safeProjects = projects || [];
   const set = (k: keyof EjecucionFields, v: string) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -318,7 +323,7 @@ export function EjecucionForm({
           <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comprobantes</p>
           <ComprobanteUploader
             companyId={companyId}
-            ejecucionId={form.mode === 'edit' ? (form as any).record?.id : undefined}
+            ejecucionId={ejecucionId}
             comprobantes={comprobantes}
             onComprobantesChange={setComprobantes}
             mode={form.mode === 'add' ? 'add' : 'edit'}
@@ -326,6 +331,7 @@ export function EjecucionForm({
             onPendingChange={setPendingComprobantes}
             tiposComprobante={settingsData?.tipoComprobante || []}
             requiredTypes={['factura', 'soporte']}
+            onSaveComprobantes={handleSaveComprobantes}
           />
         </div>
 
