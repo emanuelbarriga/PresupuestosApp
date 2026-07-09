@@ -168,6 +168,12 @@ export function BudgetForm({
     // Strip empty optional fields to match legacy Sidepanel behavior (test expects undefined, not '')
     if (!data.mesPresupuestado) delete data.mesPresupuestado;
     if (!data.fechaPresupuestado) delete data.fechaPresupuestado;
+
+    // Save the year from fechaEjecutado BEFORE deleting it (used as fallback for recurring)
+    const yearFromDate = data.fechaEjecutado
+      ? parseInt((data.fechaEjecutado as string).split('-')[0], 10)
+      : null;
+
     const entries: Record<string, any>[] = [];
     const reps = recurring && form.mode === 'add' ? Math.max(1, recurringCount) : 1;
 
@@ -185,16 +191,14 @@ export function BudgetForm({
       if (entry.mesPresupuestado && !entry.fechaPresupuestado) {
         const monthIdx = MONTHS.indexOf(entry.mesPresupuestado as Month);
         if (monthIdx >= 0) {
-          const year = entry.fechaEjecutado
-            ? parseInt((entry.fechaEjecutado as string).split('-')[0], 10)
-            : new Date().getFullYear();
+          const year = yearFromDate || new Date().getFullYear();
           entry.fechaPresupuestado = `${isNaN(year) ? new Date().getFullYear() : year}-${String(monthIdx + 1).padStart(2, '0')}`;
         }
       }
 
       if (i > 0) {
         entry.mesPresupuestado = addMonth(entry.mesPresupuestado, i);
-        entry.fechaPresupuestado = addMonthToYM(entry.fechaPresupuestado || `${new Date().getFullYear()}-01`, i);
+        entry.fechaPresupuestado = addMonthToYM(entry.fechaPresupuestado || `${yearFromDate || new Date().getFullYear()}-01`, i);
       }
       entries.push(entry);
     }
