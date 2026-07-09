@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Project, Client, Tercero, Budget, CuentaBancaria, SettingsCategorias, ActiveForm, Comprobante, Month, Banco, MovimientoBancarioInput, ExtractoEstado } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
-import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeSettings, subscribeCuentasBancarias, addClient, addProject, addTercero, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
+import { subscribeClients, subscribeProviders, subscribeBudgets, subscribeTerceros, subscribeCompanySettings, subscribeCuentasBancarias, addClient, addProject, addTercero, createInvitation, updateInvitation, blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { X, ChevronDown, ChevronUp, Save, Send, Shield, Mail, Clock, User, Pencil, Building2, Plus } from 'lucide-react';
 import { formatThousands, unformatThousands } from '@/lib/utils';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
@@ -24,6 +24,7 @@ import { EjecucionForm } from '@/components/forms/EjecucionForm';
 import { generateFilePath, uploadFile } from '@/lib/fileUpload';
 import { TerceroForm } from '@/components/forms/TerceroForm';
 import { CuentaForm } from '@/components/forms/CuentaForm';
+import { ProjectForm } from '@/components/forms/ProjectForm';
 import { ExtractoAddForm } from '@/components/forms/ExtractoAddForm';
 import { FormExtractoEdit } from '@/components/forms/FormExtractoEdit';
 import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
@@ -537,7 +538,7 @@ export function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
 
   useEffect(() => {
-    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeCuentasBancarias(companyId, setCuentas), subscribeSettings(setSettingsData)];
+    const unsubs = [subscribeClients(setClients), subscribeProviders(setProviders), subscribeTerceros(setTerceros), subscribeBudgets(companyId, setAllBudgets), subscribeCuentasBancarias(companyId, setCuentas), subscribeCompanySettings(companyId, setSettingsData)];
     return () => unsubs.forEach(u => u());
   }, [companyId]);
 

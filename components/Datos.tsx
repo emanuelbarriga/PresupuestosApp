@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
 import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
 import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
@@ -331,12 +332,33 @@ export function Datos({
   }, [cuentas, extractoExpandido, toggleExtractoMovimientos]);
 
   const handleDeleteExtracto = useCallback(async (ext: ExtractoBancario) => {
-    const ok = window.confirm(`¿Borrar extracto de ${ext.mes} ${ext.anio}?\nSe eliminarán todos los movimientos asociados.`);
-    if (!ok) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast((t) => (
+        <div className="text-sm space-y-3">
+          <p className="text-slate-700 font-medium">¿Borrar extracto de {ext.mes} {ext.anio}?</p>
+          <p className="text-xs text-slate-500">Se eliminarán todos los movimientos asociados.</p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(false); }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(true); }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Sí
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity });
+    });
+    if (!confirmed) return;
     try {
       await deleteExtracto(companyId, ext.accountId, ext.id);
     } catch (err) {
-      alert('Error al borrar el extracto.');
+      toast.error('Error al borrar el extracto.');
     }
   }, [companyId]);
 
@@ -393,7 +415,7 @@ export function Datos({
 
       setViewModalData(prev => ({ ...prev, open: false }));
     } catch (err) {
-      alert('Error al guardar los cambios.');
+      toast.error('Error al guardar los cambios.');
     } finally {
       setViewModalSaving(false);
     }
@@ -1062,8 +1084,30 @@ export function Datos({
                         </td>
                         <ActionCell>
                           <EditBtn onClick={() => edit('budget', b)} />
-                          <DeleteBtn onDelete={() => {
-                            if (window.confirm(`¿Borrar presupuesto "${b.descripcion}"? Esta acción no se puede deshacer.`)) {
+                          <DeleteBtn onDelete={async () => {
+                            const confirmed = await new Promise<boolean>((resolve) => {
+                              toast((t) => (
+                                <div className="text-sm space-y-3">
+                                  <p className="text-slate-700 font-medium">¿Borrar presupuesto &ldquo;{b.descripcion}&rdquo;?</p>
+                                  <p className="text-xs text-slate-500">Esta acción no se puede deshacer.</p>
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      onClick={() => { toast.dismiss(t.id); resolve(false); }}
+                                      className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                                    >
+                                      No
+                                    </button>
+                                    <button
+                                      onClick={() => { toast.dismiss(t.id); resolve(true); }}
+                                      className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                                    >
+                                      Sí
+                                    </button>
+                                  </div>
+                                </div>
+                              ), { duration: Infinity });
+                            });
+                            if (confirmed) {
                               onDeleteBudget?.(b.id);
                             }
                           }} />

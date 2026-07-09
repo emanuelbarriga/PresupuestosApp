@@ -54,6 +54,17 @@ describe('groupByEntity', () => {
     expect(unknownGroup!.entityName).toBe('e-unknown');
   });
 
+  it('usa entityName real cuando está disponible', () => {
+    const itemsWithNames: Array<{ id: string; entityId: string; entityType: 'client' | 'provider' | 'interno' | ''; entityName: string; value: number }> = [
+      { id: '1', entityId: 'e1', entityType: 'client', entityName: 'Juan Pérez', value: 100 },
+      { id: '3', entityId: 'e2', entityType: 'provider', entityName: 'Empresa X S.A.S.', value: 150 },
+    ];
+    const result = groupByEntity(itemsWithNames);
+    expect(result).toHaveLength(2);
+    expect(result.find(g => g.entityId === 'e1')!.entityName).toBe('Juan Pérez');
+    expect(result.find(g => g.entityId === 'e2')!.entityName).toBe('Empresa X S.A.S.');
+  });
+
   it('retorna array vacío cuando no hay items', () => {
     expect(groupByEntity([])).toEqual([]);
   });

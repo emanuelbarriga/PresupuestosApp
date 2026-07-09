@@ -37,6 +37,9 @@ phases:
     notes: |
 
 archived_changes:
+  - name: critical-technical-debt-fixes
+    archived_at: 2026-07-09
+    summary: Fixed cross-tenant subscription (H4), consolidated entity-grouping into shared utility (H5), replaced native browser dialogs with react-hot-toast (H6) — 17/17 tasks, zero regressions
   - name: date-fix
     archived_at: 2026-07-01
     summary: Added fechaPresupuestado (YYYY-MM) to Budget type for multi-year support

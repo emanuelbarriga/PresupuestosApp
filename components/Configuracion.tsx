@@ -12,6 +12,7 @@ import {
   updateMemberRole,
 } from '@/lib/firestore';
 import { Company, CompanyMember, Invitacion, FormType, ActiveForm } from '@/lib/types';
+import toast from 'react-hot-toast';
 import {
   Shield, Mail, Copy, Check, UserPlus, Clock, Trash2, Pencil, Ban, X,
 } from 'lucide-react';
@@ -182,13 +183,34 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
   // ── Actions ──
 
   const handleRemoveFromCompany = async (companyId: string, memberId: string, memberEmail: string, companyName: string) => {
-    if (!confirm(`¿Eliminar a ${memberEmail} de ${companyName}?`)) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast((t) => (
+        <div className="text-sm space-y-3">
+          <p className="text-slate-700 font-medium">¿Eliminar a {memberEmail} de {companyName}?</p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(false); }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(true); }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Sí
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity });
+    });
+    if (!confirmed) return;
     const key = `${companyId}:${memberId}`;
     setDeletingMember(key);
     try {
       await deleteMemberFromCompany(companyId, memberId);
     } catch (err) {
-      alert('Error al eliminar el miembro');
+      toast.error('Error al eliminar el miembro');
     } finally {
       setDeletingMember(null);
     }
@@ -196,14 +218,35 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
 
   const handleDeleteUserFromAll = async (aggregatedUser: AggregatedUser) => {
     const companyNames = aggregatedUser.memberships.map((m) => m.companyName).join(', ');
-    if (!confirm(`¿Eliminar a ${aggregatedUser.email} de todas las empresas (${companyNames})?`)) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast((t) => (
+        <div className="text-sm space-y-3">
+          <p className="text-slate-700 font-medium">¿Eliminar a {aggregatedUser.email} de todas las empresas ({companyNames})?</p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(false); }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(true); }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Sí
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity });
+    });
+    if (!confirmed) return;
     setDeletingMember(aggregatedUser.userId);
     try {
       await Promise.all(
         aggregatedUser.memberships.map((m) => deleteMemberFromCompany(m.companyId, aggregatedUser.userId)),
       );
     } catch (err) {
-      alert('Error al eliminar el usuario');
+      toast.error('Error al eliminar el usuario');
     } finally {
       setDeletingMember(null);
     }
@@ -215,7 +258,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     try {
       await blockMember(companyId, memberId, !currentBlocked);
     } catch (err) {
-      alert('Error al actualizar el estado del miembro');
+      toast.error('Error al actualizar el estado del miembro');
     } finally {
       setBlockingMember(null);
     }
@@ -229,12 +272,33 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
   };
 
   const handleDeleteInvitation = async (invId: string, email: string) => {
-    if (!confirm(`¿Eliminar la invitación para ${email}?`)) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast((t) => (
+        <div className="text-sm space-y-3">
+          <p className="text-slate-700 font-medium">¿Eliminar la invitación para {email}?</p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(false); }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={() => { toast.dismiss(t.id); resolve(true); }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Sí
+            </button>
+          </div>
+        </div>
+      ), { duration: Infinity });
+    });
+    if (!confirmed) return;
     setDeletingInvitation(invId);
     try {
       await deleteInvitation(invId);
     } catch (err) {
-      alert('Error al eliminar la invitación');
+      toast.error('Error al eliminar la invitación');
     } finally {
       setDeletingInvitation(null);
     }

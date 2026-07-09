@@ -8,6 +8,8 @@ import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
 import { FileText, Plus, Save, Trash2, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
+import { groupByEntity } from '@/components/utils/groupByEntity';
+import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
@@ -99,22 +101,17 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
         {data.mode === 'Presupuestado' && (
           <div className="mb-6"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Presupuestos ({data.budgets.length})</p>
           {(() => {
-            const grouped = data.budgets.reduce((acc, b) => {
-              const key = b.entityId || b.entityName || 'Sin entidad';
-              if (!acc[key]) acc[key] = { entityName: b.entityName || 'Sin entidad', entityType: b.entityType, items: [], total: 0 };
-              acc[key].items.push(b);
-              acc[key].total += b.montoPresupuestado;
-              return acc;
-            }, {} as Record<string, { entityName: string; entityType: string; items: Budget[]; total: number }>);
-            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            const grouped = groupByEntity(data.budgets).map(g => ({
+              ...g,
+              total: g.items.reduce((sum, b) => sum + b.montoPresupuestado, 0),
+            }));
+            const sorted = [...grouped].sort((a, b) => a.entityName.localeCompare(b.entityName));
             return sorted.map(group => (
               <div key={group.entityName} className="mb-3 last:mb-0">
                 <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
-                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
-                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
-                    </span>
+                    <EntityTypeBadge type={group.entityType} />
                   </div>
                   <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
                 </div>
@@ -170,22 +167,17 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
         {data.mode === 'Ejecutado' && (
           <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ejecuciones ({data.ejecuciones.length})</p>
           {(() => {
-            const grouped = data.ejecuciones.reduce((acc, e) => {
-              const key = e.entityId || e.entityName || 'Sin entidad';
-              if (!acc[key]) acc[key] = { entityName: e.entityName || 'Sin entidad', entityType: e.entityType, items: [], total: 0 };
-              acc[key].items.push(e);
-              acc[key].total += e.montoEjecutado;
-              return acc;
-            }, {} as Record<string, { entityName: string; entityType: string; items: Ejecucion[]; total: number }>);
-            const sorted = Object.values(grouped).sort((a, b) => a.entityName.localeCompare(b.entityName));
+            const grouped = groupByEntity(data.ejecuciones).map(g => ({
+              ...g,
+              total: g.items.reduce((sum, e) => sum + e.montoEjecutado, 0),
+            }));
+            const sorted = [...grouped].sort((a, b) => a.entityName.localeCompare(b.entityName));
             return sorted.map(group => (
               <div key={group.entityName} className="mb-3 last:mb-0">
                 <div className="flex items-center justify-between px-2 py-1.5 bg-slate-100 rounded-t-lg">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-slate-700">{group.entityName}</span>
-                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase", group.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : group.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : group.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500')}>
-                      {group.entityType === 'ambos' ? 'C/P' : group.entityType === 'client' ? 'C' : group.entityType === 'provider' ? 'P' : '?'}
-                    </span>
+                    <EntityTypeBadge type={group.entityType} />
                   </div>
                   <span className="text-[11px] font-bold text-slate-700">{formatCurrency(group.total)}</span>
                 </div>

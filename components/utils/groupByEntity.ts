@@ -3,11 +3,11 @@
  * Deduplicates the pattern used 4x across Sidepanel.tsx.
  */
 export function groupByEntity<
-  T extends { entityId: string; entityType: 'client' | 'provider' | 'interno' | '' },
+  T extends { entityId: string; entityType: 'client' | 'provider' | 'interno' | ''; entityName?: string },
 >(
   items: T[],
 ): Array<{ entityId: string; entityName: string; entityType: T['entityType']; items: T[] }> {
-  const entityNames: Record<string, string> = {
+  const typeLabels: Record<string, string> = {
     client: 'Cliente',
     provider: 'Proveedor',
     interno: 'Interno',
@@ -19,7 +19,7 @@ export function groupByEntity<
     const key = item.entityId;
     if (!groups.has(key)) {
       groups.set(key, {
-        entityName: entityNames[item.entityType] || item.entityId,
+        entityName: item.entityName || typeLabels[item.entityType] || item.entityId,
         entityType: item.entityType,
         items: [],
       });

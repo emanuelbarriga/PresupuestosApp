@@ -28,6 +28,8 @@ vi.mock('firebase/firestore', () => ({
   getFirestore,
 }));
 
+vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() }, Toaster: () => null }));
+
 vi.mock('@/lib/firebase', () => ({ db: {} }));
 
 vi.mock('@/lib/firestore', () => ({
