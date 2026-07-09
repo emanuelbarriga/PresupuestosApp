@@ -211,7 +211,7 @@ export function BudgetForm({
     for (const entry of entries) {
       await onSubmit(form, entry);
     }
-    onBack();
+    // Parent handles screen pop via popScreen in handleFormSubmit
   };
 
   return (

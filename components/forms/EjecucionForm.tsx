@@ -244,7 +244,8 @@ export function EjecucionForm({
     for (const entry of entries) {
       await onSubmit(form, entry);
     }
-    onBack();
+    // Parent handles screen pop
+    // onBack called here was causing double-popScreen with page.tsx handleFormSubmit
   };
 
   return (
