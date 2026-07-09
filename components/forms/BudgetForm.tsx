@@ -59,6 +59,9 @@ export function BudgetForm({
   const [fields, setFields] = useState<BudgetFields>(() => {
     if (form.mode === 'edit' && form.record) {
       const r = form.record as any;
+      const fp = String(r.fechaPresupuestado ?? '');
+      // Derive fechaEjecutado (YYYY-MM-DD) from fechaPresupuestado (YYYY-MM) for date input
+      const fe = String(r.fechaEjecutado ?? '') || (fp ? fp + '-15' : '');
       return {
         tipo: String(r.tipo ?? 'ingreso'),
         projectId: String(r.projectId ?? ''),
@@ -68,9 +71,9 @@ export function BudgetForm({
         entityType: String(r.entityType ?? 'interno'),
         descripcion: String(r.descripcion ?? ''),
         montoPresupuestado: String(r.montoPresupuestado ?? ''),
-        fechaEjecutado: String(r.fechaEjecutado ?? ''),
+        fechaEjecutado: fe,
         mesPresupuestado: String(r.mesPresupuestado ?? ''),
-        fechaPresupuestado: String(r.fechaPresupuestado ?? ''),
+        fechaPresupuestado: fp,
       };
     }
     const defs = form.defaults || {};
