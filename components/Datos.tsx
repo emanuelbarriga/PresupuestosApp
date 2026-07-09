@@ -634,6 +634,25 @@ export function Datos({
     return data;
   }, [cuentas, searchQuery]);
 
+  // Auto-ajustar currentPage cuando los datos filtrados se achican
+  const totalItems = useMemo(() => {
+    switch (activeTab) {
+      case 'Presupuestos': return filteredBudgets.length;
+      case 'Ejecuciones': return filteredEjecuciones.length;
+      case 'Proyectos': return filteredProyectos.length;
+      case 'Terceros': return filteredTerceros.length;
+      case 'Bancos': return filteredCuentas.length;
+      default: return 0;
+    }
+  }, [activeTab, filteredBudgets.length, filteredEjecuciones.length, filteredProyectos.length, filteredTerceros.length, filteredCuentas.length]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(totalItems / pageSize));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [totalItems, pageSize]);
+
   const downloadCSV = useCallback(() => {
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const json = (v: any) => esc(JSON.stringify(v));

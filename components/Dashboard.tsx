@@ -516,13 +516,24 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
     [matrixData.rows, showNegociacion, selectedProjects],
   );
 
+  // Expandir/colapsar solo cuando cambia el filtro de proyectos
   useEffect(() => {
     if (selectedProjects.size > 0) {
       setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
     } else {
       setExpandedProjects(new Set());
     }
-  }, [selectedProjects, visibleRows]);
+  }, [selectedProjects]);
+
+  // En actualizaciones de datos, solo podar entries que ya no existen
+  useEffect(() => {
+    setExpandedProjects(prev => {
+      const validKeys = new Set(visibleRows.map(r => r.projectId || r.proyecto));
+      const next = new Set([...prev].filter(k => validKeys.has(k)));
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [visibleRows]);
 
   const expandAll = () => {
     setExpandedProjects(new Set(visibleRows.map(r => r.projectId || r.proyecto)));
