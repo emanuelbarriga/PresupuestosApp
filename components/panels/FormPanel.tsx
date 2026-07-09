@@ -20,8 +20,8 @@ import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { TipoSwitch } from '@/components/forms/TipoSwitch';
 import { ColorSelect } from '@/components/forms/ColorSelect';
 import { BudgetForm } from '@/components/forms/BudgetForm';
-import { ProjectForm } from '@/components/forms/ProjectForm';
 import { EjecucionForm } from '@/components/forms/EjecucionForm';
+import { generateFilePath, uploadFile } from '@/lib/fileUpload';
 import { TerceroForm } from '@/components/forms/TerceroForm';
 import { CuentaForm } from '@/components/forms/CuentaForm';
 import { ExtractoAddForm } from '@/components/forms/ExtractoAddForm';
@@ -604,6 +604,7 @@ export function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack
     }
   }, [form]);
 
+  const ejecucionId = form.mode === 'edit' && form.type === 'ejecucion' ? (form as any).record?.id : undefined;
   const set = (k: string, v: string) => setFields(prev => ({ ...prev, [k]: v }));
   const f = (k: string) => fields[k] ?? '';
   const ft = form.mode === 'add' ? form.type : form.type;
@@ -700,8 +701,30 @@ export function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack
         if (selectedBudgetLinks.length > 0) {
           data._budgetLinks = selectedBudgetLinks.map(l => ({ budgetId: l.budgetId, monto: Number(l.monto) || 0 }));
         }
-        if (form.mode === 'add' && pendingComprobantes.length > 0) {
-          data._pendingComprobantes = pendingComprobantes.map(pc => ({ id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size }));
+        // Upload pending comprobantes BEFORE the entry is created
+        if (pendingComprobantes.length > 0) {
+          const uploadId = ejecucionId || crypto.randomUUID();
+          const uploaded = await Promise.all(
+            pendingComprobantes.map(async (pc) => {
+              const path = generateFilePath(companyId, uploadId, pc.name);
+              const result = await uploadFile(pc.file, path);
+              return {
+                id: crypto.randomUUID(),
+                name: pc.name,
+                url: result.url,
+                path: result.path,
+                type: pc.type,
+                size: pc.size,
+                uploadedAt: new Date().toISOString(),
+                ...(pc.descripcion ? { descripcion: pc.descripcion } : {}),
+                ...(pc.tipo ? { tipo: pc.tipo } : {}),
+              };
+            }),
+          );
+          data.comprobantes = [...comprobantes, ...uploaded];
+          if (form.mode === 'add') data._preGeneratedId = uploadId;
+        } else if (comprobantes.length > 0) {
+          data.comprobantes = comprobantes;
         }
       }
       if (ft === 'project') {
@@ -1007,14 +1030,14 @@ export function FormPanel({ form, companyId, onClose, onSubmit, projects, onBack
               <p className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comprobantes</p>
               <ComprobanteUploader
                 companyId={companyId}
-                ejecucionId={form.mode === 'edit' ? (form as any).record?.id : undefined}
+                ejecucionId={ejecucionId}
                 comprobantes={comprobantes}
                 onComprobantesChange={setComprobantes}
-                mode={form.mode === 'add' ? 'add' : 'edit'}
                 pendingComprobantes={pendingComprobantes}
                 onPendingChange={setPendingComprobantes}
                 tiposComprobante={settingsData?.tipoComprobante || []}
                 requiredTypes={REQUIRED_COMPROBANTE_TYPES.map(r => r.name)}
+                onSaveComprobantes={ejecucionId ? async (_id, comps) => { await onSubmit(form, { comprobantes: comps }); } : undefined}
               />
             </div>
             <SearchableSelect label="Cuenta bancaria (opcional)" value={f('cuentaId')} onChange={v => {

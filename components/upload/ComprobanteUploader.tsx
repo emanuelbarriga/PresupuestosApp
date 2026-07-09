@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- dynamic user-uploaded images */
 import { useState, useRef } from 'react';
 import { Comprobante, SettingsItem } from '@/lib/types';
-import { validateFile, uploadFile, deleteFile, generateFilePath } from '@/lib/fileUpload';
+import { validateFile, deleteFile } from '@/lib/fileUpload';
 import { Upload, FileText, Download, Trash2, X } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -28,12 +28,10 @@ interface ComprobanteUploaderProps {
   ejecucionId?: string;
   comprobantes: Comprobante[];
   onComprobantesChange: (updated: Comprobante[]) => void;
-  mode: 'add' | 'edit';
-  pendingComprobantes?: PendingComprobante[];
-  onPendingChange?: (updated: PendingComprobante[]) => void;
+  pendingComprobantes: PendingComprobante[];
+  onPendingChange: React.Dispatch<React.SetStateAction<PendingComprobante[]>>;
   tiposComprobante: SettingsItem[];
   requiredTypes?: string[];
-  /** NEW: replaces direct updateEjecucion call. Parent (page.tsx) owns the Firestore write. */
   onSaveComprobantes?: (ejecucionId: string, comprobantes: Comprobante[]) => Promise<void>;
 }
 
@@ -42,7 +40,6 @@ export function ComprobanteUploader({
   ejecucionId,
   comprobantes,
   onComprobantesChange,
-  mode,
   pendingComprobantes,
   onPendingChange,
   tiposComprobante,
@@ -51,11 +48,8 @@ export function ComprobanteUploader({
 }: ComprobanteUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [newTipo, setNewTipo] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<PendingComprobante[]>([]);
 
   const addFilesToList = (files: FileList | null) => {
     if (!files) return;
@@ -68,101 +62,54 @@ export function ComprobanteUploader({
         setValidationError(prev => prev ? `${prev}; ${file.name}: ${validation.error}` : `${file.name}: ${validation.error}`);
         continue;
       }
-      newItems.push({ id: crypto.randomUUID(), file, name: file.name, type: file.type, size: file.size, descripcion: newDesc, tipo: newTipo });
+      newItems.push({
+        id: crypto.randomUUID(),
+        file,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        descripcion: newDesc || undefined,
+        tipo: newTipo || undefined,
+      });
     }
     if (newItems.length > 0) {
-      // If ADD mode, use pendingComprobantes. If EDIT, use selectedFiles (local queue)
-      if (mode === 'add' && onPendingChange) {
-        onPendingChange([...(pendingComprobantes || []), ...newItems]);
-      } else {
-        setSelectedFiles(prev => [...prev, ...newItems]);
-      }
+      onPendingChange(prev => [...prev, ...newItems]);
       setNewDesc('');
       setNewTipo('');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const uploadAll = async () => {
-    if (!ejecucionId || selectedFiles.length === 0) {
-      return;
-    }
-    setUploading(true);
-    setUploadProgress(0);
-    let uploaded = 0;
-    const total = selectedFiles.length;
-    const newComprobantes: Comprobante[] = [];
-
-    for (const pf of selectedFiles) {
-      try {
-        const path = generateFilePath(companyId, ejecucionId, pf.name);
-        const result = await uploadFile(pf.file, path, (p) => setUploadProgress(((uploaded + p / 100) / total) * 100));
-        newComprobantes.push({
-          id: crypto.randomUUID(),
-          name: pf.name,
-          url: result.url,
-          path: result.path,
-          type: pf.type,
-          size: pf.size,
-          uploadedAt: new Date().toISOString(),
-          ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
-          ...(pf.tipo ? { tipo: pf.tipo } : {}),
-        });
-        uploaded++;
-        setUploadProgress((uploaded / total) * 100);
-      } catch (err) {
-        setValidationError(prev => prev ? `${prev}; Error en ${pf.name}` : `Error en ${pf.name}`);
-      }
-    }
-
-    if (newComprobantes.length > 0) {
-      const updated = [...comprobantes, ...newComprobantes];
-      onComprobantesChange(updated);
-      // Use onSaveComprobantes instead of direct updateEjecucion
-      if (ejecucionId && onSaveComprobantes) {
-        try {
-          await onSaveComprobantes(ejecucionId, updated);
-        } catch (err) {
-          // Error is handled upstream
-        }
-      }
-    }
-    setSelectedFiles([]);
-    setUploading(false);
-    setUploadProgress(0);
-  };
-
   const removeSelected = (id: string) => {
-    if (mode === 'add' && onPendingChange) {
-      onPendingChange((pendingComprobantes || []).filter(p => p.id !== id));
-    } else {
-      setSelectedFiles(prev => prev.filter(p => p.id !== id));
-    }
+    onPendingChange(prev => prev.filter(p => p.id !== id));
   };
 
   const handleRemove = async (comp: Comprobante) => {
     try {
-      if (ejecucionId && comp.path) {
+      if (comp.path) {
         await deleteFile(comp.path);
       }
       const updated = comprobantes.filter(c => c.id !== comp.id);
       onComprobantesChange(updated);
-      // Use onSaveComprobantes instead of direct updateEjecucion
       if (ejecucionId && onSaveComprobantes) {
         await onSaveComprobantes(ejecucionId, updated);
       }
     } catch (err) {
+      // Error silencioso — el archivo se borró de la lista igual
     }
   };
 
-  const pendingList = mode === 'add' ? (pendingComprobantes || []) : selectedFiles;
-
   return (
     <div className="space-y-2">
-      {/* Descripción + Tipo */}
-      <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
-        placeholder="Descripción del comprobante"
-        className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
+      {/* 1) File picker */}
+      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple
+        onChange={e => { addFilesToList(e.target.files); }} className="hidden" />
+      <button onClick={() => fileInputRef.current?.click()}
+        className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
+        <Upload size={14} /> Seleccionar archivos
+      </button>
+
+      {/* 2) Tipo buttons */}
       {tiposComprobante.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           {tiposComprobante.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(t => (
@@ -176,39 +123,16 @@ export function ComprobanteUploader({
         </div>
       )}
 
-      {/* File picker */}
-      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple
-        onChange={e => { addFilesToList(e.target.files); }} className="hidden" />
-      <div className="flex gap-2">
-        <button onClick={() => fileInputRef.current?.click()}
-          className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg transition-colors">
-          <Upload size={14} /> Seleccionar archivos
-        </button>
-        {pendingList.length > 0 && mode === 'edit' && (
-          <button onClick={uploadAll} disabled={uploading}
-            className="flex items-center justify-center gap-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 px-4 py-2 rounded-lg transition-colors">
-            {uploading ? `${Math.round(uploadProgress)}%` : `Subir (${pendingList.length})`}
-          </button>
-        )}
-      </div>
+      {/* 3) Descripción */}
+      <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+        placeholder="Descripción del comprobante (opcional)"
+        className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all" />
 
       {validationError && (
         <p className="text-[10px] text-rose-600 font-medium">{validationError}</p>
       )}
 
-      {uploading && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-slate-500">
-            <span>Subiendo archivos...</span>
-            <span>{Math.round(uploadProgress)}%</span>
-          </div>
-          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-          </div>
-        </div>
-      )}
-
-      {/* Existing comprobantes (siempre visibles) */}
+      {/* Existing comprobantes */}
       {comprobantes.length > 0 && (
         <div className="space-y-1">
           <p className="text-[9px] font-bold text-slate-400 uppercase">{comprobantes.length} comprobante(s) guardado(s)</p>
@@ -227,7 +151,7 @@ export function ComprobanteUploader({
                 className="text-emerald-400 hover:text-indigo-600 shrink-0" title="Descargar">
                 <Download size={12} />
               </a>
-              {mode === 'edit' && (
+              {ejecucionId && (
                 <button onClick={() => handleRemove(c)} className="text-emerald-400 hover:text-rose-500 shrink-0" title="Eliminar">
                   <Trash2 size={12} />
                 </button>
@@ -238,10 +162,10 @@ export function ComprobanteUploader({
       )}
 
       {/* Pending / selected files list */}
-      {pendingList.length > 0 && (
+      {pendingComprobantes.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[9px] font-bold text-amber-500 uppercase">{pendingList.length} pendiente(s)</p>
-          {pendingList.map(pc => (
+          <p className="text-[9px] font-bold text-amber-500 uppercase">{pendingComprobantes.length} pendiente(s)</p>
+          {pendingComprobantes.map(pc => (
             <div key={pc.id} className="flex items-center gap-2 bg-amber-50 rounded-lg p-2 border border-amber-200">
               <FileText size={16} className="text-amber-500 shrink-0" />
               <div className="flex-1 min-w-0">
@@ -254,13 +178,9 @@ export function ComprobanteUploader({
               </button>
             </div>
           ))}
-          {mode === 'add' && (
-            <p className="text-[9px] text-amber-500 italic">Se subirán al guardar la ejecución</p>
-          )}
+          <p className="text-[9px] text-amber-500 italic">Se subirán al guardar la ejecución</p>
         </div>
       )}
-
-      {/* Submit button for ADD mode pending comprobantes is part of form submit */}
     </div>
   );
 }

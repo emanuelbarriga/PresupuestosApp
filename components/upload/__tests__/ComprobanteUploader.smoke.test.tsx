@@ -1,26 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
-import { ComprobanteUploader } from '../ComprobanteUploader';
-import { Comprobante, SettingsItem } from '@/lib/types';
-
-// Mock fileUpload to avoid Firebase dependencies
-vi.mock('@/lib/fileUpload', () => ({
-  deleteFile: vi.fn().mockResolvedValue(undefined),
-  validateFile: vi.fn().mockReturnValue({ valid: true }),
-  uploadFile: vi.fn(),
-  generateFilePath: vi.fn().mockReturnValue('path/to/file'),
-}));
+import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
+import type { Comprobante, SettingsItem } from '@/lib/types';
 
 const mockTipos: SettingsItem[] = [
-  { name: 'Factura', color: '#6366f1', order: 1 },
-  { name: 'Cuenta de cobro', color: '#6366f1', order: 2 },
+  { name: 'Factura', color: '#000000', order: 1 },
+  { name: 'Cuenta de cobro', color: '#000000', order: 2 },
 ];
 
 const createComprobante = (overrides: Partial<Comprobante> = {}): Comprobante => ({
-  id: 'c1',
-  name: 'doc.pdf',
-  url: '#',
+  id: 'comp-1',
+  name: 'test.pdf',
+  url: 'https://example.com/test.pdf',
   type: 'application/pdf',
   size: 500,
   path: 'some/path',
@@ -36,11 +27,12 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
-    expect(screen.getByPlaceholderText('Descripción del comprobante')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Descripción del comprobante (opcional)')).toBeInTheDocument();
   });
 
   it('renderiza los tipos de comprobante', () => {
@@ -50,7 +42,8 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -65,7 +58,8 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -79,7 +73,8 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[createComprobante()]}
         onComprobantesChange={vi.fn()}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -96,13 +91,13 @@ describe('ComprobanteUploader', () => {
         comprobantes={[createComprobante()]}
         onComprobantesChange={onChange}
         onSaveComprobantes={onSave}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
     const deleteBtn = screen.getByTitle('Eliminar');
     fireEvent.click(deleteBtn);
-    // Wait for async handleRemove to resolve
     await vi.waitFor(() => {
       expect(onChange).toHaveBeenCalledWith([]);
     });
@@ -117,7 +112,8 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[createComprobante()]}
         onComprobantesChange={onChange}
-        mode="edit"
+        pendingComprobantes={[]}
+        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -126,5 +122,27 @@ describe('ComprobanteUploader', () => {
     await vi.waitFor(() => {
       expect(onChange).toHaveBeenCalledWith([]);
     });
+  });
+
+  it('muestra archivos pendientes y su indicador', () => {
+    render(
+      <ComprobanteUploader
+        companyId="company-1"
+        ejecucionId="ej-1"
+        comprobantes={[]}
+        onComprobantesChange={vi.fn()}
+        pendingComprobantes={[{
+          id: 'pending-1',
+          file: new File([''], 'factura.pdf', { type: 'application/pdf' }),
+          name: 'factura.pdf',
+          type: 'application/pdf',
+          size: 1000,
+        }]}
+        onPendingChange={vi.fn()}
+        tiposComprobante={mockTipos}
+      />
+    );
+    expect(screen.getByText(/1 pendiente/)).toBeInTheDocument();
+    expect(screen.getByText('Se subirán al guardar la ejecución')).toBeInTheDocument();
   });
 });

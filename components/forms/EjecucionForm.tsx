@@ -12,6 +12,19 @@ import { Link2, X, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { Calculator } from '@/components/shared/Calculator';
 import { addClient, addProject } from '@/lib/firestore';
+import { generateFilePath, uploadFile } from '@/lib/fileUpload';
+
+type PendingComprobanteUploadResult = {
+  id: string;
+  name: string;
+  url: string;
+  path: string;
+  type: string;
+  size: number;
+  uploadedAt: string;
+  descripcion?: string;
+  tipo?: string;
+};
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
@@ -123,9 +136,6 @@ export function EjecucionForm({
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
 
   const ejecucionId = form.mode === 'edit' ? (form as any).record?.id : undefined;
-  const handleSaveComprobantes = ejecucionId
-    ? async (_id: string, comps: Comprobante[]) => { await onSubmit(form, { comprobantes: comps }); }
-    : undefined;
 
   const safeProjects = projects || [];
   const set = (k: keyof EjecucionFields, v: string) => setFields(prev => ({ ...prev, [k]: v }));
@@ -164,6 +174,36 @@ export function EjecucionForm({
     const entries: Record<string, any>[] = [];
     const reps = recurring && form.mode === 'add' ? Math.max(1, recurringCount) : 1;
 
+    // ── Upload pending comprobantes FIRST ──
+    let uploadedComprobantes: PendingComprobanteUploadResult[] = [];
+    if (pendingComprobantes.length > 0) {
+      // For ADD mode, generate an ID now so files go to the right path
+      const uploadId = ejecucionId || crypto.randomUUID();
+      uploadedComprobantes = await Promise.all(
+        pendingComprobantes.map(async (pc) => {
+          const path = generateFilePath(companyId, uploadId, pc.name);
+          const result = await uploadFile(pc.file, path);
+          return {
+            id: crypto.randomUUID(),
+            name: pc.name,
+            url: result.url,
+            path: result.path,
+            type: pc.type,
+            size: pc.size,
+            uploadedAt: new Date().toISOString(),
+            ...(pc.descripcion ? { descripcion: pc.descripcion } : {}),
+            ...(pc.tipo ? { tipo: pc.tipo } : {}),
+          };
+        }),
+      );
+      // Carries the pre-generated ID to page.tsx for ADD mode
+      if (form.mode === 'add') {
+        data._preGeneratedId = uploadId;
+      }
+    }
+
+    const allComprobantes = [...comprobantes, ...uploadedComprobantes];
+
     for (let i = 0; i < reps; i++) {
       const entry = { ...data };
       if (!entry.projectId) entry.projectId = '';
@@ -179,15 +219,9 @@ export function EjecucionForm({
           monto: Number(l.monto) || 0,
         }));
       }
-      // Include uploaded comprobantes (full metadata with url/path from Storage)
-      if (comprobantes.length > 0) {
-        entry.comprobantes = comprobantes;
-      }
-      // Include pending files (not yet uploaded, still need Storage upload)
-      if (pendingComprobantes.length > 0) {
-        entry._pendingComprobantes = pendingComprobantes.map(pc => ({
-          id: pc.id, file: pc.file, name: pc.name, type: pc.type, size: pc.size,
-        }));
+      // Comprobantes already uploaded — include full metadata
+      if (allComprobantes.length > 0) {
+        entry.comprobantes = allComprobantes;
       }
       if (i > 0 && entry.fechaEjecutado) {
         const parts = (entry.fechaEjecutado as string).split('-');
@@ -198,6 +232,10 @@ export function EjecucionForm({
           while (m < 1) { m += 12; y--; }
           entry.fechaEjecutado = `${y}-${String(m).padStart(2, '0')}-${parts[2]}`;
         }
+      }
+      // Each recurring entry gets its own pre-generated ID
+      if (form.mode === 'add' && i > 0) {
+        entry._preGeneratedId = crypto.randomUUID();
       }
       entries.push(entry);
     }
@@ -326,12 +364,11 @@ export function EjecucionForm({
             ejecucionId={ejecucionId}
             comprobantes={comprobantes}
             onComprobantesChange={setComprobantes}
-            mode={form.mode === 'add' ? 'add' : 'edit'}
             pendingComprobantes={pendingComprobantes}
             onPendingChange={setPendingComprobantes}
             tiposComprobante={settingsData?.tipoComprobante || []}
             requiredTypes={['factura', 'soporte']}
-            onSaveComprobantes={handleSaveComprobantes}
+            onSaveComprobantes={ejecucionId ? async (_id, comps) => { await onSubmit(form, { comprobantes: comps }); } : undefined}
           />
         </div>
 

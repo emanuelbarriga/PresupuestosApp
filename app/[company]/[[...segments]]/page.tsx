@@ -3,7 +3,6 @@
 import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
-import { uploadFile, generateFilePath } from '@/lib/fileUpload';
 import { db, storage } from '@/lib/firebase';
 import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -304,13 +303,15 @@ export default function CompanyPage({ params }: Props) {
           await addBudget(companyId, data as Omit<Budget, 'id'>);
           break;
         case 'ejecucion': {
-          const pendingFiles = data._pendingComprobantes as Array<{ id: string; file: File; name: string; type: string; size: number; descripcion?: string; tipo?: string }> | undefined;
+          const preGeneratedId = data._preGeneratedId as string | undefined;
           const budgetLinks = data._budgetLinks as Array<{ budgetId: string; monto: number }> | undefined;
-          delete data._pendingComprobantes;
+          delete data._preGeneratedId;
           delete data._budgetLinks;
           // Use writeBatch for atomic creation of ejecucion + budgetLinks + budget totals
           const batch = writeBatch(db);
-          const ejecucionRef = doc(collection(db, 'companies', companyId, 'ejecuciones'));
+          const ejecucionRef = preGeneratedId
+            ? doc(db, 'companies', companyId, 'ejecuciones', preGeneratedId)
+            : doc(collection(db, 'companies', companyId, 'ejecuciones'));
           batch.set(ejecucionRef, { ...data, createdAt: serverTimestamp() });
           if (budgetLinks && budgetLinks.length > 0) {
             for (const link of budgetLinks) {
@@ -330,27 +331,6 @@ export default function CompanyPage({ params }: Props) {
             }
           }
           await batch.commit();
-          const docId = ejecucionRef.id;
-          if (pendingFiles && pendingFiles.length > 0) {
-            const comprobantes: Comprobante[] = await Promise.all(
-              pendingFiles.map(async (pf) => {
-                const path = generateFilePath(companyId, docId, pf.name);
-                const result = await uploadFile(pf.file, path);
-                return {
-                  id: crypto.randomUUID(),
-                  name: pf.name,
-                  url: result.url,
-                  path: result.path,
-                  type: pf.type,
-                  size: pf.size,
-                  uploadedAt: new Date().toISOString(),
-                  ...(pf.descripcion ? { descripcion: pf.descripcion } : {}),
-                  ...(pf.tipo ? { tipo: pf.tipo } : {}),
-                };
-              }),
-            );
-            await updateEjecucion(companyId, docId, { comprobantes: JSON.parse(JSON.stringify(comprobantes)) });
-          }
           break;
         }
         case 'project':
