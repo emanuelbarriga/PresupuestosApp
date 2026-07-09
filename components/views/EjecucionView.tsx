@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Ejecucion, Budget, Comprobante } from '@/lib/types';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { subscribeBudgets, removeBudgetLink, updateEjecucion } from '@/lib/firestore';
 import { deleteFile } from '@/lib/fileUpload';
 import { DF } from '@/components/shared/DF';
@@ -28,6 +30,20 @@ export function EjecucionView({ ejecucion, companyId, onNavigate }: EjecucionVie
     return () => unsub();
   }, [companyId]);
 
+  // Live subscription to this ejecucion document — keeps comprobantes in sync
+  useEffect(() => {
+    const ejecucionRef = doc(db, 'companies', companyId, 'ejecuciones', ejecucion.id);
+    const unsub = onSnapshot(ejecucionRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.comprobantes) {
+          setComprobantes(data.comprobantes as Comprobante[]);
+        }
+      }
+    });
+    return () => unsub();
+  }, [companyId, ejecucion.id]);
+
   // Derive budgetLinks from budgets' linkedEjecuciones — no subcollection read needed
   const budgetLinks = useMemo(() => {
     const links: Array<{ id: string; budgetId: string; budgetName: string; monto: number }> = [];
@@ -39,10 +55,6 @@ export function EjecucionView({ ejecucion, companyId, onNavigate }: EjecucionVie
     }
     return links;
   }, [budgets, ejecucion.id]);
-
-  useEffect(() => {
-    setComprobantes(ejecucion.comprobantes || []);
-  }, [ejecucion.comprobantes]);
 
   const handleRemoveLink = async (linkId: string) => {
     try {
