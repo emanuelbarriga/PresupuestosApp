@@ -144,9 +144,8 @@ describe('parseForPreview', () => {
     await parseForPreview(mockBuffer, 'Bancolombia');
 
     // No Firestore functions should be called (parseForPreview is non-persisting)
-    const { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } = await import('@/lib/firestore');
+    const { updateExtractoStatus, batchAddMovimientos } = await import('@/lib/firestore');
     expect(updateExtractoStatus).not.toHaveBeenCalled();
     expect(batchAddMovimientos).not.toHaveBeenCalled();
-    expect(fetchMovimientoHashes).not.toHaveBeenCalled();
   });
 });

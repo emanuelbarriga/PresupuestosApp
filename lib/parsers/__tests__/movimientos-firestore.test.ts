@@ -74,7 +74,6 @@ import {
   subscribeMovimientos,
   batchAddMovimientos,
   deleteMovimiento,
-  fetchMovimientoHashes,
   updateExtractoStatus,
 } from '@/lib/firestore';
 import type { MovimientoBancarioInput } from '@/lib/types';
@@ -204,36 +203,6 @@ describe('deleteMovimiento', () => {
       'companies', 'c1', 'cuentasBancarias', 'a1', 'extractos', 'e1', 'movimientos', 'm1',
     );
     expect(deleteDoc).toHaveBeenCalled();
-  });
-});
-
-describe('fetchMovimientoHashes', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('returns hash values from documents', async () => {
-    (getDocs as Mock).mockResolvedValue(
-      makeMockSnapshot([
-        { id: 'm1', hash: 'abc123' },
-        { id: 'm2', hash: 'def456' },
-        { id: 'm3' }, // no hash
-      ]),
-    );
-
-    const hashes = await fetchMovimientoHashes('c1', 'a1', 'e1');
-
-    expect(getDocs).toHaveBeenCalled();
-    expect(hashes).toContain('abc123');
-    expect(hashes).toContain('def456');
-    expect(hashes).toHaveLength(2); // only docs with hash
-  });
-
-  it('returns empty array when no documents have hashes', async () => {
-    (getDocs as Mock).mockResolvedValue(makeMockSnapshot([]));
-
-    const hashes = await fetchMovimientoHashes('c1', 'a1', 'e1');
-    expect(hashes).toEqual([]);
   });
 });
 

@@ -25,12 +25,12 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
   const [archiveConfirm, setArchiveConfirm] = useState<{ type: 'budget' | 'ejecucion'; id: string } | null>(null);
 
   // Direct updateEjecucion calls preserved — will be cleaned up in Phase 5
-  const handleArchive = async (type: 'budget' | 'ejecucion', id: string) => {
+  const handleArchive = async (type: 'budget' | 'ejecucion', id: string, archived: boolean) => {
     try {
       if (type === 'budget') {
-        await updateBudget(companyId, id, { archivado: true });
+        await updateBudget(companyId, id, { archivado: archived });
       } else {
-        await updateEjecucion(companyId, id, { archivado: true });
+        await updateEjecucion(companyId, id, { archivado: archived });
       }
     } catch (err) {
     }
@@ -143,7 +143,7 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
                         </button>
                         {archiveConfirm?.id === b.id && archiveConfirm?.type === 'budget' ? (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => handleArchive('budget', b.id)}
+                            <button onClick={() => handleArchive('budget', b.id, !b.archivado)}
                               className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
                               Confirmar
                             </button>
@@ -155,7 +155,7 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
                         ) : (
                           <button onClick={() => setArchiveConfirm({ type: 'budget', id: b.id })}
                             className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
-                            <Trash2 size={11} /> Archivar
+                            {b.archivado ? <Save size={11} /> : <Trash2 size={11} />} {b.archivado ? 'Desarchivar' : 'Archivar'}
                           </button>
                         )}
                       </div>
@@ -216,7 +216,7 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
                         </button>
                         {archiveConfirm?.id === e.id && archiveConfirm?.type === 'ejecucion' ? (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => handleArchive('ejecucion', e.id)}
+                            <button onClick={() => handleArchive('ejecucion', e.id, !e.archivado)}
                               className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
                               Confirmar
                             </button>
@@ -228,7 +228,7 @@ export function DataPanel({ data, companyId, onClose, onNavigate, projects, canG
                         ) : (
                           <button onClick={() => setArchiveConfirm({ type: 'ejecucion', id: e.id })}
                             className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
-                            <Trash2 size={11} /> Archivar
+                            {e.archivado ? <Save size={11} /> : <Trash2 size={11} />} {e.archivado ? 'Desarchivar' : 'Archivar'}
                           </button>
                         )}
                       </div>

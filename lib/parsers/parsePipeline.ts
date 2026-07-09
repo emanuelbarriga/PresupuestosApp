@@ -4,7 +4,7 @@ import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
 import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
 import { derivarMesAnio } from '@/lib/parsers/periodo';
-import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
+import { updateExtractoStatus, batchAddMovimientos } from '@/lib/firestore';
 
 export interface ParsePreviewResult {
   movimientos: MovimientoBancarioInput[];
@@ -104,11 +104,9 @@ async function _runPipeline(
     const revCount = movsReconciliados.filter(m => m.requiereRevision).length;
 
     // Step 6: Detect duplicates
-    const hashesExistentes = await withRetry(
-      () => fetchMovimientoHashes(companyId, accountId, extractoId),
-      'fetchMovimientoHashes',
-    );
-    const movsFinales = await detectarDuplicados(movsReconciliados, hashesExistentes);
+    // TODO: implement hash-based dedup — fetchMovimientoHashes was removed because
+    // the hash field was never written, so dedup has been silently a no-op.
+    const movsFinales = await detectarDuplicados(movsReconciliados, []);
     const dupCount = movsFinales.filter(m => m.posibleDuplicado).length;
 
     // Step 7: Batch write (chunk if > 500)

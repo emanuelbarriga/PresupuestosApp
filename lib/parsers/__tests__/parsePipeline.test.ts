@@ -35,7 +35,7 @@ import { runParsePipelineFromBuffer } from '@/lib/parsers/parsePipeline';
 import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
-import { updateExtractoStatus, batchAddMovimientos, fetchMovimientoHashes } from '@/lib/firestore';
+import { updateExtractoStatus, batchAddMovimientos } from '@/lib/firestore';
 
 describe('runParsePipeline', () => {
   const companyId = 'company-1';
@@ -82,9 +82,6 @@ describe('runParsePipeline', () => {
     // Mock reconcile
     vi.mocked(reconciliar).mockImplementation((movs) => movs);
 
-    // Mock hash detection
-    vi.mocked(fetchMovimientoHashes).mockResolvedValue([]);
-
     // Mock dedup
     vi.mocked(detectarDuplicados).mockImplementation(async (movs) =>
       movs.map(m => ({ ...m, posibleDuplicado: undefined }))
@@ -105,7 +102,6 @@ describe('runParsePipeline', () => {
     expect(detectarBanco).not.toHaveBeenCalled();
     expect(getParser).toHaveBeenCalledWith('Bancolombia');
     expect(reconciliar).toHaveBeenCalledWith(mockMovimientos, 1000000);
-    expect(fetchMovimientoHashes).toHaveBeenCalledWith(companyId, accountId, extractoId);
     expect(detectarDuplicados).toHaveBeenCalled();
     expect(batchAddMovimientos).toHaveBeenCalledWith(companyId, accountId, extractoId, expect.any(Array));
     expect(updateExtractoStatus).toHaveBeenLastCalledWith(
