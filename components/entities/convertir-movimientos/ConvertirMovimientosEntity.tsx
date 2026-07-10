@@ -133,8 +133,11 @@ export function ConvertirMovimientosEntity({ mode, companyId, record, defaults, 
           comprobantes: [],
         });
 
-        if (extractoId) {
-          await updateMovimiento(companyId, cuentaId, extractoId, mov.id, { convertido: true, _ejecucionId: ejecucionId });
+        // Use individual extractoId from movimiento (for "Todos" mode) or the common one
+        const movExtractoId = (mov as any)._extractoId as string | undefined;
+        const targetExtractoId = movExtractoId || extractoId;
+        if (targetExtractoId) {
+          await updateMovimiento(companyId, cuentaId, targetExtractoId, mov.id, { convertido: true, _ejecucionId: ejecucionId });
         }
         ok++;
       } catch {

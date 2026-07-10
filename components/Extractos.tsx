@@ -24,9 +24,11 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [extractosMap, setExtractosMap] = useState<Record<string, ExtractoBancario[]>>({});
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [movimientos, setMovimientos] = useState<MovimientoBancario[]>([]);
+  const [singleMovimientos, setSingleMovimientos] = useState<MovimientoBancario[]>([]);
+  const [allMovimientos, setAllMovimientos] = useState<MovimientoBancario[]>([]);
   const [extractoInfo, setExtractoInfo] = useState<{ id: string; mes: string; anio: number } | null>(null);
   const [selectedMovs, setSelectedMovs] = useState<Set<string>>(new Set());
+  const [viewAllMode, setViewAllMode] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,7 +122,7 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
     movimientosUnsub.current = null;
 
     setExtractoInfo({ id: extractoId, mes, anio });
-    setMovimientos([]);
+    setSingleMovimientos([]);
 
     if (!selectedAccountId || !extractoId) return;
 
@@ -128,7 +130,7 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
       companyId,
       selectedAccountId,
       extractoId,
-      (movs) => setMovimientos(movs),
+      (movs) => setSingleMovimientos(movs),
       () => {},
     );
     movimientosUnsub.current = unsub;
@@ -148,7 +150,65 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
     return () => movimientosUnsub.current?.();
   }, []);
 
+  // ── All extractos mode subscriptions ──
+  const allMovUnsubs = useRef<Map<string, () => void>>(new Map());
+
+  const cleanupAllMov = useCallback(() => {
+    for (const [, unsub] of allMovUnsubs.current) unsub();
+    allMovUnsubs.current.clear();
+    setAllMovimientos([]);
+  }, []);
+
+  // Subscribe to all extractos when viewAllMode is on
+  useEffect(() => {
+    if (!viewAllMode || !selectedAccountId) {
+      cleanupAllMov();
+      return;
+    }
+
+    const exts = extractosMap[selectedAccountId] ?? [];
+    const currentSubs = allMovUnsubs.current;
+    const activeExtIds = new Set(exts.map(e => e.id));
+
+    // Remove stale subs
+    for (const [extId, unsub] of currentSubs) {
+      if (!activeExtIds.has(extId)) { unsub(); currentSubs.delete(extId); }
+    }
+
+    // Subscribe new
+    for (const ext of exts) {
+      if (!currentSubs.has(ext.id)) {
+        const unsub = subscribeMovimientos(companyId, selectedAccountId, ext.id, (movs) => {
+          setAllMovimientos(prev => {
+            // Replace movements for this extracto, keep others
+            const others = prev.filter(m => (m as any)._extractoId !== ext.id);
+            const tagged = movs.map(m => ({ ...m, _extractoId: ext.id, _extractoMes: ext.mes, _extractoAnio: ext.anio }));
+            return [...others, ...tagged];
+          });
+        }, () => {});
+        currentSubs.set(ext.id, unsub);
+      }
+    }
+
+    // If no extractos, clear
+    if (exts.length === 0) setAllMovimientos([]);
+
+    return () => cleanupAllMov();
+  }, [viewAllMode, selectedAccountId, extractosMap, companyId, cleanupAllMov]);
+
+  // When switching to single mode, unsubscribe all-movements subs
+  useEffect(() => {
+    if (!viewAllMode) cleanupAllMov();
+  }, [viewAllMode, cleanupAllMov]);
+
+  // Reset viewAllMode on account change
+  useEffect(() => {
+    setViewAllMode(false);
+  }, [selectedAccountId]);
+
   // ── Derived state ──
+  // Movements source: single extracto or all extractos
+  const movimientos = viewAllMode ? allMovimientos : singleMovimientos;
 
   const selectedCuenta = useMemo(
     () => cuentas.find(c => c.id === selectedAccountId),
@@ -339,13 +399,16 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
 
   /** Open movimiento detail sidepanel with Convertir button */
   const handleViewMovimiento = useCallback((mov: MovimientoBancario) => {
-    onNavigate?.({ type: 'entity' as const, entity: 'movimiento' as any, mode: 'view', record: mov, defaults: { cuentaName: selectedCuenta?.nombre ?? '', _cuentaId: selectedAccountId, _extractoId: extractoInfo?.id ?? '' } });
-  }, [onNavigate, selectedCuenta, selectedAccountId, extractoInfo]);
+    const movExtractoId = (viewAllMode ? (mov as any)._extractoId : extractoInfo?.id) as string | undefined;
+    onNavigate?.({ type: 'entity' as const, entity: 'movimiento' as any, mode: 'view', record: mov, defaults: { cuentaName: selectedCuenta?.nombre ?? '', _cuentaId: selectedAccountId, _extractoId: movExtractoId ?? '' } });
+  }, [onNavigate, selectedCuenta, selectedAccountId, extractoInfo, viewAllMode]);
 
   /** Direct conversion without going through detalle */
   const handleConvertDirect = useCallback((mov: MovimientoBancario) => {
     const isDebito = mov.debito != null && mov.debito > 0;
     const monto = isDebito ? mov.debito! : mov.credito ?? 0;
+    // In "Todos" mode, _extractoId comes from the tagged movimiento
+    const movExtractoId = (viewAllMode ? (mov as any)._extractoId : extractoInfo?.id) as string | undefined;
     onNavigate?.({
       type: 'entity' as const,
       entity: 'ejecucion' as any,
@@ -358,11 +421,11 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
         cuentaId: selectedAccountId,
         cuentaName: selectedCuenta?.nombre ?? '',
         _cuentaId: selectedAccountId,
-        _extractoId: extractoInfo?.id ?? '',
+        _extractoId: movExtractoId ?? '',
         _movimientoId: mov.id,
       },
     });
-  }, [onNavigate, selectedAccountId, selectedCuenta, extractoInfo]);
+  }, [onNavigate, selectedAccountId, selectedCuenta, extractoInfo, viewAllMode]);
 
   /** Try to find the associated ejecucion by matching data when _ejecucionId is missing */
   const findEjecucionByMovimiento = useCallback(async (mov: MovimientoBancario): Promise<{ id: string } | null> => {
@@ -421,8 +484,9 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
       if (found) {
         ejecId = found.id;
         // Save it back so future lookups work
-        if (selectedAccountId && extractoInfo?.id) {
-          updateMovimiento(companyId, selectedAccountId, extractoInfo.id, mov.id, { _ejecucionId: ejecId }).catch((e) => console.error('[Extractos] Error guardando _ejecucionId backfill:', e));
+        const movExtractoId = (mov as any)._extractoId as string | undefined;
+        if (selectedAccountId && (movExtractoId || extractoInfo?.id)) {
+          updateMovimiento(companyId, selectedAccountId, movExtractoId || extractoInfo!.id!, mov.id, { _ejecucionId: ejecId }).catch((e) => console.error('[Extractos] Error guardando _ejecucionId backfill:', e));
         }
       }
     }
@@ -446,10 +510,11 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
     });
     if (!confirmed) return;
 
+    const delMovExtractoId = (mov as any)._extractoId as string | undefined;
     try {
       await deleteDoc(doc(db, 'companies', companyId, 'ejecuciones', ejecId));
-      if (selectedAccountId && extractoInfo?.id) {
-        await updateMovimiento(companyId, selectedAccountId, extractoInfo.id, mov.id, { convertido: false, _ejecucionId: '' });
+      if (selectedAccountId && (delMovExtractoId || extractoInfo?.id)) {
+        await updateMovimiento(companyId, selectedAccountId, delMovExtractoId || extractoInfo!.id!, mov.id, { convertido: false, _ejecucionId: '' });
       }
       toast.success('Ejecución eliminada');
     } catch (err) {
@@ -591,6 +656,16 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
                     <span className="text-[11px] font-bold text-slate-600 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg">
                       {selectedCuenta?.banco}
                     </span>
+                    <div className="flex rounded-lg bg-slate-100 p-0.5 gap-0.5">
+                      <button onClick={() => setViewAllMode(false)}
+                        className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
+                          !viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        )}>Último</button>
+                      <button onClick={() => setViewAllMode(true)}
+                        className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
+                          viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        )}>Todos</button>
+                    </div>
                     {cuentaExtractos.length > 1 && (
                       <select
                         value={extractoInfo ? `${extractoInfo.id}|${extractoInfo.mes}|${extractoInfo.anio}` : ''}
