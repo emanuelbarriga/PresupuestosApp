@@ -142,4 +142,25 @@ describe('BancoomevaParser', () => {
       expect(result.context.saldoFinal).toBe(27261685.20);
     });
   });
+
+  describe('es-CO number format support', () => {
+    it('parses rows with es-CO formatted numbers via parseMonto in context', () => {
+      // 2-number rows (una columna vacía). Gap heuristic: small gap = DEBITO,
+      // large gap (4+ spaces) = CREDITO (DEBITO column empty).
+      const text = [
+        'Extracto de Cuenta  DEL: 01-01-2026  AL: 30-01-2026',
+        'FECHA   OFICINA   DESCRIPCION   VALOR DEBITO   VALOR CREDITO   SALDO',
+        '02-01-2026   OFICINA UNICENTRO BOGOTAN/DND COBRO CHEQUE  1.500.000,00    9.674.057,84',
+        '05-01-2026   OFICINA MEDELLIN CENTRON/C ABONO NOMINA       58,04  11.173.999,80',
+      ].join('\n');
+      const result = parser.parse(text);
+      expect(result.movimientos).toHaveLength(2);
+      // Debido a es-CO, DEBITO = 1500000
+      expect(result.movimientos[0].debito).toBe(1500000.00);
+      expect(result.movimientos[0].saldo).toBe(9674057.84);
+      // Gap grande = empty DEBITO column, so 58,04 is CREDITO
+      expect(result.movimientos[1].credito).toBe(58.04);
+      expect(result.movimientos[1].saldo).toBe(11173999.80);
+    });
+  });
 });

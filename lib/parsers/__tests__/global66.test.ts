@@ -169,4 +169,24 @@ Fecha   Descripción   Movimiento   Tarjeta   Débito   Abono   Saldo
       expect(result.context.saldoFinal).toBe(3352614.80);
     });
   });
+
+  describe('es-CO number format support', () => {
+    it('parses amounts with es-CO format (dot=thousands, comma=decimal)', () => {
+      const text = [
+        'Movimientos de cuenta en COP  Período consultado:  Desde:   01-May-2026  Hasta:   31-May-2026',
+        'Inicio de período:  $43.038.109,81  Final de período:  $3.352.614,80',
+        'Fecha   Descripción   Movimiento   Tarjeta   Débito   Abono   Saldo',
+        '2026-05-01 11:58:08   Envío a cuenta   12214628  $2.208.017,00  $40.830.092,81',
+        '2026-05-01 11:58:08   Costo tipo de cambio   0.0  $22.303,00  $40.807.789,81',
+      ].join('\n');
+      const result = parser.parse(text);
+      expect(result.movimientos).toHaveLength(2);
+      expect(result.movimientos[0].debito).toBe(2208017.00);
+      expect(result.movimientos[0].saldo).toBe(40830092.81);
+      expect(result.movimientos[1].debito).toBe(22303.00);
+      expect(result.movimientos[1].saldo).toBe(40807789.81);
+      expect(result.context.saldoInicial).toBe(43038109.81);
+      expect(result.context.saldoFinal).toBe(3352614.80);
+    });
+  });
 });

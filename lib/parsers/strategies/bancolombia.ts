@@ -8,10 +8,36 @@ interface DateRange {
   hastaYear: number;
 }
 
-function parseMonto(text: string): number {
-  // Remove $, commas, and any whitespace
-  const cleaned = text.replace(/[$,\s]/g, '');
-  return parseFloat(cleaned);
+export function parseMonto(text: string): number {
+  const s = text.trim();
+  // Strip non-numeric chars except commas, dots, and minus
+  let cleaned = s.replace(/[^\d,.\-]/g, '');
+  if (!cleaned || cleaned === '.' || cleaned === ',') return 0;
+
+  const neg = cleaned.startsWith('-') ? -1 : 1;
+  cleaned = cleaned.replace(/^-/, '');
+
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+
+  if (lastComma > lastDot) {
+    // es-CO format: dot=thousands, comma=decimal
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (lastDot >= 0) {
+    // en-US format: comma=thousands, dot=decimal
+    const after = cleaned.slice(lastDot + 1);
+    if (after.length === 2 && /^\d{2}$/.test(after)) {
+      cleaned = cleaned.replace(/,/g, '');
+    } else {
+      cleaned = cleaned.replace(/\./g, '');
+    }
+  } else {
+    // No decimal separator — just remove commas
+    cleaned = cleaned.replace(/,/g, '');
+  }
+
+  const result = parseFloat(cleaned) * neg;
+  return Number.isFinite(result) ? result : 0;
 }
 
 function inferirAnio(mes: number, range: DateRange): number {
@@ -36,16 +62,19 @@ function parseFechaBancolombia(fechaStr: string, range: DateRange): string {
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
-function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
+// Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
+// Uses negative lookahead (?!\d) to prevent partial matches (e.g. matching "1.47" inside "1.478,29").
+const NUM_PATTERN = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
+
+export function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
   // Extraer el bloque RESUMEN entre el encabezado y la tabla de datos.
   const resumen = text.match(/SALDO ANTERIOR[\s\S]*?FECHA\s+DESCRIPCI[ÓO]N/);
   if (!resumen) return null;
   const block = resumen[0];
 
   // Estrategia 1: Y-grouping — cada etiqueta tiene su $ en la misma línea
-  // ej: "SALDO ANTERIOR $ 1,478.29\n...\nSALDO ACTUAL $ 70,565,811.95"
-  const siY = block.match(/SALDO ANTERIOR[^$]*\$\s*([\d,]+\.\d{2})/);
-  const sfY = block.match(/SALDO ACTUAL[^$]*\$\s*([\d,]+\.\d{2})/);
+  const siY = block.match(new RegExp(`SALDO ANTERIOR[^$]*\\$\\s*(${NUM_PATTERN})`));
+  const sfY = block.match(new RegExp(`SALDO ACTUAL[^$]*\\$\\s*(${NUM_PATTERN})`));
   if (siY && sfY) {
     return {
       saldoInicial: parseMonto(siY[1]),
@@ -54,9 +83,10 @@ function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number
   }
 
   // Estrategia 2: flat mode — 4 $ juntos, luego 4 números: SI, TA, TC, SF
-  // ej: "$  $  $  $  1,478.29  140,961,765.20  70,397,431.54  70,565,811.95"
   const flat = block.match(
-    /\$\s*\$\s*\$\s*\$\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/,
+    new RegExp(
+      `\\$\\s*\\$\\s*\\$\\s*\\$\\s*(${NUM_PATTERN})\\s+(${NUM_PATTERN})\\s+(${NUM_PATTERN})\\s+(${NUM_PATTERN})`,
+    ),
   );
   if (flat) {
     return {
@@ -109,32 +139,170 @@ export class BancolombiaParser implements ExtractoParser {
       return { movimientos: [], context, errores: ['No se pudo extraer el rango de fechas del encabezado'] };
     }
 
-    // Process the text: remove page headers and summaries.
-    // El texto DEBE venir con row-layout (Y-grouping) para que cada fila
-    // del PDF sea una línea, independientemente de si la página original
-    // usaba layout row-by-row o columnar. El Y-grouping se hace en la
-    // extracción (extractPdfTextFromBuffer con mode='row-layout'), NO acá.
     const cleanedText = this.cleanText(texto);
+    const sections = cleanedText.split('\n\n');
 
-    // Row-by-row extraction: funciona sobre cualquier texto donde cada fila
-    // tenga patrón "FECHA DESCRIPCIÓN VALOR SALDO". Las páginas columnares
-    // ya vienen reconstruidas fila-por-fila gracias al Y-grouping.
-    const rowRows = this.extractRows(cleanedText, dateRange);
+    // Columnar detection: 4+ consecutive dates with only whitespace between them
+    const columnarRegex = /\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/;
+
+    const allRows: Omit<MovimientoBancarioInput, 'ordinal'>[] = [];
+    const seen = new Set<string>();
+
+    for (const section of sections) {
+      const trimmed = section.trim();
+      if (!trimmed) continue;
+
+      const sectionRows = columnarRegex.test(trimmed)
+        ? this.extractColumnar(trimmed, dateRange)
+        : this.extractRows(trimmed, dateRange);
+
+      for (const row of sectionRows) {
+        const key = `${row.fecha}|${row.saldo}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allRows.push(row);
+        }
+      }
+    }
+
+    // Sort by fecha ascending
+    allRows.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
     // Assign sequential ordinals
-    const movimientos: MovimientoBancarioInput[] = [];
-    let ordinal = 0;
-    for (const row of rowRows) {
-      ordinal++;
-      movimientos.push({ ...row, ordinal });
-    }
+    const movimientos: MovimientoBancarioInput[] = allRows.map((row, index) => ({
+      ...row,
+      ordinal: index + 1,
+    }));
 
     return { movimientos, context };
   }
 
-  /**
-   * Check if the cleaned text has columnar sections that weren't processed.
-   */
+  private extractColumnar(
+    section: string,
+    dateRange: DateRange,
+  ): Omit<MovimientoBancarioInput, 'ordinal'>[] {
+    // Extract all dates
+    const dateRegex = /\b(\d{1,2}\/\d{1,2})\b/g;
+    const dates: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = dateRegex.exec(section)) !== null) {
+      dates.push(m[1]);
+    }
+    const n = dates.length;
+    if (n < 2) return [];
+
+    // Remove dates from the section text
+    let withoutDates = section.replace(/\b\d{1,2}\/\d{1,2}\b/g, ' ');
+    withoutDates = withoutDates.replace(/\s+/g, ' ').trim();
+
+    // Extract all numbers (both en-US and es-CO) from the remaining text
+    const numPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d)))/g;
+    const allNumbers: number[] = [];
+    let numMatch: RegExpExecArray | null;
+    while ((numMatch = numPattern.exec(withoutDates)) !== null) {
+      allNumbers.push(parseMonto(numMatch[1]));
+    }
+    if (allNumbers.length < n) return [];
+
+    // Split into amounts (first N) and saldos (last N)
+    let amounts: number[];
+    let saldos: number[];
+    if (allNumbers.length >= n * 2) {
+      amounts = allNumbers.slice(0, n);
+      saldos = allNumbers.slice(-n);
+    } else {
+      const k = Math.max(0, allNumbers.length - n);
+      amounts = allNumbers.slice(0, k);
+      saldos = allNumbers.slice(k);
+      while (amounts.length < n) {
+        amounts.push(0);
+      }
+    }
+
+    // Extract description text: everything before the first number with decimal separator
+    const firstNumberMatch = withoutDates.match(/-?[\d,.]+[.,]\d{2}(?!\d)/);
+    const descText = firstNumberMatch
+      ? withoutDates.slice(0, firstNumberMatch.index).trim()
+      : withoutDates;
+
+    // Split description text by anchor keywords
+    const anchors = descText.split(
+      /\b(ABONO|AJUSTE|COBRO|COMPRA|CUOTA|IMPTO|PAGO|SERVICIO|TRANSFERENCIA|INTERBANC)\b\s*/i,
+    );
+
+    const descParts: string[] = [];
+    let i = 1;
+    while (i < anchors.length && descParts.length < n) {
+      const anchor = anchors[i] || '';
+      const rest = (i + 1 < anchors.length ? anchors[i + 1] : '').trim();
+      descParts.push((anchor + ' ' + rest).trim());
+      i += 2;
+    }
+
+    // Expand descriptions that contain standalone "0" tokens (bank bug —
+    // real transactions where the description shows as "0"). Each standalone
+    // "0" represents a separate row that must be kept.
+    const expanded: string[] = [];
+    for (const part of descParts) {
+      const tokens = part.match(/\b0\b/g);
+      if (tokens && tokens.length > 0 && part.replace(/\b0\b/g, '').trim().length > 0) {
+        // Split at zero boundaries: "IMPTO GOBIERNO 4X1000 0 0 0" →
+        // ["IMPTO GOBIERNO 4X1000", "0", "0", "0"]
+        const segments = part.split(/\b0\b/);
+        for (let s = 0; s < segments.length; s++) {
+          const seg = segments[s].trim();
+          if (seg) expanded.push(seg);
+          if (s < segments.length - 1) expanded.push('0'); // keep "0" as description
+        }
+      } else {
+        expanded.push(part);
+      }
+    }
+    descParts.length = 0;
+    descParts.push(...expanded);
+
+    // If too many descriptions, merge shortest adjacent pairs
+    while (descParts.length > n) {
+      let best = 0;
+      let bestLen = Infinity;
+      for (let j = 0; j < descParts.length - 1; j++) {
+        const combined = descParts[j].split(/\s+/).length + descParts[j + 1].split(/\s+/).length;
+        if (combined < bestLen) {
+          bestLen = combined;
+          best = j;
+        }
+      }
+      descParts[best] = (descParts[best] + ' ' + descParts[best + 1]).trim();
+      descParts.splice(best + 1, 1);
+    }
+
+    // Pad descriptions if fewer than expected
+    while (descParts.length < n) {
+      descParts.push('');
+    }
+
+    // Build rows
+    const rows: Omit<MovimientoBancarioInput, 'ordinal'>[] = [];
+    for (let j = 0; j < n; j++) {
+      const fecha = parseFechaBancolombia(dates[j], dateRange);
+      const valor = amounts[j] ?? 0;
+      const saldo = saldos[j] ?? 0;
+      const debito = valor < 0 ? Math.abs(valor) : undefined;
+      const credito = valor > 0 ? valor : undefined;
+
+      rows.push({
+        fecha,
+        descripcion: descParts[j].replace(/\s+/g, ' ').trim(),
+        debito,
+        credito,
+        saldo,
+        moneda: 'COP',
+        bancoOrigen: this.banco,
+      });
+    }
+    return rows;
+  }
+
   private formatDate(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -157,7 +325,7 @@ export class BancolombiaParser implements ExtractoParser {
     // Remove "FIN ESTADO DE CUENTA + oficina" pero NO lo que sigue (montos/saldos).
     // En página 3, los montos y saldos aparecen DESPUÉS de "FIN ESTADO DE CUENTA
     // UNICENTRO CALI", no antes — usar $ al final los borraría.
-    cleaned = cleaned.replace(/FIN\s+ESTADO[\s\S]*?(?=\s*-?\d[\d,]*(?:\.\d{2})|\s*$)/gi, '');
+    cleaned = cleaned.replace(/FIN\s+ESTADO[\s\S]*?(?=\s*-?\d[\d,.]*(?:\.\d{2}|,\d{2})|\s*$)/gi, '');
 
     // Remaining standalone "VIGILADO" references (no date nearby)
     cleaned = cleaned.replace(/VIGILADO/g, '');
@@ -227,7 +395,7 @@ export class BancolombiaParser implements ExtractoParser {
       start: number;
       end: number;
     }
-    const numberPattern = /(-?[\d,]*\.\d{2})/g;
+    const numberPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d)))/g;
     const numbers: NumberMatch[] = [];
     let numMatch: RegExpExecArray | null;
 
@@ -250,8 +418,11 @@ export class BancolombiaParser implements ExtractoParser {
     // Description is everything before the VALOR number position
     const descripcion = text.slice(0, valorMatch.start).trim();
 
-    // Skip rows with "0" description (bank bug), empty description, or all-digits
-    if (!descripcion || descripcion === '0' || /^\d+$/.test(descripcion.replace(/[\s,.]+/g, ''))) return null;
+    // Skip truly empty or all-digit descriptions.
+    // Exception: bank-bug "0" description with non-zero valor IS a real transaction.
+    if (!descripcion) return null;
+    const isAllDigits = /^\d+$/.test(descripcion.replace(/[\s,.]+/g, ''));
+    if (isAllDigits && (descripcion !== '0' || valor === 0)) return null;
 
     const fecha = parseFechaBancolombia(dateStr, dateRange);
     const debito = valor < 0 ? Math.abs(valor) : undefined;

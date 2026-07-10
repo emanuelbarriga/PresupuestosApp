@@ -1,0 +1,15 @@
+{
+  "name": "gestor-presupuestos-functions",
+  "description": "Cloud Functions para servir Next.js (SSR + API routes)",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "firebase-functions": "^6.3.2",
+    "firebase-admin": "^13.2.0",
+    "next": "^15.4.9",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "private": true
+}

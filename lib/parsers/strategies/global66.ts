@@ -1,5 +1,9 @@
 import type { Banco, MovimientoBancarioInput } from '@/lib/types';
 import type { ExtractoParser, ParseResult, ParseContext } from '@/lib/parsers/types';
+import { parseMonto } from '@/lib/parsers/strategies/bancolombia';
+
+// Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
+const NUM = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
 
 /**
  * Merge split amounts in Global66 extracted text.
@@ -20,11 +24,6 @@ function mergeAmounts(text: string): string {
     })
   );
   return merged.join('\n');
-}
-
-function parseMonto(text: string): number {
-  const cleaned = text.replace(/[$,\s]/g, '');
-  return parseFloat(cleaned);
 }
 
 export class Global66Parser implements ExtractoParser {
@@ -73,8 +72,8 @@ export class Global66Parser implements ExtractoParser {
       periodoHasta = this.normalizePeriodDate(periodMatch[2]);
     }
 
-    const saldoInicialMatch = fullText.match(/Inicio de per[íi]odo:\s*\$([\d,]+\.\d{2})/i);
-    const saldoFinalMatch = fullText.match(/Final de per[íi]odo:\s*\$([\d,]+\.\d{2})/i);
+    const saldoInicialMatch = fullText.match(new RegExp(`Inicio de per[íi]odo:\\s*\\$(${NUM})`, 'i'));
+    const saldoFinalMatch = fullText.match(new RegExp(`Final de per[íi]odo:\\s*\\$(${NUM})`, 'i'));
 
     return {
       banco: this.banco,
@@ -107,7 +106,7 @@ export class Global66Parser implements ExtractoParser {
     const rest = line.slice(tsMatch[0].length).trim();
 
     // Find all $amount patterns (after merge, these are complete numbers)
-    const amountPattern = /\$([\d,]+\.\d{2})/g;
+    const amountPattern = new RegExp(`\\$(${NUM})`, 'g');
     const amounts: Array<{ value: string; start: number }> = [];
     let amMatch: RegExpExecArray | null;
 

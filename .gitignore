@@ -1,4 +1,5 @@
 !.env.example
+.firebase/
 *.log
 *firebase-adminsdk*.json
 .DS_Store

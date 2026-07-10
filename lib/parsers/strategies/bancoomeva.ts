@@ -1,10 +1,6 @@
 import type { Banco, MovimientoBancarioInput } from '@/lib/types';
 import type { ExtractoParser, ParseResult, ParseContext } from '@/lib/parsers/types';
-
-function parseMonto(text: string): number {
-  const cleaned = text.replace(/[$,\s]/g, '');
-  return parseFloat(cleaned);
-}
+import { parseMonto } from '@/lib/parsers/strategies/bancolombia';
 
 // Bancoomeva PDF text extraction (pdfjs) produces ONE line per page, not one
 // line per transaction row — everything on a page is packed together with
@@ -13,13 +9,16 @@ function parseMonto(text: string): number {
 // summary and the legal disclaimer) and then locate transaction rows by their
 // "DD-MM-YYYY OFICINA" anchor, wherever it appears in the text.
 
+// Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
+const NUM = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
+
 // Repeats verbatim on every page — strip entirely (dotall so it spans the
 // embedded newlines between page blocks in the extracted text).
 // Use [\\s\\S] instead of dotAll (/s) flag — target is ES2017
 const DISCLAIMER_PATTERN = /Nuestra línea de Atención[\s\S]*?autónoma de Bancoomeva\./g;
 
 // Running summary block repeated at the top of every page after page 1.
-const SUMMARY_PATTERN = /SALDO INICIAL\s+\$\s*[\d,]+\.\d{2}[\s\S]*?SALDO FINAL\s+\$\s*[\d,]+\.\d{2}/g;
+const SUMMARY_PATTERN = new RegExp(`SALDO INICIAL\\s+\\$\\s*(?:${NUM})[\\s\\S]*?SALDO FINAL\\s+\\$\\s*(?:${NUM})`, 'g');
 
 // Anchor for a transaction row: a date followed by "OFICINA", capturing
 // everything up to (but not including) the next such anchor or the end.
@@ -71,8 +70,8 @@ export class BancoomevaParser implements ExtractoParser {
     }
 
     // Find first SALDO INICIAL and last SALDO FINAL with their $values
-    const siRe = /SALDO INICIAL[\s\S]*?\$\s*([\d,]+\.\d{2})/gi;
-    const sfRe = /SALDO FINAL[\s\S]*?\$\s*([\d,]+\.\d{2})/gi;
+    const siRe = new RegExp(`SALDO INICIAL[\\s\\S]*?\\$\\s*(${NUM})`, 'gi');
+    const sfRe = new RegExp(`SALDO FINAL[\\s\\S]*?\\$\\s*(${NUM})`, 'gi');
     let saldoInicialMatch: RegExpExecArray | null = null;
     let saldoFinalMatch: RegExpExecArray | null = null;
     let mx: RegExpExecArray | null;
@@ -123,7 +122,7 @@ export class BancoomevaParser implements ExtractoParser {
 
     // Find numbers (debito, credito, saldo) from the right
     // Format: ...text...  DEBITO_VAL  CREDITO_VAL  SALDO_VAL
-    const numberPattern = /(-?[\d,]*\.\d{2})/g;
+    const numberPattern = new RegExp(`(-?${NUM})`, 'g');
     const numbers: Array<{ value: string; start: number; end: number }> = [];
     let numMatch: RegExpExecArray | null;
 
@@ -144,6 +143,9 @@ export class BancoomevaParser implements ExtractoParser {
     let saldoVal = 0;
     let descEndIndex = 0;
 
+    const isNotaCredito = /N\/C\b/i.test(rest);
+    const isNotaDebito = /N\/D\b/i.test(rest);
+
     if (numCount >= 3) {
       // Flat (join(' ')) extraction order: [CREDITO, SALDO, DEBITO].
       // text order = [n1, n2, n3] where:
@@ -153,8 +155,6 @@ export class BancoomevaParser implements ExtractoParser {
       // Determine DEBITO vs CREDITO from the description prefix:
       //   "N/C" = Nota Crédito → n1 is CREDITO, n3 is DEBITO(0)
       //   "N/D" or "N/DND" = Nota Débito → n1 is DEBITO, n3 is DEBITO(?)
-      const isNotaCredito = /N\/C\b/i.test(rest);
-      const isNotaDebito = /N\/D\b/i.test(rest);
 
       saldoVal = parseMonto(numbers[1].value);
 
@@ -179,12 +179,10 @@ export class BancoomevaParser implements ExtractoParser {
       // In Bancoomeva PDF columns: DEBITO is left, CREDITO is right.
       // If the first number appears far from the description (empty DEBITO column),
       // it's a credito. If close, it's a debito.
-      const descText = rest.slice(0, descEndIndex).trim();
       const gapText = rest.slice(0, numbers[numCount - 2].start).trimEnd();
       const gapChars = numbers[numCount - 2].start - gapText.length;
 
       if (gapChars >= 4) {
-        // Large gap means empty DEBITO column → this is credito
         creditoVal = midVal;
       } else {
         debitoVal = midVal;
