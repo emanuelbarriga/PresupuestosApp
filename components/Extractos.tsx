@@ -649,72 +649,62 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col shrink-0">
             {/* Extracto info + Filters bar */}
             <div className="px-4 py-3 border-b border-slate-100 space-y-2">
-              {/* Extracto selector and info */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-600 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg">
-                      {selectedCuenta?.banco}
-                    </span>
-                    <div className="flex rounded-lg bg-slate-100 p-0.5 gap-0.5">
-                      <button onClick={() => setViewAllMode(false)}
-                        className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
-                          !viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                        )}>Último</button>
-                      <button onClick={() => setViewAllMode(true)}
-                        className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
-                          viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                        )}>Todos</button>
-                    </div>
-                    {cuentaExtractos.length > 1 && (
-                      <select
-                        value={extractoInfo ? `${extractoInfo.id}|${extractoInfo.mes}|${extractoInfo.anio}` : ''}
-                        onChange={handleExtractoChange}
-                        className="border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors cursor-pointer bg-white"
-                      >
-                        {cuentaExtractos.map(ext => (
-                          <option key={ext.id} value={`${ext.id}|${ext.mes}|${ext.anio}`}>
-                            {ext.mes} {ext.anio} — {ext.estado} ({ext.totalMovimientosParseados ?? 0} movs)
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {cuentaExtractos.length === 1 && extractoInfo && (
-                      <span className="text-xs text-slate-600 font-medium">
-                        {extractoInfo.mes} {extractoInfo.anio}
-                      </span>
-                    )}
-                    <span className="text-[10px] text-slate-400">
-                      {movimientos.length} movimientos
-                    </span>
-                  </div>
+              {/* Single line: toggle · selector · débitos · créditos · movs */}
+              <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-0.5">
+                <div className="flex rounded-lg bg-slate-100 p-0.5 gap-0.5 shrink-0">
+                  <button onClick={() => setViewAllMode(false)}
+                    className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
+                      !viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    )}>Individual</button>
+                  <button onClick={() => setViewAllMode(true)}
+                    className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
+                      viewAllMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    )}>Todos</button>
                 </div>
-                <div className="flex items-center gap-2">
-                  {selectedCuenta && (
-                    <span className="text-[10px] text-slate-500">
-                      Saldo: <span className="font-bold text-slate-700">{formatCurrency(selectedCuenta.saldoActual ?? 0)}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
 
-              {/* Summary bar */}
-              <div className="flex items-center gap-4 text-[11px] pb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400">Débitos:</span>
+                {!viewAllMode && cuentaExtractos.length > 1 && (
+                  <select
+                    value={extractoInfo ? `${extractoInfo.id}|${extractoInfo.mes}|${extractoInfo.anio}` : ''}
+                    onChange={handleExtractoChange}
+                    className="border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors cursor-pointer bg-white shrink-0"
+                  >
+                    {cuentaExtractos.map(ext => (
+                      <option key={ext.id} value={`${ext.id}|${ext.mes}|${ext.anio}`}>
+                        {ext.mes} {ext.anio} — {ext.estado} ({ext.totalMovimientosParseados ?? 0} movs)
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!viewAllMode && cuentaExtractos.length === 1 && extractoInfo && (
+                  <span className="text-xs text-slate-600 font-medium shrink-0">
+                    {extractoInfo.mes} {extractoInfo.anio}
+                  </span>
+                )}
+                {viewAllMode && (
+                  <span className="text-[10px] font-medium text-slate-500 shrink-0">
+                    {cuentaExtractos.length} extractos
+                  </span>
+                )}
+
+                <div className="w-px h-4 bg-slate-200 shrink-0" />
+
+                <div className="flex items-center gap-3 text-[11px] shrink-0">
+                  <span className="text-slate-500">Débitos:</span>
                   <span className="font-bold text-rose-600 tabular-nums">
                     {formatCurrency(filteredMovimientos.reduce((s, m) => s + (m.debito ?? 0), 0))}
                   </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400">Créditos:</span>
+                  <span className="text-slate-500">Créditos:</span>
                   <span className="font-bold text-emerald-600 tabular-nums">
                     {formatCurrency(filteredMovimientos.reduce((s, m) => s + (m.credito ?? 0), 0))}
                   </span>
                 </div>
-                <div className="w-px h-4 bg-slate-200" />
-                <span className="text-slate-400">
-                  <span className="font-semibold text-slate-600">{filteredMovimientos.length}</span> movimientos{selectedMovs.size > 0 ? ` · ${selectedMovs.size} seleccionados` : ''}
+
+                <div className="w-px h-4 bg-slate-200 shrink-0" />
+
+                <span className="text-[11px] text-slate-500 shrink-0">
+                  <span className="font-semibold text-slate-600">{filteredMovimientos.length}</span> de{' '}
+                  <span className="text-slate-400">{movimientos.length}</span> movs
+                  {selectedMovs.size > 0 && <span className="ml-1.5 text-indigo-600 font-medium">· {selectedMovs.size} selec.</span>}
                 </span>
               </div>
 
