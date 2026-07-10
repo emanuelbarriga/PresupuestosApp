@@ -1,16 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Clock, Pencil, Mail, User, Shield } from 'lucide-react';
-import clsx from 'clsx';
+import { Clock, Pencil, Mail } from 'lucide-react';
 
 interface InvitacionEditFormProps {
   record: {
     id?: string;
-    companyId?: string;
-    companyName?: string;
     email?: string;
-    role?: string;
     expiresAt?: string;
     createdAt?: string;
   };
@@ -19,7 +15,7 @@ interface InvitacionEditFormProps {
   selectedCompany: any;
   saving: boolean;
   setSaving: (v: boolean) => void;
-  onUpdateInvitation: (id: string, data: { role?: string; expiresAt?: string }) => Promise<void>;
+  onUpdateInvitation: (id: string, data: { expiresAt?: string }) => Promise<void>;
   onSuccess: () => Promise<void>;
   onBack: () => void;
 }
@@ -31,9 +27,6 @@ export function InvitacionEditForm({
   onUpdateInvitation,
   onSuccess,
 }: InvitacionEditFormProps) {
-  const [role, setRole] = useState<'colaborador' | 'admin'>(
-    (record?.role as 'colaborador' | 'admin') ?? 'colaborador',
-  );
   const [expiry, setExpiry] = useState<1 | 3 | 7>(() => {
     if (!record?.expiresAt) return 7;
     const remaining = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
@@ -52,7 +45,6 @@ export function InvitacionEditForm({
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expiry);
       await onUpdateInvitation(record.id, {
-        role,
         expiresAt: expiresAt.toISOString(),
       });
       setSuccess(true);
@@ -82,14 +74,6 @@ export function InvitacionEditForm({
 
   return (
     <div className="space-y-5">
-      {/* Empresa readonly */}
-      <div>
-        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Empresa</label>
-        <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-          <span className="text-sm text-slate-700">{record?.companyName ?? '—'}</span>
-        </div>
-      </div>
-
       {/* Email readonly */}
       <div>
         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Correo electrónico</label>
@@ -100,37 +84,15 @@ export function InvitacionEditForm({
         </div>
       </div>
 
-      {/* Rol editable */}
-      <div>
-        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Rol</label>
-        <div className="flex bg-slate-100 rounded-lg p-1">
-          <button type="button" onClick={() => setRole('colaborador')}
-            className={clsx(
-              'flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5',
-              role === 'colaborador' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-            )}>
-            <User size={14} /> Colaborador
-          </button>
-          <button type="button" onClick={() => setRole('admin')}
-            className={clsx(
-              'flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5',
-              role === 'admin' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-            )}>
-            <Shield size={14} /> Administrador
-          </button>
-        </div>
-      </div>
-
       {/* Expiración editable */}
       <div>
         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Tiempo disponible</label>
         <div className="flex bg-slate-100 rounded-lg p-1">
           {([1, 3, 7] as const).map((d) => (
             <button key={d} type="button" onClick={() => setExpiry(d)}
-              className={clsx(
-                'flex-1 py-2 text-xs font-bold rounded-md transition-all',
-                expiry === d ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-              )}>
+              className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
+                expiry === d ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}>
               {d === 1 ? '1 día' : d === 3 ? '3 días' : '1 semana'}
             </button>
           ))}
