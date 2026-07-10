@@ -218,10 +218,12 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
   // ── Filters & Sorting ──
 
   const sortedMovimientos = useMemo(() => {
-    return [...movimientos].sort((a, b) =>
-      (a.ordinal ?? 0) - (b.ordinal ?? 0) || a.fecha.localeCompare(b.fecha),
-    );
-  }, [movimientos]);
+    return [...movimientos].sort((a, b) => {
+      const cmp = (a.ordinal ?? 0) - (b.ordinal ?? 0) || a.fecha.localeCompare(b.fecha);
+      // Individual: oldest first. Todos: newest first.
+      return viewAllMode ? -cmp : cmp;
+    });
+  }, [movimientos, viewAllMode]);
 
   const filteredMovimientos = useMemo(() => {
     let data = sortedMovimientos;
@@ -649,8 +651,11 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col shrink-0">
             {/* Extracto info + Filters bar */}
             <div className="px-4 py-3 border-b border-slate-100 space-y-2">
-              {/* Single line: toggle · selector · débitos · créditos · movs */}
+              {/* Single line: banco · toggle · selector · débitos · créditos · movs */}
               <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-0.5">
+                <span className="text-[11px] font-bold text-slate-600 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg shrink-0">
+                  {selectedCuenta?.banco}
+                </span>
                 <div className="flex rounded-lg bg-slate-100 p-0.5 gap-0.5 shrink-0">
                   <button onClick={() => setViewAllMode(false)}
                     className={clsx("px-2 py-1 text-[10px] font-bold rounded-md transition-all whitespace-nowrap",
