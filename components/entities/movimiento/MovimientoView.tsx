@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import type { MovimientoBancario, NavScreen, Ejecucion, EntityType } from '@/lib/types';
-import { getEjecucion, updateMovimiento } from '@/lib/firestore';
-import { ArrowRight, Pencil, Trash2, Eye } from 'lucide-react';
-import { deleteDoc, doc, collection } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import type { MovimientoBancario, NavScreen, Ejecucion, EntityType, MovimientoBancarioInput, Banco } from '@/lib/types';
+import { getEjecucion, updateMovimiento, subscribeMovimientos } from '@/lib/firestore';
+import { ArrowRight, Pencil, Trash2, Eye, FileText } from 'lucide-react';
+import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
+import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
 
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -115,31 +116,94 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
     }
   };
 
+  // ── Extracto modal ──
+  const [extractoModal, setExtractoModal] = useState<{
+    open: boolean; header: ExtractoParseHeader | null; movimientos: MovimientoBancarioInput[]; pdfUrl?: string;
+  }>({ open: false, header: null, movimientos: [] });
+  const extractoMovUnsub = useRef<(() => void) | null>(null);
+
+  const handleVerExtracto = async () => {
+    if (!extractoId || !cuentaId) {
+      toast.error('No hay extracto asociado a este movimiento');
+      return;
+    }
+    try {
+      // Fetch extracto data
+      const extSnap = await getDoc(doc(db, 'companies', companyId, 'cuentasBancarias', cuentaId, 'extractos', extractoId));
+      const extData = extSnap.data();
+      if (!extData) { toast.error('Extracto no encontrado'); return; }
+
+      // Fetch cuenta for banco name
+      const cueSnap = await getDoc(doc(db, 'companies', companyId, 'cuentasBancarias', cuentaId));
+      const cueData = cueSnap.data();
+      const banco = (cueData?.banco as string) || movimiento.bancoOrigen || 'No detectado';
+
+      setExtractoModal({
+        open: true,
+        header: {
+          mes: extData.mes ?? '',
+          anio: extData.anio ?? new Date().getFullYear(),
+          banco: banco as Banco,
+          saldoInicial: extData.saldoInicial ?? 0,
+          saldoFinal: extData.saldoFinal ?? 0,
+        },
+        movimientos: [],
+        pdfUrl: extData.archivo?.url,
+      });
+
+      // Subscribe to movimientos
+      extractoMovUnsub.current?.();
+      extractoMovUnsub.current = subscribeMovimientos(companyId, cuentaId, extractoId, (movs) => {
+        setExtractoModal(prev => ({ ...prev, movimientos: movs }));
+      }, () => {});
+    } catch {
+      toast.error('Error al cargar el extracto');
+    }
+  };
+
+  const handleCerrarExtracto = () => {
+    extractoMovUnsub.current?.();
+    extractoMovUnsub.current = null;
+    setExtractoModal({ open: false, header: null, movimientos: [] });
+  };
+
+  useEffect(() => {
+    return () => extractoMovUnsub.current?.();
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Movimiento</p>
-        {!movimiento.convertido ? (
-          <button onClick={handleConvertir}
-            className="flex items-center gap-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
-            <ArrowRight size={12} /> Ejecutar
-          </button>
-        ) : (
-          <div className="flex items-center gap-1">
-            <button onClick={handleVerEjecucion} disabled={loadingEjec}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-              <Eye size={12} /> Ver
+        <div className="flex items-center gap-1">
+          {extractoId && cuentaId && (
+            <button onClick={handleVerExtracto}
+              className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-colors">
+              <FileText size={12} /> Extracto
             </button>
-            <button onClick={handleEditarEjecucion} disabled={loadingEjec}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-              <Pencil size={12} /> Editar
+          )}
+          {!movimiento.convertido ? (
+            <button onClick={handleConvertir}
+              className="flex items-center gap-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
+              <ArrowRight size={12} /> Ejecutar
             </button>
-            <button onClick={handleEliminarEjecucion}
-              className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 px-2.5 py-1.5 rounded-lg transition-colors">
-              <Trash2 size={12} /> Eliminar
-            </button>
-          </div>
-        )}
+          ) : (
+            <>
+              <button onClick={handleVerEjecucion} disabled={loadingEjec}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                <Eye size={12} /> Ver
+              </button>
+              <button onClick={handleEditarEjecucion} disabled={loadingEjec}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                <Pencil size={12} /> Editar
+              </button>
+              <button onClick={handleEliminarEjecucion}
+                className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 px-2.5 py-1.5 rounded-lg transition-colors">
+                <Trash2 size={12} /> Eliminar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div>
@@ -196,6 +260,23 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
           <p className="text-xs text-purple-600">Este movimiento podría ser un duplicado de otro en el extracto.</p>
         </div>
       )}
+
+      {/* Extracto PDF preview modal */}
+      <ExtractoParseModal
+        open={extractoModal.open}
+        file={null}
+        pdfUrl={extractoModal.pdfUrl}
+        header={extractoModal.header}
+        movimientos={extractoModal.movimientos}
+        loading={false}
+        readOnly
+        title="Extracto Bancario — Vista Previa"
+        progress={null}
+        error={null}
+        onBancoChange={() => {}}
+        onSave={() => {}}
+        onCancel={handleCerrarExtracto}
+      />
     </div>
   );
 }
