@@ -234,6 +234,8 @@ export type RecordDetail =
   | { type: 'client'; client: Client; projects: Project[] }
   | { type: 'provider'; provider: Provider }
   | { type: 'tercero'; tercero: Tercero }
+  | { type: 'cuenta'; cuenta: CuentaBancaria }
+  | { type: 'extracto'; extracto: ExtractoBancario }
   | { type: 'settings-editor'; category: string; title: string; items: any[] }
   | {
       type: 'detalle-tercero';
@@ -265,8 +267,39 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'invite-user'; record: Invitacion }
   | { mode: 'edit'; type: 'edit-user-role'; record: { userId: string; email: string; memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[] } };
 
+// ─── Entity types (sidepanel entity unification) ──────────────────────────────
+
+export type EntityType =
+  | 'budget' | 'ejecucion' | 'project' | 'tercero'
+  | 'cuenta' | 'extracto' | 'settings' | 'invitacion'
+  | 'colaborador' | 'compania';
+
+// NavScreen — entity+mode replaces data/view/form dispatch.
+// Entity-list variant carries dashboard cell click data for EntityList rendering.
+// View/detalle-tercero variant is the only legacy carryover (not replaced by entity components).
 export type NavScreen =
-  | { id: string; type: 'data'; data: SidepanelData }
-  | { id: string; type: 'view'; detail: RecordDetail }
-  | { id: string; type: 'form'; form: ActiveForm }
-  | { id: string; type: 'customize' };
+  | { type: 'entity'; entity: EntityType; mode: 'create' | 'edit' | 'view'; record?: any; defaults?: Record<string, string>; year?: number; filterTipo?: TransactionType; filterMode?: 'Presupuestado' | 'Ejecutado' }
+  | { type: 'entity-list'; data: SidepanelData }
+  | { type: 'customize'; id?: string }
+  | { id: string; type: 'view'; detail: { type: 'detalle-tercero'; projects: Array<{ projectId: string; projectName: string; groups: DetalleTerceroGroup[]; totalPresupuestado: number; totalEjecutado: number; diferencia: number }>; totalPresupuestado: number; totalEjecutado: number; diferencia: number } };
+
+// Entity component props contract
+export interface EntityProps {
+  mode: 'create' | 'edit' | 'view';
+  companyId: string;
+  record?: any;
+  defaults?: Record<string, string>;
+  year?: number;
+  filterTipo?: TransactionType;
+  filterMode?: 'Presupuestado' | 'Ejecutado';
+  onSubmit: (action: {
+    mode: 'create' | 'edit' | 'archive';
+    entity: EntityType;
+    record?: any;
+    data: Record<string, any>;
+  }) => Promise<void>;
+  onNavigate: (screen: NavScreen) => void;
+  onClose: () => void;
+  onBack: () => void;
+  canGoBack: boolean;
+}

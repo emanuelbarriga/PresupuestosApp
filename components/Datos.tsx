@@ -425,6 +425,12 @@ export function Datos({
     <td className="p-2 text-center">{children}</td>
   );
 
+  const ViewBtn = ({ onClick }: { onClick: () => void }) => (
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="text-slate-400 hover:text-indigo-600 transition-colors mr-1" title="Ver">
+      <FileText size={14} />
+    </button>
+  );
+
   const EditBtn = ({ onClick }: { onClick: () => void }) => (
     <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="text-slate-400 hover:text-indigo-600 transition-colors" title="Editar">
       <Pencil size={14} />
@@ -1355,6 +1361,7 @@ export function Datos({
                                 {ejecucionCountByCuenta.get(cuenta.id) ?? 0}
                               </td>
                               <ActionCell>
+                                <ViewBtn onClick={() => onViewRecord?.({ type: 'cuenta', cuenta })} />
                                 <EditBtn onClick={() => edit('cuenta', cuenta)} />
                               </ActionCell>
                             </tr>
@@ -1433,6 +1440,7 @@ export function Datos({
                                                           <FileText size={14} />
                                                         </a>
                                                       )}
+                                                      <ViewBtn onClick={() => onViewRecord?.({ type: 'extracto', extracto: ext })} />
                                                       <EditBtn onClick={() => edit('extracto', ext)} />
                                                       <button
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteExtracto(ext); }}

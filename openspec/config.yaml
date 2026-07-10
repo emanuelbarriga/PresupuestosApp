@@ -37,6 +37,10 @@ phases:
     notes: |
 
 archived_changes:
+  - name: sidepanel-entity-unification
+    archived_at: 2026-07-09
+    summary: Unificó 10 entidades en componentes únicos create|edit|view, reemplazó FormPanel/ViewPanel/DataPanel, 29/29 tareas completadas, cutover sin regresiones
+    main_spec: openspec/specs/sidepanel-entity-components/spec.md
   - name: critical-technical-debt-fixes
     archived_at: 2026-07-09
     summary: Fixed cross-tenant subscription (H4), consolidated entity-grouping into shared utility (H5), replaced native browser dialogs with react-hot-toast (H6) — 17/17 tasks, zero regressions

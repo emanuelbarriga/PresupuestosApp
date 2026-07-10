@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
 import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -74,10 +74,6 @@ export default function CompanyPage({ params }: Props) {
   const [projectSearch, setProjectSearch] = useState('');
 
   const current = navStack[navStack.length - 1];
-  const sidepanelData = current?.type === 'data' ? current.data : null;
-  const recordDetail = current?.type === 'view' ? current.detail : null;
-  const activeForm = current?.type === 'form' ? current.form : null;
-  const customizeOpen = current?.type === 'customize';
   const canGoBack = navStack.length > 1;
 
   const isConjunto = companyId === 'all';
@@ -168,7 +164,7 @@ export default function CompanyPage({ params }: Props) {
     if (createTriggered.current) return;
     if (searchParams.get('create-company') === '1') {
       createTriggered.current = true;
-      pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: 'create-company' } });
+      pushScreen({ type: 'entity', entity: 'compania', mode: 'create' });
     }
   }, [searchParams, pushScreen]);
 
@@ -193,10 +189,10 @@ export default function CompanyPage({ params }: Props) {
   };
 
   const handleCellClick = (data: SidepanelData) => {
-    pushScreen({ id: crypto.randomUUID(), type: 'data', data });
+    pushScreen({ type: 'entity-list', data });
   };
 
-  const handleProjectClick = (projectId: string, projectName: string) => {
+  const handleProjectClick = (projectId: string, projectName: string, year?: number, tipo?: TransactionType, viewMode?: 'Presupuestado' | 'Ejecutado') => {
     if (isConjunto) return;
     const found = projects.find(p => p.id === projectId) || projects.find(p => p.name === projectName);
     const project: Project = found || {
@@ -206,34 +202,30 @@ export default function CompanyPage({ params }: Props) {
       clientName: '',
       estado: 'Activo',
     };
-    const relatedBudgets = budgets.filter(b => (b.projectId && b.projectId === projectId) || (!b.projectId && b.projectName === projectName));
-    const relatedEjecuciones = ejecuciones.filter(e => (e.projectId && e.projectId === projectId) || (!e.projectId && e.projectName === projectName));
-    const detail: RecordDetail = {
-      type: 'project',
-      project,
-      budgets: relatedBudgets,
-      ejecuciones: relatedEjecuciones,
-    };
-    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+    pushScreen({ type: 'entity', entity: 'project', mode: 'view', record: project, year, filterTipo: tipo, filterMode: viewMode });
   };
 
   const handleCustomizeClick = () => {
     if (current?.type === 'customize') {
       popScreen();
     } else {
-      pushScreen({ id: crypto.randomUUID(), type: 'customize' });
+      pushScreen({ type: 'customize' });
     }
   };
 
-  const handleEmptyCellClick = (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => {
+  const handleEmptyCellClick = (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string, value?: number) => {
     if (isConjunto) return;
-    const formType = mode === 'Presupuestado' ? 'budget' : 'ejecucion';
+    const entity = mode === 'Presupuestado' ? 'budget' as const : 'ejecucion' as const;
     const monthIndex = MONTHS.indexOf(month);
     const defaults: Record<string, string> = {
       projectName,
       tipo,
     };
     if (projectId) defaults.projectId = projectId;
+    // Pre-fill montoEjecutado with the presupuestado value when clicking gray cells
+    if (entity === 'ejecucion' && value !== undefined) {
+      defaults.montoEjecutado = String(value);
+    }
     // Use entity info from tercero cell if provided, otherwise resolve from project
     if (entityName) {
       defaults.entityName = entityName;
@@ -247,25 +239,52 @@ export default function CompanyPage({ params }: Props) {
       }
     }
     const fechaStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-15`;
-    if (formType === 'budget') {
+    if (entity === 'budget') {
       defaults.mesPresupuestado = month;
       defaults.fechaEjecutado = fechaStr;
     } else {
       defaults.fechaEjecutado = fechaStr;
     }
-    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type: formType, defaults } });
+    pushScreen({ type: 'entity', entity, mode: 'create', defaults });
   };
 
   const handleViewRecord = (detail: RecordDetail) => {
-    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+    const entityMap: Record<string, EntityType> = {
+      budget: 'budget', ejecucion: 'ejecucion', project: 'project',
+      client: 'tercero', provider: 'tercero', tercero: 'tercero',
+      cuenta: 'cuenta', extracto: 'extracto',
+    };
+    const entity = entityMap[detail.type];
+    if (entity) {
+      const record = (detail as any)[detail.type] || (detail as any).project || (detail as any).client || (detail as any).provider || (detail as any).tercero;
+      pushScreen({ type: 'entity', entity, mode: 'view', record });
+    } else if (detail.type === 'detalle-tercero') {
+      pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+    } else if (detail.type === 'settings-editor') {
+      pushScreen({ type: 'entity', entity: 'settings', mode: 'edit', record: detail });
+    }
   };
 
   const handleAddNew = (type: FormType, defaults?: Record<string, string>) => {
-    pushScreen({ id: crypto.randomUUID(), type: 'form', form: { mode: 'add', type, defaults } });
+    const entityMap: Record<string, EntityType> = {
+      budget: 'budget', ejecucion: 'ejecucion', project: 'project',
+      client: 'tercero', provider: 'tercero', tercero: 'tercero',
+      cuenta: 'cuenta', extracto: 'extracto',
+      'invite-user': 'invitacion', 'edit-user-role': 'colaborador', 'create-company': 'compania',
+    };
+    const entity = entityMap[type];
+    if (entity) pushScreen({ type: 'entity', entity, mode: 'create', defaults });
   };
 
   const handleEditRecord = (form: ActiveForm) => {
-    pushScreen({ id: crypto.randomUUID(), type: 'form', form });
+    const entityMap: Record<string, EntityType> = {
+      budget: 'budget', ejecucion: 'ejecucion', project: 'project',
+      client: 'tercero', provider: 'tercero', tercero: 'tercero',
+      cuenta: 'cuenta', extracto: 'extracto',
+      'invite-user': 'invitacion', 'edit-user-role': 'colaborador',
+    };
+    const entity = entityMap[form.type];
+    if (entity) pushScreen({ type: 'entity', entity, mode: 'edit', record: (form as any).record });
   };
 
   const handleDeleteBudget = async (budgetId: string) => {
@@ -286,7 +305,9 @@ export default function CompanyPage({ params }: Props) {
 
   const handleTerceroClick = (detail: RecordDetail) => {
     if (isConjunto) return;
-    pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+    if (detail.type === 'detalle-tercero') {
+      pushScreen({ id: crypto.randomUUID(), type: 'view', detail });
+    }
   };
 
   const handleFormSubmit = async (form: ActiveForm, data: Record<string, any>) => {
@@ -409,6 +430,38 @@ export default function CompanyPage({ params }: Props) {
     popScreen();
   };
 
+  const handleEntitySubmit = useCallback(async (action: {
+    mode: 'create' | 'edit' | 'archive';
+    entity: EntityType;
+    record?: any;
+    data: Record<string, any>;
+  }) => {
+    if (action.mode === 'archive') {
+      if (action.entity === 'budget' && action.record?.id) {
+        await updateBudget(companyId, action.record.id, { archivado: action.data.archivado });
+      } else if (action.entity === 'ejecucion' && action.record?.id) {
+        await updateEjecucion(companyId, action.record.id, { archivado: action.data.archivado });
+      }
+      popScreen();
+      return;
+    }
+
+    if (action.mode === 'create' || action.mode === 'edit') {
+      const formTypeMap: Partial<Record<EntityType, FormType>> = {
+        budget: 'budget', ejecucion: 'ejecucion', project: 'project',
+        tercero: 'tercero', cuenta: 'cuenta', extracto: 'extracto',
+        invitacion: 'invite-user', colaborador: 'edit-user-role', compania: 'create-company',
+      };
+      const formType = formTypeMap[action.entity];
+      if (formType) {
+        const activeForm: ActiveForm = action.mode === 'edit'
+          ? { mode: 'edit', type: formType as any, record: action.record }
+          : { mode: 'add', type: formType };
+        await handleFormSubmit(activeForm, action.data);
+      }
+    }
+  }, [companyId, handleFormSubmit, popScreen]);
+
   const handleSaveComprobantes = useCallback(async (ejecucionId: string, comprobantes: Comprobante[]) => {
     await updateEjecucion(companyId, ejecucionId, { comprobantes: JSON.parse(JSON.stringify(comprobantes)) });
   }, [companyId]);
@@ -445,9 +498,9 @@ export default function CompanyPage({ params }: Props) {
             )}
           </div>
 
-          <Sidepanel data={sidepanelData} recordDetail={recordDetail} activeForm={activeForm} customizeOpen={customizeOpen}
-            companyId={companyId} onClose={handleSidepanelClose} onFormSubmit={handleFormSubmit}
-            onCellClick={handleCellClick}
+          <Sidepanel screen={current}
+            companyId={companyId} onClose={handleSidepanelClose}
+            onSubmit={handleEntitySubmit}
             canGoBack={canGoBack}
             onBack={handleSidepanelBack}
             onNavigate={pushScreen}
@@ -455,8 +508,7 @@ export default function CompanyPage({ params }: Props) {
             selectedProjects={selectedProjects}
             projectSearch={projectSearch}
             onProjectsChange={setSelectedProjects}
-            onSearchChange={setProjectSearch}
-            onSaveComprobantes={handleSaveComprobantes} />
+            onSearchChange={setProjectSearch} />
         </main>
       </div>
   );

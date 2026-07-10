@@ -124,8 +124,8 @@ export function buildTerceroGroups(
 
 interface DashboardProps {
   onCellClick: (data: SidepanelData) => void;
-  onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
+  onProjectClick?: (projectId: string, projectName: string, year?: number, tipo?: TransactionType, mode?: 'Presupuestado' | 'Ejecutado') => void;
+  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string, value?: number) => void;
   onTerceroClick?: (detail: RecordDetail) => void;
   onCustomizeClick?: () => void;
   budgets: Budget[];
@@ -183,8 +183,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
     [ejecuciones, yearStr, showArchivados],
   );
 
-  const hasTerceroData = filteredBudgets.length > 0 || filteredEjecuciones.length > 0;
 
+  /** Build detalle-tercero for ALL projects (triggered by the global button) */
   const handleTerceroClick = () => {
     const projects = buildTerceroGroups(filteredBudgets, filteredEjecuciones, mode);
     const totalPresupuestado = projects.reduce((s, p) => s + p.totalPresupuestado, 0);
@@ -195,6 +195,29 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       totalPresupuestado,
       totalEjecutado,
       diferencia: totalEjecutado - totalPresupuestado,
+    });
+  };
+
+  /** Open EntityList for a single tercero sub-row (single project, single tercero) */
+  const handleTerceroSubRowClick = (row: any, tercero: any, terceroTipo: TransactionType) => {
+    const allBudgets: Budget[] = [];
+    const allEjecuciones: Ejecucion[] = [];
+    for (const m of visibleMonths) {
+      if (tercero.budgetsPorMes?.[m]) allBudgets.push(...tercero.budgetsPorMes[m]);
+      if (tercero.ejecucionesPorMes?.[m]) allEjecuciones.push(...tercero.ejecucionesPorMes[m]);
+    }
+    onCellClick({
+      title: `${row.proyecto} / ${tercero.entityName}`,
+      subtitle: `${mode} de ${terceroTipo}s`,
+      formula: `Detalle de ${tercero.entityName} en ${row.proyecto}`,
+      budgets: allBudgets,
+      ejecuciones: allEjecuciones,
+      value: mode === 'Presupuestado' ? tercero.totalPresupuestado : tercero.totalEjecutado,
+      presupuestado: tercero.totalPresupuestado,
+      ejecutado: tercero.totalEjecutado,
+      diferencia: tercero.totalEjecutado - tercero.totalPresupuestado,
+      mode: mode as 'Presupuestado' | 'Ejecutado',
+      tipo: terceroTipo,
     });
   };
 
@@ -215,12 +238,7 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
             <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Presupuestado' ? "bg-sky-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Presupuestado')}>Presupuestado</button>
             <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Ejecutado' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Ejecutado')}>Ejecutado</button>
           </div>
-          {/* HIDDEN: se activará cuando implementemos filas expandibles en la matriz
-          {hasTerceroData && (
-            <button onClick={handleTerceroClick} className="px-3 py-1 text-[10px] font-bold rounded-lg border border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors flex items-center gap-1.5">
-              Detalle por Tercero
-            </button>
-          )} */}
+          {/* Detalle por Tercero: se accede haciendo clic en el nombre del tercero en las sub-filas expandidas */}
           <button onClick={() => setShowNegociacion(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
             Negociación {showNegociacion ? 'ON' : 'OFF'}
           </button>
@@ -251,8 +269,8 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
       </div>
 
       <div className="p-4 flex-1 overflow-auto flex flex-col gap-6">
-        <Matrix tipo="ingreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
-        <Matrix tipo="egreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="ingreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onTerceroSubRowClick={handleTerceroSubRowClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setIngresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
+        <Matrix tipo="egreso" year={selectedYear} showNegociacion={showNegociacion} mode={mode} onCellClick={onCellClick} onProjectClick={onProjectClick} onTerceroSubRowClick={handleTerceroSubRowClick} onEmptyCellClick={onEmptyCellClick} onReportTotals={setEgresoTotals} visibleMonths={visibleMonths} budgets={filteredBudgets} ejecuciones={filteredEjecuciones} resolveProjectName={resolveProjectName} allProjects={projects} selectedProjects={selectedProjects} />
       </div>
     </div>
   );
@@ -264,8 +282,9 @@ interface MatrixProps {
   mode: 'Presupuestado' | 'Ejecutado';
   year: number;
   onCellClick: (data: SidepanelData) => void;
-  onProjectClick?: (projectId: string, projectName: string) => void;
-  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string) => void;
+  onProjectClick?: (projectId: string, projectName: string, year?: number, tipo?: TransactionType, mode?: 'Presupuestado' | 'Ejecutado') => void;
+  onTerceroSubRowClick?: (row: any, tercero: any, tipo: TransactionType) => void;
+  onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string, value?: number) => void;
   onReportTotals?: (totals: { presupuestado: number; ejecutado: number }) => void;
   visibleMonths: Month[];
   budgets: Budget[];
@@ -275,7 +294,7 @@ interface MatrixProps {
   selectedProjects: Set<string>;
 }
 
-function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
+function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick, onTerceroSubRowClick, onEmptyCellClick, onReportTotals, visibleMonths, budgets, ejecuciones, resolveProjectName, allProjects, selectedProjects }: MatrixProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -683,7 +702,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                 const isExpanded = expandedProjects.has(rowKey);
                 rows.push(
                   <tr key={rowKey} className={clsx("transition-colors group", isP ? "hover:bg-sky-50/40" : "hover:bg-slate-50")}>
-                    <td onClick={() => onProjectClick?.(row.projectId, row.proyecto)}
+                    <td onClick={() => onProjectClick?.(row.projectId, row.proyecto, year, tipo, mode)}
                       className={clsx("p-3 sticky left-0 z-10 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)] transition-colors cursor-pointer", isP ? "bg-white group-hover:bg-sky-50/40 border-sky-100" : "bg-white group-hover:bg-slate-50 border-slate-200")}>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={(e) => { e.stopPropagation(); toggleProject(rowKey); }}
@@ -706,7 +725,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                         <td key={m} className={clsx("p-2 text-center border-r transition-colors cursor-pointer", isP ? "border-sky-50" : "border-slate-100", isCurrent && !isZero && (isP ? "bg-sky-50/50" : "bg-indigo-50/30"), !isZero && (showGrayPresupuestado ? "text-slate-400 hover:text-slate-600" : `font-bold ${hoverBgTheme} ${colorTheme}`), isZero && (isP ? "text-slate-300 hover:bg-sky-50 hover:text-slate-500" : "text-slate-300 hover:bg-slate-50 hover:text-slate-500"))}
                           onClick={() => {
                             if (showGrayPresupuestado) {
-                              onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado');
+                              onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado', undefined, undefined, undefined, presupuestado);
                             } else if (isZero) {
                               onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, mode);
                             } else {
@@ -718,7 +737,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                       );
                     })}
                     <td className={clsx("p-3 text-right border-l transition-colors font-bold cursor-pointer", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 ? (isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800") : "text-slate-400")}
-                      onClick={() => onProjectClick?.(row.projectId, row.proyecto)}>
+                      onClick={() => onProjectClick?.(row.projectId, row.proyecto, year, tipo, mode)}>
                       {formatCurrency(mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado)}
                     </td>
                   </tr>
@@ -730,7 +749,8 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                     const tKey = `${rowKey}-tercero-${t.entityId}-${ti}`;
                     rows.push(
                       <tr key={tKey} className={clsx("transition-colors", isP ? "bg-sky-50/20 hover:bg-sky-50" : "bg-slate-50/40 hover:bg-slate-50")}>
-                        <td className={clsx("p-2 pl-8 sticky left-0 z-10 border-r text-[10px]", isP ? "bg-sky-50/20 border-sky-100" : "bg-slate-50/40 border-slate-200")}>
+                        <td className={clsx("p-2 pl-8 sticky left-0 z-10 border-r text-[10px] cursor-pointer", isP ? "bg-sky-50/20 border-sky-100 hover:bg-sky-100" : "bg-slate-50/40 border-slate-200 hover:bg-slate-100")}
+                          onClick={() => onTerceroSubRowClick?.(row, t, tipo)}>
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium text-slate-700 truncate">{t.entityName}</span>
                             <span className={clsx("px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase shrink-0", t.entityType === 'client' ? 'bg-emerald-100 text-emerald-700' : t.entityType === 'provider' ? 'bg-amber-100 text-amber-700' : t.entityType === 'ambos' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500')}>
@@ -745,28 +765,14 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                           const isZero = val === 0;
                           const showGrayPresupuestado = !isP && ejecutado === 0 && presupuestado > 0;
                           return (
-                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", !isZero && (showGrayPresupuestado ? "text-slate-400 cursor-pointer hover:text-slate-600" : `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`), isZero && !showGrayPresupuestado && "text-slate-300 cursor-pointer hover:bg-slate-50")}
+                            <td key={m} className={clsx("p-2 text-center border-r transition-colors text-[10px]", isP ? "border-sky-100" : "border-slate-100", isZero && "text-slate-300 cursor-pointer hover:bg-slate-50", !isZero && (showGrayPresupuestado ? "text-slate-400 cursor-pointer hover:text-slate-600" : `font-semibold ${colorTheme} cursor-pointer ${isP ? "hover:bg-sky-100/50" : "hover:bg-slate-100"}`))}
                               onClick={() => {
                                 if (showGrayPresupuestado) {
-                                  onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType);
-                                } else if (!isZero) {
-                                  const bs = t.budgetsPorMes[m] || [];
-                                  const ejs = t.ejecucionesPorMes[m] || [];
-                                  onCellClick({
-                                    title: `${row.proyecto} / ${m}`,
-                                    subtitle: `${t.entityName} / ${mode} de ${tipo}s`,
-                                    formula: `${t.entityName} en ${m} para ${row.proyecto}`,
-                                    budgets: bs,
-                                    ejecuciones: ejs,
-                                    value: val,
-                                    presupuestado,
-                                    ejecutado,
-                                    diferencia: ejecutado - presupuestado,
-                                    mode,
-                                    tipo,
-                                  });
-                                } else {
+                                  onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, 'Ejecutado', t.entityId, t.entityName, t.entityType, presupuestado);
+                                } else if (isZero) {
                                   onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
+                                } else {
+                                  onTerceroSubRowClick?.(row, t, tipo);
                                 }
                               }}>
                               {isZero && !showGrayPresupuestado ? '-' : formatCurrency(showGrayPresupuestado ? presupuestado : val)}
@@ -775,23 +781,9 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                         })}
                         <td className={clsx("p-2 text-right border-l text-[10px] font-semibold", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado) > 0 ? `${colorTheme} cursor-pointer hover:bg-slate-50` : "text-slate-400")}
                           onClick={() => {
-                            const p = t.totalPresupuestado;
-                            const e = t.totalEjecutado;
-                            const val = mode === 'Presupuestado' ? p : e;
+                            const val = mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado;
                             if (val === 0) return;
-                            onCellClick({
-                              title: `${row.proyecto} / ${t.entityName}`,
-                              subtitle: `Total período / ${mode} de ${tipo}s`,
-                              formula: `${t.entityName} en el período visible para ${row.proyecto}`,
-                              budgets: t.allBudgets || [],
-                              ejecuciones: t.allEjecuciones || [],
-                              value: val,
-                              presupuestado: p,
-                              ejecutado: e,
-                              diferencia: e - p,
-                              mode,
-                              tipo,
-                            });
+                            onTerceroSubRowClick?.(row, t, tipo);
                           }}>
                           {formatCurrency(mode === 'Presupuestado' ? t.totalPresupuestado : t.totalEjecutado)}
                         </td>

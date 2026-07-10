@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -18,3 +18,12 @@ export const db = initializeFirestore(app, {
   }),
 });
 export const storage = getStorage(app);
+
+// Conectar a emuladores si la variable de entorno está configurada
+if (process.env.NEXT_PUBLIC_EMULATOR_HOST) {
+  const host = process.env.NEXT_PUBLIC_EMULATOR_HOST;
+  const [firestorePort, authPort] = (process.env.NEXT_PUBLIC_EMULATOR_PORTS || '8081,9099').split(',').map(Number);
+  connectFirestoreEmulator(db, host, firestorePort);
+  // Storage emulator no siempre está disponible, intentar conectar
+  try { connectStorageEmulator(storage, host, 9199); } catch {}
+}
