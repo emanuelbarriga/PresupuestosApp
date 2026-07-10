@@ -49,6 +49,28 @@ exports.nextjs = onRequest(
       await app.prepare();
       prepared = true;
     }
+
+    // ── Fix: Next.js 15 standalone + Cloud Functions v2 body conflict ──
+    //
+    // Cloud Functions v2 consume el stream del body antes de que Next.js
+    // pueda crear su NextRequest interno. Si Next.js recibe el body como
+    // objeto parseado (req.body), el constructor de Request falla con:
+    //   "Response body object should not be disturbed or locked"
+    //
+    // Solución: restaurar el body como string UTF-8 para que Next.js pueda
+    // crear su propio ReadableStream. req.rawBody es un Buffer provisto
+    // por Cloud Functions v2 con el body crudo original.
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
+        req.body = req.rawBody.toString('utf-8');
+        req.headers['content-length'] = String(Buffer.byteLength(req.body));
+      } else if (req.body && typeof req.body === 'object') {
+        // Fallback: si rawBody no está disponible, serializar el objeto
+        req.body = JSON.stringify(req.body);
+        req.headers['content-length'] = String(Buffer.byteLength(req.body));
+      }
+    }
+
     return handle(req, res);
   },
 );

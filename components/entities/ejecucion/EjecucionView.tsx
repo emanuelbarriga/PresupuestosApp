@@ -9,7 +9,7 @@ import { deleteFile } from '@/lib/fileUpload';
 import { DF } from '@/components/shared/DF';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
-import { Link2, Unlink, FileText } from 'lucide-react';
+import { Link2, Unlink, FileText, Plus } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -89,9 +89,32 @@ export function EjecucionView({ ejecucion, companyId, onSubmit, onNavigate }: Ej
       <DF label="Cuenta bancaria" v={ejecucion.cuentaName || 'Sin cuenta bancaria'} />
 
       <div className="border-t border-slate-100 pt-4">
-        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
-          <Link2 size={12} /> Presupuestos vinculados ({budgetLinks.length})
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1.5">
+            <Link2 size={12} /> Presupuestos vinculados ({budgetLinks.length})
+          </p>
+          <button
+            onClick={() =>
+              onNavigate({
+                type: 'entity',
+                entity: 'budget',
+                mode: 'create',
+                defaults: {
+                  descripcion: `Presupuesto: ${ejecucion.descripcion}`,
+                  projectId: ejecucion.projectId || '',
+                  projectName: ejecucion.projectName || '',
+                  entityId: ejecucion.entityId || '',
+                  entityName: ejecucion.entityName || '',
+                  entityType: ejecucion.entityType || '',
+                  tipo: ejecucion.tipo,
+                },
+              })
+            }
+            className="flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm px-3 py-1.5 rounded-lg transition-all hover:shadow-md"
+          >
+            <Plus size={13} /> Nuevo Presupuesto
+          </button>
+        </div>
         {budgetLinks.length === 0 ? (
           <p className="text-xs text-slate-500 italic">Sin presupuestos vinculados</p>
         ) : budgetLinks.map(link => {

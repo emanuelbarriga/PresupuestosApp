@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Budget, Ejecucion, NavScreen } from '@/lib/types';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
@@ -9,8 +9,42 @@ import clsx from 'clsx';
 import { groupByEntity } from '@/components/utils/groupByEntity';
 import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
 
+const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] as const;
+const MONTH_SET = new Set<string>(MONTHS);
+
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
+
+/**
+ * Parse the title to extract context depending on what kind of cell was clicked.
+ *
+ * Project cell:      title = "Admin / Febrero"          → { project: "Admin", month: "Febrero" }
+ * Tercero cell:      title = "Admin / Cliente"          → { project: "Admin", entityName: "Cliente" }
+ * Tercero month:     title = "Admin / Febrero / Cliente" → { project: "Admin", month: "Febrero", entityName: "Cliente" }
+ * Row total:         title = "Total Admin"              → { project: "Admin" }
+ * Col total:         title = "Total Febrero"            → { month: "Febrero" }
+ * Grand total:       title = "TOTAL PERIODO VISIBLE"    → {}
+ */
+function parseCellTitle(title: string): { project?: string; month?: string; entityName?: string } {
+  if (!title.includes(' / ')) return {};
+  const parts = title.split(' / ');
+  if (parts.length < 2) return {};
+
+  // Three parts: "Admin / Febrero / Cliente" → tercero month cell
+  if (parts.length >= 3) {
+    return { project: parts[0], month: parts[1], entityName: parts[2] };
+  }
+
+  const [first, second] = parts;
+
+  // If second part is a month name → project cell: "Admin / Febrero"
+  if (MONTH_SET.has(second)) {
+    return { project: first, month: second };
+  }
+
+  // Otherwise → tercero sub-row: "Admin / Cliente Uno"
+  return { project: first, entityName: second };
+}
 
 export interface EntityListProps {
   mode: 'Presupuestado' | 'Ejecutado';
@@ -81,9 +115,43 @@ export function EntityList({
       <div className="flex-1 overflow-y-auto p-6">
         {mode === 'Presupuestado' && (
           <div className="mb-6">
-            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">
-              Presupuestos ({budgets.length})
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">
+                Presupuestos ({budgets.length})
+              </p>
+              <button
+                onClick={() => {
+                  const ctx = parseCellTitle(title);
+                  const firstBudget = budgets[0];
+                  // If title has entityName (tercero sub-row), use it; otherwise fall back to first budget
+                  const entityName = ctx.entityName || firstBudget?.entityName || '';
+                  const entityId = (ctx.entityName
+                    ? budgets.find(b => b.entityName === ctx.entityName)?.entityId
+                    : firstBudget?.entityId) || '';
+                  const entityType = (ctx.entityName
+                    ? budgets.find(b => b.entityName === ctx.entityName)?.entityType
+                    : firstBudget?.entityType) || '';
+                  onNavigate({
+                    type: 'entity',
+                    entity: 'budget',
+                    mode: 'create',
+                    defaults: {
+                      tipo,
+                      projectName: ctx.project || firstBudget?.projectName || '',
+                      projectId: firstBudget?.projectId || '',
+                      entityName,
+                      entityId,
+                      entityType,
+                      mesPresupuestado: ctx.month || firstBudget?.mesPresupuestado || '',
+                      montoPresupuestado: presupuestado ? String(presupuestado) : '',
+                    },
+                  });
+                }}
+                className="flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm px-3 py-1.5 rounded-lg transition-all hover:shadow-md"
+              >
+                <Plus size={13} /> Nuevo
+              </button>
+            </div>
             {budgets.length === 0 ? (
               <p className="text-xs text-slate-400 italic">No hay presupuestos</p>
             ) : (
@@ -94,9 +162,41 @@ export function EntityList({
 
         {mode === 'Ejecutado' && (
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">
-              Ejecuciones ({ejecuciones.length})
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">
+                Ejecuciones ({ejecuciones.length})
+              </p>
+              <button
+                onClick={() => {
+                  const ctx = parseCellTitle(title);
+                  const firstEjec = ejecuciones[0];
+                  const entityName = ctx.entityName || firstEjec?.entityName || '';
+                  const entityId = (ctx.entityName
+                    ? ejecuciones.find(e => e.entityName === ctx.entityName)?.entityId
+                    : firstEjec?.entityId) || '';
+                  const entityType = (ctx.entityName
+                    ? ejecuciones.find(e => e.entityName === ctx.entityName)?.entityType
+                    : firstEjec?.entityType) || '';
+                  onNavigate({
+                    type: 'entity',
+                    entity: 'ejecucion',
+                    mode: 'create',
+                    defaults: {
+                      tipo,
+                      projectName: ctx.project || firstEjec?.projectName || '',
+                      projectId: firstEjec?.projectId || '',
+                      entityName,
+                      entityId,
+                      entityType,
+                      montoEjecutado: ejecutado ? String(ejecutado) : '',
+                    },
+                  });
+                }}
+                className="flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm px-3 py-1.5 rounded-lg transition-all hover:shadow-md"
+              >
+                <Plus size={13} /> Nueva
+              </button>
+            </div>
             {ejecuciones.length === 0 ? (
               <p className="text-xs text-slate-400 italic">No hay ejecuciones</p>
             ) : (

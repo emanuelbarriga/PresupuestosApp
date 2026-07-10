@@ -199,16 +199,28 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
   };
 
   /** Open EntityList for a single tercero sub-row (single project, single tercero) */
-  const handleTerceroSubRowClick = (row: any, tercero: any, terceroTipo: TransactionType) => {
+  const handleTerceroSubRowClick = (row: any, tercero: any, terceroTipo: TransactionType, month?: Month) => {
     const allBudgets: Budget[] = [];
     const allEjecuciones: Ejecucion[] = [];
-    for (const m of visibleMonths) {
-      if (tercero.budgetsPorMes?.[m]) allBudgets.push(...tercero.budgetsPorMes[m]);
-      if (tercero.ejecucionesPorMes?.[m]) allEjecuciones.push(...tercero.ejecucionesPorMes[m]);
+    if (month) {
+      // Cell click → only that month's data
+      if (tercero.budgetsPorMes?.[month]) allBudgets.push(...tercero.budgetsPorMes[month]);
+      if (tercero.ejecucionesPorMes?.[month]) allEjecuciones.push(...tercero.ejecucionesPorMes[month]);
+    } else {
+      // Name or total click → all visible months
+      for (const m of visibleMonths) {
+        if (tercero.budgetsPorMes?.[m]) allBudgets.push(...tercero.budgetsPorMes[m]);
+        if (tercero.ejecucionesPorMes?.[m]) allEjecuciones.push(...tercero.ejecucionesPorMes[m]);
+      }
     }
+    const title = month
+      ? `${row.proyecto} / ${month} / ${tercero.entityName}`
+      : `${row.proyecto} / ${tercero.entityName}`;
     onCellClick({
-      title: `${row.proyecto} / ${tercero.entityName}`,
-      subtitle: `${mode} de ${terceroTipo}s`,
+      title,
+      subtitle: month
+        ? `${mode} de ${terceroTipo}s — ${month}`
+        : `${mode} de ${terceroTipo}s`,
       formula: `Detalle de ${tercero.entityName} en ${row.proyecto}`,
       budgets: allBudgets,
       ejecuciones: allEjecuciones,
@@ -283,7 +295,7 @@ interface MatrixProps {
   year: number;
   onCellClick: (data: SidepanelData) => void;
   onProjectClick?: (projectId: string, projectName: string, year?: number, tipo?: TransactionType, mode?: 'Presupuestado' | 'Ejecutado') => void;
-  onTerceroSubRowClick?: (row: any, tercero: any, tipo: TransactionType) => void;
+  onTerceroSubRowClick?: (row: any, tercero: any, tipo: TransactionType, month?: Month) => void;
   onEmptyCellClick?: (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string, value?: number) => void;
   onReportTotals?: (totals: { presupuestado: number; ejecutado: number }) => void;
   visibleMonths: Month[];
@@ -776,7 +788,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                                 } else if (isZero) {
                                   onEmptyCellClick?.(year, row.projectId, row.proyecto, m, tipo, mode, t.entityId, t.entityName, t.entityType);
                                 } else {
-                                  onTerceroSubRowClick?.(row, t, tipo);
+                                  onTerceroSubRowClick?.(row, t, tipo, m);
                                 }
                               }}>
                               {isZero && !showGrayPresupuestado ? '-' : formatCurrency(showGrayPresupuestado ? presupuestado : val)}
