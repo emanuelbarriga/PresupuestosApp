@@ -9,8 +9,9 @@ import { parseMonto } from '@/lib/parsers/strategies/bancolombia';
 // summary and the legal disclaimer) and then locate transaction rows by their
 // "DD-MM-YYYY OFICINA" anchor, wherever it appears in the text.
 
-// Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
-const NUM = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
+// Combined number pattern matching en-US ("1,478.29"), es-CO ("1.478,29"),
+// and bare decimals like ".83" (Bancoomeva omits the leading 0 for amounts < 1 peso).
+const NUM = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))|\\.\\d{2}";
 
 // Repeats verbatim on every page — strip entirely (dotall so it spans the
 // embedded newlines between page blocks in the extracted text).
