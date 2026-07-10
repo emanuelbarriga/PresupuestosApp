@@ -980,6 +980,7 @@ export async function deleteMemberFromCompany(companyId: string, memberId: strin
   await deleteDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId));
 }
 
+/** @deprecated Use PATCH /api/companies/manage-member (action: 'block') instead. */
 export async function blockMember(companyId: string, memberId: string, blocked: boolean): Promise<void> {
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { blocked });
 }
@@ -1051,6 +1052,7 @@ export async function updateInvitation(
   await updateDoc(doc(db, INVITATIONS_COLLECTION, invitationId), data);
 }
 
+/** @deprecated Use PATCH /api/companies/manage-member (action: 'update-role') instead. */
 export async function updateMemberRole(
   companyId: string,
   memberId: string,
@@ -1059,6 +1061,7 @@ export async function updateMemberRole(
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, 'members', memberId), { role });
 }
 
+/** @deprecated Use PATCH /api/companies/manage-member (action: 'add') instead. */
 export async function addMemberToCompany(
   companyId: string,
   memberId: string,
