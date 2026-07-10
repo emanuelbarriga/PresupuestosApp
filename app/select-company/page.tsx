@@ -10,7 +10,7 @@ import type { Company, Invitacion } from '@/lib/types';
 import { Building2 } from 'lucide-react';
 
 export default function SelectCompanyPage() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, signOut, needsAssignment } = useAuth();
   const router = useRouter();
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -29,6 +29,13 @@ export default function SelectCompanyPage() {
       router.replace('/login');
     }
   }, [user, authLoading, router]);
+
+  // Redirect if user is pending assignment
+  useEffect(() => {
+    if (!authLoading && needsAssignment) {
+      router.replace('/pending-approval');
+    }
+  }, [needsAssignment, authLoading, router]);
 
   // Real-time subscriptions
   useEffect(() => {
@@ -192,9 +199,9 @@ export default function SelectCompanyPage() {
                       className="bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center justify-between"
                     >
                       <div>
-                        <p className="text-sm font-bold text-slate-800">{inv.companyName}</p>
+                        <p className="text-sm font-bold text-slate-800">{inv.email}</p>
                         <p className="text-[11px] text-slate-400">
-                          Colaborador · {inv.companyId}
+                          Invitación pendiente
                         </p>
                       </div>
                       <button

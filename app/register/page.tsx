@@ -24,7 +24,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteId = searchParams.get('invite');
-  const [inviteInfo, setInviteInfo] = useState<{ companyName: string; expiresAt: string; expired: boolean; email: string } | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<{ expiresAt: string; expired: boolean; email: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,8 +39,7 @@ function RegisterForm() {
       const data = snap.data();
       const expiresAt = data.expiresAt ?? '';
       const expired = expiresAt ? new Date(expiresAt).getTime() < Date.now() : false;
-      setInviteInfo({ companyName: data.companyName ?? '', expiresAt, expired, email: data.email ?? '' });
-      if (data.email && !email) setEmail(data.email);
+      setInviteInfo({ expiresAt, expired, email: data.email ?? '' });
     }).catch(() => {});
   }, [inviteId]);
 
@@ -62,7 +61,7 @@ function RegisterForm() {
       };
       acceptInvite();
     }
-    router.replace('/select-company');
+    router.replace('/pending-approval');
   }, [user, authLoading, router, inviteId, inviteInfo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,6 +75,11 @@ function RegisterForm() {
 
     if (password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    if (inviteInfo && email.toLowerCase() !== inviteInfo.email.toLowerCase()) {
+      setError('El correo ingresado no coincide con el correo invitado');
       return;
     }
 
@@ -94,10 +98,10 @@ function RegisterForm() {
             });
           }
         } catch {
-          /* ignore — user can still use the app, invite can be accepted later */
+          /* ignore — accept-invitation can be retried from select-company */
         }
       }
-      router.push('/select-company');
+      router.push('/pending-approval');
     } catch (err) {
       setError(mapError(err));
     } finally {
@@ -120,7 +124,7 @@ function RegisterForm() {
         <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700">
           <p className="text-xs font-bold">Invitación para otro usuario</p>
           <p className="text-[11px] text-amber-600 mt-1">
-            Esta invitación es para <strong>{inviteInfo.email}</strong> a <strong>{inviteInfo.companyName}</strong>.
+            Esta invitación es para <strong>{inviteInfo.email}</strong>.
             {inviteInfo.expiresAt && <> Caduca el {new Date(inviteInfo.expiresAt).toLocaleDateString('es-CO')}.</>}
           </p>
         </div>
@@ -128,7 +132,7 @@ function RegisterForm() {
         <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-700">
           <p className="text-xs font-bold flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">✓</span>
-            Fuiste invitado a <strong>{inviteInfo.companyName}</strong>
+            Fuiste invitado a la plataforma
           </p>
           <p className="text-[11px] text-emerald-600 mt-1">
             {inviteInfo.expiresAt && (

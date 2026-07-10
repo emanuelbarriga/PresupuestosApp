@@ -11,11 +11,14 @@ import {
   User,
 } from 'firebase/auth';
 import { auth } from '@/lib/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   error: string | null;
+  needsAssignment: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -30,10 +33,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true); // true until onAuthStateChanged fires
   const [error, setError] = useState<string | null>(null);
+  const [needsAssignment, setNeedsAssignment] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const userData = userDoc.data();
+          setNeedsAssignment(userData?.pendingAssignment === true);
+        } catch {
+          setNeedsAssignment(false);
+        }
+      } else {
+        setNeedsAssignment(false);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -80,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signInWithGoogle: signInWithGoogleFn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, error, needsAssignment, signIn, signUp, signInWithGoogle: signInWithGoogleFn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
