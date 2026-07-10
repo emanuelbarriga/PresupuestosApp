@@ -41,6 +41,25 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
   const [filterMontoMax, setFilterMontoMax] = useState('');
   const [filterEjecutado, setFilterEjecutado] = useState(''); // '' | 'si' | 'no'
 
+  // Sorting
+  type SortKey = 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo';
+  const [sortKey, setSortKey] = useState<SortKey>('fecha');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
+    if (sortKey !== columnKey) return <span className="ml-1 text-slate-300">↕</span>;
+    return <span className="ml-1 text-indigo-500">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   // ── Subscriptions ──
 
   // Cuentas bancarias
@@ -219,11 +238,17 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
 
   const sortedMovimientos = useMemo(() => {
     return [...movimientos].sort((a, b) => {
-      const cmp = (a.ordinal ?? 0) - (b.ordinal ?? 0) || a.fecha.localeCompare(b.fecha);
-      // Individual: oldest first. Todos: newest first.
-      return viewAllMode ? -cmp : cmp;
+      let cmp = 0;
+      switch (sortKey) {
+        case 'fecha':       cmp = a.fecha.localeCompare(b.fecha); break;
+        case 'descripcion': cmp = a.descripcion.localeCompare(b.descripcion); break;
+        case 'debito':      cmp = (a.debito ?? 0) - (b.debito ?? 0); break;
+        case 'credito':     cmp = (a.credito ?? 0) - (b.credito ?? 0); break;
+        case 'saldo':       cmp = a.saldo - b.saldo; break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [movimientos, viewAllMode]);
+  }, [movimientos, sortKey, sortDir]);
 
   const filteredMovimientos = useMemo(() => {
     let data = sortedMovimientos;
@@ -826,11 +851,21 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
                           : <Square size={14} />}
                       </button>
                     </th>
-                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
-                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Descripción</th>
-                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap">Débito</th>
-                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap">Crédito</th>
-                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right">Saldo</th>
+                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleSort('fecha')}>
+                      Fecha<SortIcon columnKey="fecha" />
+                    </th>
+                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleSort('descripcion')}>
+                      Descripción<SortIcon columnKey="descripcion" />
+                    </th>
+                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleSort('debito')}>
+                      Débito<SortIcon columnKey="debito" />
+                    </th>
+                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleSort('credito')}>
+                      Crédito<SortIcon columnKey="credito" />
+                    </th>
+                    <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleSort('saldo')}>
+                      Saldo<SortIcon columnKey="saldo" />
+                    </th>
                     <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-28">Estado</th>
                     <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-16">Acción</th>
                   </tr>
