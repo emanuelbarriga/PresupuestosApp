@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Banco, Month, MovimientoBancarioInput } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Search } from 'lucide-react';
+import clsx from 'clsx';
 
 export interface ExtractoParseHeader {
   mes: Month | '';
@@ -74,6 +75,7 @@ export function ExtractoParseModal({
   if (saving === false && savingRef.current) savingRef.current = false;
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [localHeader, setLocalHeader] = useState<ExtractoParseHeader | null>(header);
+  const [modalSearch, setModalSearch] = useState('');
   const [editMovimientos, setEditMovimientos] = useState<MovimientoBancarioInput[]>(() =>
     movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })),
   );
@@ -89,7 +91,7 @@ export function ExtractoParseModal({
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (!open) setCorrigiendo(false);
+    if (!open) { setCorrigiendo(false); setModalSearch(''); }
   }
 
   // Sync movimientos → editMovimientos once per modal session:
@@ -100,6 +102,18 @@ export function ExtractoParseModal({
   }
   // Reset syncedRef when modal closes
   if (!open && syncedRef.current) syncedRef.current = false;
+
+  const displayMovimientos = corrigiendo ? editMovimientos : movimientos;
+
+  const filteredMovimientos = useMemo(() => {
+    if (!modalSearch.trim()) return displayMovimientos;
+    const q = modalSearch.toLowerCase();
+    return displayMovimientos.filter(m =>
+      m.descripcion.toLowerCase().includes(q) ||
+      (m.debito != null && String(Math.round(m.debito)).includes(q)) ||
+      (m.credito != null && String(Math.round(m.credito)).includes(q))
+    );
+  }, [displayMovimientos, modalSearch]);
 
   const updateMovimiento = (ordinal: number, field: 'fecha' | 'descripcion' | 'debito' | 'credito' | 'saldo', rawValue: string) => {
     setEditMovimientos(prev => prev.map(m => {
@@ -282,9 +296,22 @@ export function ExtractoParseModal({
                   </HeaderField>
                 </div>
 
+                {/* Search filter */}
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input type="text" value={modalSearch} onChange={e => setModalSearch(e.target.value)}
+                    placeholder="Filtrar por descripción, débito o crédito..."
+                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-[11px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-400" />
+                  {modalSearch && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
+                      {filteredMovimientos.length} resultados
+                    </span>
+                  )}
+                </div>
+
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <PreviewMovimientosTable
-                    movimientos={corrigiendo ? editMovimientos : movimientos}
+                    movimientos={filteredMovimientos}
                     editable={corrigiendo}
                     onEdit={corrigiendo ? updateMovimiento : undefined}
                     onDelete={corrigiendo ? handleDeleteMovimiento : undefined}
