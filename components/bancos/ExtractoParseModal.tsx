@@ -76,6 +76,8 @@ export function ExtractoParseModal({
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [localHeader, setLocalHeader] = useState<ExtractoParseHeader | null>(header);
   const [modalSearch, setModalSearch] = useState('');
+  const [pdfSearch, setPdfSearch] = useState('');
+  const pdfSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [editMovimientos, setEditMovimientos] = useState<MovimientoBancarioInput[]>(() =>
     movimientos.map((m, i) => ({ ...m, ordinal: m.ordinal ?? i + 1 })),
   );
@@ -321,12 +323,40 @@ export function ExtractoParseModal({
             )}
           </div>
 
-          {/* Right pane: PDF preview */}
-          <div className="w-1/2 bg-slate-50 flex items-center justify-center">
+          {/* Right pane: PDF preview with text search */}
+          <div className="w-1/2 bg-slate-50 flex flex-col">
             {previewUrl ? (
-              <iframe src={previewUrl} title="Vista previa del PDF" className="w-full h-full" />
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0">
+                  <Search size={12} className="text-slate-400 shrink-0" />
+                  <input type="text" value={pdfSearch}
+                    onChange={e => {
+                      setPdfSearch(e.target.value);
+                      clearTimeout(pdfSearchTimer.current);
+                      pdfSearchTimer.current = setTimeout(() => {
+                        // Reload embed with search fragment (Chrome PDF viewer)
+                        const el = document.querySelector<HTMLElement>('[data-pdf-embed]');
+                        if (el) {
+                          const base = previewUrl!.split('#')[0];
+                          el.setAttribute('src', e.target.value ? `${base}#search=${encodeURIComponent(e.target.value)}` : base);
+                        }
+                      }, 400);
+                    }}
+                    placeholder="Buscar texto en el PDF..."
+                    className="flex-1 border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:border-indigo-500 outline-none placeholder:text-slate-400 bg-white" />
+                  {pdfSearch && (
+                    <button onClick={() => { setPdfSearch(''); clearTimeout(pdfSearchTimer.current); const el = document.querySelector<HTMLElement>('[data-pdf-embed]'); if (el) el.setAttribute('src', previewUrl!.split('#')[0]); }}
+                      className="text-slate-400 hover:text-slate-600 text-[11px] font-medium shrink-0">×</button>
+                  )}
+                </div>
+                <div className="flex-1 flex items-center justify-center">
+                  <embed data-pdf-embed src={previewUrl} type="application/pdf" className="w-full h-full" />
+                </div>
+              </>
             ) : (
-              <p className="text-xs text-slate-400">Sin vista previa</p>
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-xs text-slate-400">Sin vista previa</p>
+              </div>
             )}
           </div>
         </div>
