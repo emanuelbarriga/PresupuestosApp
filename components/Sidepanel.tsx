@@ -12,6 +12,8 @@ import { ProjectEntity } from '@/components/entities/project/ProjectEntity';
 import { TerceroEntity } from '@/components/entities/tercero/TerceroEntity';
 import { CuentaEntity } from '@/components/entities/cuenta/CuentaEntity';
 import { ExtractoEntity } from '@/components/entities/extracto/ExtractoEntity';
+import { MovimientoEntity } from '@/components/entities/movimiento/MovimientoEntity';
+import { ConvertirMovimientosEntity } from '@/components/entities/convertir-movimientos/ConvertirMovimientosEntity';
 import { SettingsEntity } from '@/components/entities/settings/SettingsEntity';
 import { InvitacionEntity } from '@/components/entities/invitacion/InvitacionEntity';
 import { ColaboradorEntity } from '@/components/entities/colaborador/ColaboradorEntity';
@@ -85,6 +87,10 @@ function renderEntityScreen(
       return <CuentaEntity key={key} {...entityProps} />;
     case 'extracto':
       return <ExtractoEntity key={key} {...entityProps} />;
+    case 'movimiento':
+      return <MovimientoEntity key={key} {...entityProps} />;
+    case 'convertir-movimientos':
+      return <ConvertirMovimientosEntity key={key} {...entityProps} />;
     case 'settings':
       return <SettingsEntity key={key} {...entityProps} />;
     case 'invitacion':

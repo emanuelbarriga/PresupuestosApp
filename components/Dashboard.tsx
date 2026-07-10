@@ -340,8 +340,12 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
 
     const getKey = (projectId: string, projectName: string) => projectId || projectName || 'Sin proyecto';
 
-    // Pre-populate with projects (skip soloEgresos for Ingresos matrix)
-    (allProjects || []).filter(p => tipo === 'egreso' || !p.soloEgresos).forEach(p => {
+    // Pre-populate with projects (skip soloEgresos for Ingresos, soloIngresos for Egresos)
+    (allProjects || []).filter(p => {
+      if (p.soloEgresos && tipo !== 'egreso') return false;
+      if (p.soloIngresos && tipo !== 'ingreso') return false;
+      return true;
+    }).forEach(p => {
       const key = getKey(p.id, p.name);
       if (!projectsMap.has(key)) {
         const emptyMonth = () => Object.fromEntries(MONTHS.map(m => [m, 0])) as Record<Month, number>;

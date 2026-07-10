@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto } from '@/lib/firestore';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText } from 'lucide-react';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada } from '@/lib/firestore';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
 import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
@@ -1342,6 +1342,16 @@ export function Datos({
                             >
                               <td className="p-3 font-semibold text-slate-700">
                                 <span className="inline-block mr-2 text-slate-400 text-[10px]">{isExpanded ? '▼' : '▶'}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCuentaPredeterminada(companyId, cuenta.id).catch(() => toast.error('Error al establecer cuenta predeterminada'));
+                                  }}
+                                  className="mr-1.5 align-middle transition-colors"
+                                  title={cuenta.predeterminada ? 'Cuenta predeterminada' : 'Establecer como predeterminada'}
+                                >
+                                  <Star size={13} className={cuenta.predeterminada ? 'fill-amber-400 text-amber-400' : 'text-slate-300 hover:text-amber-400'} />
+                                </button>
                                 {cuenta.nombre}
                               </td>
                               <td className="p-3 text-slate-600">{cuenta.banco}</td>

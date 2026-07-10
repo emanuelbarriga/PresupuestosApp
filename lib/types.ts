@@ -73,6 +73,7 @@ export interface Project {
   clientName: string;
   estado: string;
   soloEgresos?: boolean;      // Si true, solo aparece en EGRESOS del Dashboard
+  soloIngresos?: boolean;     // Si true, solo aparece en INGRESOS del Dashboard
   orden?: number;             // Orden manual definido por el usuario (menor primero)
 }
 
@@ -152,6 +153,8 @@ export interface MovimientoBancarioInput {
   /** Por qué falló la reconciliación (solo en memoria, no se persiste a Firestore) */
   revisionMotivo?: string;
   posibleDuplicado?: boolean;
+  /** Marca si este movimiento ya fue convertido a ejecución */
+  convertido?: boolean;
 }
 
 export interface MovimientoBancario extends MovimientoBancarioInput {
@@ -170,6 +173,7 @@ export interface CuentaBancaria {
   moneda: string;
   saldoInicial: number;
   saldoActual: number;
+  predeterminada?: boolean;
 }
 
 export interface ExtractoBancario {
@@ -271,8 +275,8 @@ export type ActiveForm =
 
 export type EntityType =
   | 'budget' | 'ejecucion' | 'project' | 'tercero'
-  | 'cuenta' | 'extracto' | 'settings' | 'invitacion'
-  | 'colaborador' | 'compania';
+  | 'cuenta' | 'extracto' | 'movimiento' | 'convertir-movimientos'
+  | 'settings' | 'invitacion' | 'colaborador' | 'compania';
 
 // NavScreen — entity+mode replaces data/view/form dispatch.
 // Entity-list variant carries dashboard cell click data for EntityList rendering.

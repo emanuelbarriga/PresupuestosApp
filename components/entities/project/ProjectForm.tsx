@@ -18,6 +18,7 @@ export interface ProjectFormData {
   clientName: string;
   estado: string;
   soloEgresos: string;
+  soloIngresos: string;
 }
 
 interface ProjectFormProps {
@@ -57,6 +58,7 @@ export function ProjectForm({
         clientName: String(r.clientName ?? ''),
         estado: String(r.estado ?? ''),
         soloEgresos: String(r.soloEgresos === true ? 'true' : ''),
+        soloIngresos: String(r.soloIngresos === true ? 'true' : ''),
       };
     }
     const defs = defaults || {};
@@ -70,6 +72,7 @@ export function ProjectForm({
       clientName: defs.clientName ?? '',
       estado: defs.estado ?? '',
       soloEgresos: defs.soloEgresos ?? '',
+      soloIngresos: defs.soloIngresos ?? '',
     };
   });
 
@@ -110,6 +113,7 @@ export function ProjectForm({
     if (data.tipoProyectos === '__custom__') data.tipoProyectos = '';
     if (data.unidades === '__custom__') data.unidades = '';
     data.soloEgresos = data.soloEgresos === 'true';
+    data.soloIngresos = data.soloIngresos === 'true';
     await onFormSubmit(data);
   };
 
@@ -178,6 +182,12 @@ export function ProjectForm({
           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
         <span className="text-xs font-medium text-slate-600 select-none">Solo egresos</span>
         <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Ingresos)</span>
+      </label>
+      <label className="flex items-center gap-2.5 cursor-pointer py-1">
+        <input type="checkbox" checked={fields.soloIngresos === 'true'} onChange={e => set('soloIngresos', e.target.checked ? 'true' : 'false')}
+          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+        <span className="text-xs font-medium text-slate-600 select-none">Solo ingresos</span>
+        <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Egresos)</span>
       </label>
       <div className="pt-2">
         <button onClick={handleSubmit} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg py-2.5 text-xs font-bold transition-colors">

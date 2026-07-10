@@ -29,6 +29,7 @@ import {
   updateExtracto,
   batchAddMovimientos,
   updateExtractoStatus,
+  updateMovimiento,
   deleteBudget, deleteEjecucion,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
@@ -37,6 +38,7 @@ import { Datos } from '@/components/Datos';
 import { Construction } from '@/components/Construction';
 import { Configuracion } from '@/components/Configuracion';
 import { EstadoResultados } from '@/components/EstadoResultados';
+import { Extractos } from '@/components/Extractos';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
 
@@ -326,8 +328,15 @@ export default function CompanyPage({ params }: Props) {
         case 'ejecucion': {
           const preGeneratedId = data._preGeneratedId as string | undefined;
           const budgetLinks = data._budgetLinks as Array<{ budgetId: string; monto: number }> | undefined;
+          // Mark movimiento as converted (from Extractos flow)
+          const movCuentaId = data._cuentaId as string | undefined;
+          const movExtractoId = data._extractoId as string | undefined;
+          const movMovimientoId = data._movimientoId as string | undefined;
           delete data._preGeneratedId;
           delete data._budgetLinks;
+          delete data._cuentaId;
+          delete data._extractoId;
+          delete data._movimientoId;
           // Use writeBatch for atomic creation of ejecucion + budgetLinks + budget totals
           const batch = writeBatch(db);
           const ejecucionRef = preGeneratedId
@@ -352,6 +361,10 @@ export default function CompanyPage({ params }: Props) {
             }
           }
           await batch.commit();
+          // Mark movimiento as converted and store ejecucion ID
+          if (movCuentaId && movExtractoId && movMovimientoId) {
+            updateMovimiento(companyId, movCuentaId, movExtractoId, movMovimientoId, { convertido: true, _ejecucionId: ejecucionRef.id }).catch((err) => console.error('[page] updateMovimiento falló:', err));
+          }
           break;
         }
         case 'project':
@@ -490,7 +503,10 @@ export default function CompanyPage({ params }: Props) {
             {activeView === 'EstadoResultados' && (
               <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
             )}
-            {['Proyectos', 'Proveedores', 'Clientes', 'Extractos'].includes(activeView) && (
+            {activeView === 'Extractos' && (
+              <Extractos companyId={companyId} onNavigate={(screen) => pushScreen(screen)} />
+            )}
+            {['Proyectos', 'Proveedores', 'Clientes'].includes(activeView) && (
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (

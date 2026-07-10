@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { EntityProps, Project, Tercero, SettingsCategorias } from '@/lib/types';
-import { subscribeCompanySettings, subscribeTerceros, subscribeProjects } from '@/lib/firestore';
+import { subscribeSettings, subscribeTerceros, subscribeProjects } from '@/lib/firestore';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ProjectView } from './ProjectView';
 import { ProjectForm } from './ProjectForm';
@@ -16,7 +16,7 @@ export function ProjectEntity({ mode, companyId, record, defaults, year, filterT
   useEffect(() => {
     const unsubs = [
       subscribeProjects(companyId, setProjects, () => {}),
-      subscribeCompanySettings(companyId, setSettingsData),
+      subscribeSettings(setSettingsData, () => {}),
       subscribeTerceros(setTerceros),
     ];
     return () => unsubs.forEach(u => u());

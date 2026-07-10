@@ -384,6 +384,27 @@ export async function updateEjecucion(companyId: string, ejecucionId: string, da
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId), { ...data, updatedAt: serverTimestamp() });
 }
 
+export async function getEjecucion(companyId: string, ejecucionId: string): Promise<Ejecucion | null> {
+  const snap = await getDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return {
+    id: snap.id,
+    descripcion: d.descripcion ?? '',
+    projectId: d.projectId ?? '',
+    projectName: d.projectName ?? '',
+    entityId: d.entityId ?? '',
+    entityName: d.entityName ?? '',
+    entityType: d.entityType ?? '',
+    tipo: d.tipo ?? 'ingreso',
+    montoEjecutado: d.montoEjecutado ?? 0,
+    fechaEjecutado: d.fechaEjecutado ?? '',
+    cuentaId: d.cuentaId ?? undefined,
+    cuentaName: d.cuentaName ?? undefined,
+    comprobantes: Array.isArray(d.comprobantes) ? d.comprobantes : [],
+  } as Ejecucion;
+}
+
 // ── Budget Links (N:M junction) ──
 
 export function subscribeBudgetLinks(
@@ -615,6 +636,29 @@ export async function updateCuentaBancaria(
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, cuentaId), { ...data, updatedAt: serverTimestamp() });
 }
 
+/**
+ * Mark one bank account as default (predeterminada). Unsets any other default
+ * in the same company atomically via a single batch write.
+ */
+export async function setCuentaPredeterminada(
+  companyId: string,
+  cuentaId: string,
+): Promise<void> {
+  const cuentasRef = collection(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION);
+  const snapshot = await getDocs(cuentasRef);
+  const batch = writeBatch(db);
+
+  for (const docSnap of snapshot.docs) {
+    const isTarget = docSnap.id === cuentaId;
+    // Only write if the field needs to change
+    const current = docSnap.data().predeterminada;
+    if (current === isTarget) continue;
+    batch.update(docSnap.ref, { predeterminada: isTarget, updatedAt: serverTimestamp() });
+  }
+
+  await batch.commit();
+}
+
 export async function updateExtracto(
   companyId: string,
   accountId: string,
@@ -690,6 +734,19 @@ export async function deleteMovimiento(
 ): Promise<void> {
   await deleteDoc(
     doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION, movimientoId),
+  );
+}
+
+export async function updateMovimiento(
+  companyId: string,
+  accountId: string,
+  extractoId: string,
+  movimientoId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await updateDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, CUENTAS_BANCARIAS_COLLECTION, accountId, EXTRACTOS_COLLECTION, extractoId, MOVIMIENTOS_COLLECTION, movimientoId),
+    { ...data, updatedAt: serverTimestamp() },
   );
 }
 
