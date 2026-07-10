@@ -88,12 +88,55 @@ export async function POST(request: NextRequest) {
       acceptedBy: decoded.uid,
     });
 
+    // ── Batch accept additional pending invitations for the same email ──
+    const pendingSnap = await adminDb
+      .collection('invitations')
+      .where('email', '==', invitation.email)
+      .where('status', '==', 'pendiente')
+      .get();
+
+    const additionalCompanies: { companyId: string; companyName: string }[] = [];
+
+    for (const doc of pendingSnap.docs) {
+      if (doc.id === invitationId) continue;
+      const inv = doc.data();
+
+      // Skip expired
+      if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) continue;
+
+      // Membership with merge to avoid overwriting
+      batch.set(
+        adminDb.collection('companies').doc(inv.companyId).collection('members').doc(decoded.uid),
+        {
+          id: decoded.uid,
+          email: userEmail,
+          role: inv.role ?? 'colaborador',
+          joinedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+
+      // Mark invitation as accepted
+      batch.update(doc.ref, {
+        status: 'aceptada',
+        acceptedAt: new Date().toISOString(),
+        acceptedBy: decoded.uid,
+      });
+
+      additionalCompanies.push({
+        companyId: inv.companyId,
+        companyName: inv.companyName ?? '',
+      });
+    }
+
     await batch.commit();
 
     return NextResponse.json(
       {
-        companyId: invitation.companyId,
-        companyName: invitation.companyName ?? '',
+        companies: [
+          { companyId: invitation.companyId, companyName: invitation.companyName ?? '' },
+          ...additionalCompanies,
+        ],
         success: true,
       },
       { status: 200 },

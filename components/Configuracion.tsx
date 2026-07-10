@@ -17,6 +17,16 @@ import {
   Shield, Mail, Copy, Check, UserPlus, Clock, Trash2, Pencil, Ban, X,
 } from 'lucide-react';
 
+// ── Helper: convert unknown to millis (ISO string or Firestore Timestamp) ──
+
+export function toMillis(v: unknown): number {
+  if (!v) return 0;
+  if (typeof v === 'object' && v !== null && 'seconds' in v) {
+    return (v as { seconds: number; nanoseconds?: number }).seconds * 1000;
+  }
+  return new Date(v as string).getTime();
+}
+
 // ── Aggregated types ──
 
 interface AggregatedUser {
@@ -150,7 +160,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
         result.push({ ...inv, companyName: data.company.name });
       }
     }
-    return result.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    return result.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
   }, [companyDataMap]);
 
   const adminCompanyCount = Object.values(companyDataMap).filter((d) => d.isAdmin).length;
@@ -176,7 +186,8 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
 
   const getInvitationStatus = (inv: Invitacion): 'pendiente' | 'aceptada' | 'expired' => {
     if (inv.status === 'aceptada') return 'aceptada';
-    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) return 'expired';
+    const exp = toMillis(inv.expiresAt);
+    if (exp > 0 && exp < Date.now()) return 'expired';
     return 'pendiente';
   };
 
@@ -568,7 +579,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
                             {status === 'pendiente' && inv.expiresAt && (
                               <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
                                 <Clock size={10} />
-                                {Math.ceil((new Date(inv.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))}d
+                                {Math.ceil((toMillis(inv.expiresAt) - Date.now()) / (24 * 60 * 60 * 1000))}d
                               </span>
                             )}
                           </div>

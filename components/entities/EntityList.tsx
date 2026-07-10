@@ -25,6 +25,15 @@ const formatCurrency = (val: number) =>
  * Col total:         title = "Total Febrero"            → { month: "Febrero" }
  * Grand total:       title = "TOTAL PERIODO VISIBLE"    → {}
  */
+/** Convert month name ("Febrero") to YYYY-MM-DD ("2026-02-15") using the first record's year or current year */
+function monthNameToDate(monthName: string, fallbackYear?: string): string {
+  const idx = MONTHS.indexOf(monthName as typeof MONTHS[number]);
+  if (idx === -1) return '';
+  const year = fallbackYear || String(new Date().getFullYear());
+  const m = String(idx + 1).padStart(2, '0');
+  return `${year}-${m}-15`;
+}
+
 function parseCellTitle(title: string): { project?: string; month?: string; entityName?: string } {
   if (!title.includes(' / ')) return {};
   const parts = title.split(' / ');
@@ -131,6 +140,11 @@ export function EntityList({
                   const entityType = (ctx.entityName
                     ? budgets.find(b => b.entityName === ctx.entityName)?.entityType
                     : firstBudget?.entityType) || '';
+                  // Derive fecha from month context or existing budget
+                  const budgetFallbackYear = firstBudget?.fechaPresupuestado?.split('-')[0];
+                  const budgetFecha = ctx.month
+                    ? monthNameToDate(ctx.month, budgetFallbackYear)
+                    : (firstBudget?.fechaPresupuestado ? firstBudget.fechaPresupuestado + '-15' : '');
                   onNavigate({
                     type: 'entity',
                     entity: 'budget',
@@ -143,7 +157,7 @@ export function EntityList({
                       entityId,
                       entityType,
                       mesPresupuestado: ctx.month || firstBudget?.mesPresupuestado || '',
-                      montoPresupuestado: presupuestado ? String(presupuestado) : '',
+                      fechaEjecutado: budgetFecha,
                     },
                   });
                 }}
@@ -177,6 +191,11 @@ export function EntityList({
                   const entityType = (ctx.entityName
                     ? ejecuciones.find(e => e.entityName === ctx.entityName)?.entityType
                     : firstEjec?.entityType) || '';
+                  // Derive fecha from month context or existing ejecucion
+                  const fallbackYear = firstEjec?.fechaEjecutado?.split('-')[0];
+                  const fechaEjecutado = ctx.month
+                    ? monthNameToDate(ctx.month, fallbackYear)
+                    : firstEjec?.fechaEjecutado || '';
                   onNavigate({
                     type: 'entity',
                     entity: 'ejecucion',
@@ -188,7 +207,7 @@ export function EntityList({
                       entityName,
                       entityId,
                       entityType,
-                      montoEjecutado: ejecutado ? String(ejecutado) : '',
+                      fechaEjecutado,
                     },
                   });
                 }}

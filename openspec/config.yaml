@@ -52,3 +52,10 @@ archived_changes:
     archived_at: 2026-07-01
     summary: Added 37 unit tests for Sidepanel component (8 sub-components), Dashboard data construction, and form logic
     main_spec: openspec/specs/sidepanel-testing/spec.md
+  - name: defensive-dates-configuracion
+    archived_at: 2026-07-10
+    summary: Extracted toMillis helper from aggregatedInvitations.useMemo and applied defensive date handling in getInvitationStatus and days-remaining render. 5/5 tests pass, tsc sin errores nuevos.
+    main_spec: ~
+  - name: batch-accept-invitations
+    archived_at: 2026-07-10
+    summary: Al aceptar una invitación, el endpoint batch-acepta todas las invitaciones pendientes del mismo email en un solo WriteBatch atómico. 4/4 tareas completadas, tsc sin errores nuevos.

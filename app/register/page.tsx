@@ -24,7 +24,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteId = searchParams.get('invite');
-  const [inviteInfo, setInviteInfo] = useState<{ companyName: string; expiresAt: string; expired: boolean } | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<{ companyName: string; expiresAt: string; expired: boolean; email: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,31 +39,31 @@ function RegisterForm() {
       const data = snap.data();
       const expiresAt = data.expiresAt ?? '';
       const expired = expiresAt ? new Date(expiresAt).getTime() < Date.now() : false;
-      setInviteInfo({ companyName: data.companyName ?? '', expiresAt, expired });
+      setInviteInfo({ companyName: data.companyName ?? '', expiresAt, expired, email: data.email ?? '' });
       if (data.email && !email) setEmail(data.email);
     }).catch(() => {});
   }, [inviteId]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      // If there's a pending invite, auto-accept before redirecting
-      if (inviteId && !window.sessionStorage.getItem(`invite-accepted-${inviteId}`)) {
-        const acceptInvite = async () => {
-          try {
-            const token = await user.getIdToken();
-            await fetch('/api/companies/accept-invitation', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ invitationId: inviteId }),
-            });
-            window.sessionStorage.setItem(`invite-accepted-${inviteId}`, 'true');
-          } catch { /* ignore — can accept later */ }
-        };
-        acceptInvite();
-      }
-      router.replace('/select-company');
+    if (authLoading || !user || !inviteId || !inviteInfo) return;
+    // Si el usuario logueado NO es el destinatario, no redirigir ni auto-accept
+    if (user.email?.toLowerCase() !== inviteInfo.email.toLowerCase()) return;
+    if (!window.sessionStorage.getItem(`invite-accepted-${inviteId}`)) {
+      const acceptInvite = async () => {
+        try {
+          const token = await user.getIdToken();
+          await fetch('/api/companies/accept-invitation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ invitationId: inviteId }),
+          });
+          window.sessionStorage.setItem(`invite-accepted-${inviteId}`, 'true');
+        } catch { /* ignore — can accept later */ }
+      };
+      acceptInvite();
     }
-  }, [user, authLoading, router, inviteId]);
+    router.replace('/select-company');
+  }, [user, authLoading, router, inviteId, inviteInfo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +114,14 @@ function RegisterForm() {
           <p className="text-xs font-bold">Esta invitación ha expirado</p>
           <p className="text-[11px] text-red-600 mt-1">
             El enlace de invitación venció el {new Date(inviteInfo.expiresAt).toLocaleDateString('es-CO')}. Pedí un nuevo enlace al administrador.
+          </p>
+        </div>
+      ) : inviteInfo && user && user.email?.toLowerCase() !== inviteInfo.email.toLowerCase() ? (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700">
+          <p className="text-xs font-bold">Invitación para otro usuario</p>
+          <p className="text-[11px] text-amber-600 mt-1">
+            Esta invitación es para <strong>{inviteInfo.email}</strong> a <strong>{inviteInfo.companyName}</strong>.
+            {inviteInfo.expiresAt && <> Caduca el {new Date(inviteInfo.expiresAt).toLocaleDateString('es-CO')}.</>}
           </p>
         </div>
       ) : inviteInfo && (
