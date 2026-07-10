@@ -143,8 +143,12 @@ export class BancoomevaParser implements ExtractoParser {
     let saldoVal = 0;
     let descEndIndex = 0;
 
-    const isNotaCredito = /N\/C\b/i.test(rest);
-    const isNotaDebito = /N\/D\b/i.test(rest);
+    // N/C y N/D pueden aparecer como N/C, N/CNC, N/D, N/DND.
+    // En pdfjs flat mode, el orden de montos depende de qué columna
+    // tiene valor distinto de cero (pdfjs omite $0.00 vacíos y los
+    // reordena). Usamos el prefijo para determinar débito vs crédito.
+    const isNotaCredito = /N\/C/i.test(rest);
+    const isNotaDebito = /N\/D/i.test(rest);
 
     if (numCount >= 3) {
       // Flat (join(' ')) extraction order: [CREDITO, SALDO, DEBITO].
