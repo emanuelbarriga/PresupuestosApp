@@ -66,7 +66,7 @@ describe('parseForPreview', () => {
     const result = await parseForPreview(mockBuffer);
 
     // Verify non-persisting pipeline steps
-    expect(extractPdfTextFromBuffer).toHaveBeenCalledWith(mockBuffer, undefined, 'row-layout');
+    expect(extractPdfTextFromBuffer).toHaveBeenCalledWith(mockBuffer, undefined, 'flat');
     expect(detectarBanco).toHaveBeenCalledWith('bancolombia.com extracto bancario');
     expect(getParser).toHaveBeenCalledWith('Bancolombia');
     expect(reconciliar).toHaveBeenCalledWith(mockMovimientos, 1000000);

@@ -6,7 +6,7 @@ import { Global66Parser } from '@/lib/parsers/strategies/global66';
 
 const BANCOLOMBIA_PATTERN = /bancolombia\.com/i;
 const BANCOOMEVA_PATTERN = /Bancoomeva/i;
-const GLOBAL66_PATTERN = /Movimientos de cuenta en COP/i;
+const GLOBAL66_PATTERN = /Movimientos de cuenta/i;
 const GLOBAL66_COLUMNS = /Fecha.*Descripción.*Movimiento.*Tarjeta.*Débito.*Abono.*Saldo/i;
 
 /**
@@ -18,7 +18,9 @@ const GLOBAL66_COLUMNS = /Fecha.*Descripción.*Movimiento.*Tarjeta.*Débito.*Abo
 export function detectarBanco(texto: string): Banco {
   if (BANCOLOMBIA_PATTERN.test(texto)) return 'Bancolombia';
   if (BANCOOMEVA_PATTERN.test(texto)) return 'Bancoomeva';
-  if (GLOBAL66_PATTERN.test(texto) && GLOBAL66_COLUMNS.test(texto)) return 'Global66';
+  // Global66: "Movimientos de cuenta" ya es suficientemente específico.
+  // El patrón de columnas headers fallaba en algunos PDFs (enero, marzo, abril).
+  if (GLOBAL66_PATTERN.test(texto)) return 'Global66';
 
   return 'No detectado';
 }

@@ -42,7 +42,7 @@ export function ExtractoAddView({
   const [header, setHeader] = useState<ExtractoParseHeader | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoBancarioInput[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const lastBufferRef = useRef<ArrayBuffer | null>(null);
+  const lastBufferRef = useRef<Uint8Array | null>(null);
 
   const resetAll = () => {
     setModalOpen(false);
@@ -64,11 +64,18 @@ export function ExtractoAddView({
 
     try {
       const buffer = await selected.arrayBuffer();
-      const bufferClone = buffer.slice(0);
-      lastBufferRef.current = buffer;
+      // pdfjs TRANSFIERE el ArrayBuffer a un web worker vía postMessage,
+      // lo que DETACHA el buffer. Creamos copias INDEPENDIENTES antes
+      // de que nada toque el buffer original.
+      // - copy1 → para extractPdfTextFromBuffer (inicial), se detachará
+      // - copy2 → para parseForPreview (segundo extract), se detachará
+      // - copy3 → Uint8Array para upload (NUNCA pasa por pdfjs)
+      const copy1 = buffer.slice(0);
+      const copy2 = buffer.slice(0);
+      lastBufferRef.current = new Uint8Array(buffer.slice(0));
 
       const texto = await extractPdfTextFromBuffer(
-        buffer,
+        copy1,
         (current, total) => {
           setProgress({ stage: 'extrayendo', current, total });
         },
@@ -93,7 +100,7 @@ export function ExtractoAddView({
         return;
       }
 
-      const preview = await parseForPreview(bufferClone, bancoDetectado);
+      const preview = await parseForPreview(copy2, bancoDetectado);
 
       setHeader({
         mes: preview.header.mes,
@@ -151,7 +158,10 @@ export function ExtractoAddView({
 
       if (file) {
         const uploadPath = `${companyId}/extractos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const uploadResult = await uploadFile(file, uploadPath);
+        // Usar el buffer ya cargado en memoria en vez del File original
+        // (evita problemas de Blob URL partitioning de Chrome con el objeto File)
+        const pdfBytes = lastBufferRef.current!;
+        const uploadResult = await uploadFile(pdfBytes, uploadPath);
         data.archivo = {
           url: uploadResult.url,
           path: uploadResult.path,

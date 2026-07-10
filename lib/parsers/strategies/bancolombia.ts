@@ -64,7 +64,7 @@ function parseFechaBancolombia(fechaStr: string, range: DateRange): string {
 
 // Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
 // Uses negative lookahead (?!\d) to prevent partial matches (e.g. matching "1.47" inside "1.478,29").
-const NUM_PATTERN = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
+const NUM_PATTERN = "(?:\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))|\\.\\d{2}(?!\\d)|,\\d{2}(?!\\d))";
 
 export function extractSaldos(text: string): { saldoInicial: number; saldoFinal: number } | null {
   // Extraer el bloque RESUMEN entre el encabezado y la tabla de datos.
@@ -196,7 +196,7 @@ export class BancolombiaParser implements ExtractoParser {
     withoutDates = withoutDates.replace(/\s+/g, ' ').trim();
 
     // Extract all numbers (both en-US and es-CO) from the remaining text
-    const numPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d)))/g;
+    const numPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d))|-?\.\d{2}(?!\d)|-?,\d{2}(?!\d))/g;
     const allNumbers: number[] = [];
     let numMatch: RegExpExecArray | null;
     while ((numMatch = numPattern.exec(withoutDates)) !== null) {
@@ -395,7 +395,7 @@ export class BancolombiaParser implements ExtractoParser {
       start: number;
       end: number;
     }
-    const numberPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d)))/g;
+    const numberPattern = /(-?\d[\d,]*(?:\.\d{2}(?!\d))|-?\d[\d.]*(?:,\d{2}(?!\d))|-?\.\d{2}(?!\d)|-?,\d{2}(?!\d))/g;
     const numbers: NumberMatch[] = [];
     let numMatch: RegExpExecArray | null;
 

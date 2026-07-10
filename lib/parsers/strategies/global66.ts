@@ -5,6 +5,10 @@ import { parseMonto } from '@/lib/parsers/strategies/bancolombia';
 // Combined number pattern matching both en-US ("1,478.29") and es-CO ("1.478,29") formats.
 const NUM = "\\d[\\d,]*(?:\\.\\d{2}(?!\\d))|\\d[\\d.]*(?:,\\d{2}(?!\\d))";
 
+// Palabras clave que indican que el monto es un débito (salida de dinero),
+// extraídas del script Python de referencia.
+const DEBIT_KEYWORDS = ['envío', 'costo', 'comisión', 'gmf', 'impuesto', 'iva', 'retiro'];
+
 /**
  * Merge split amounts in Global66 extracted text.
  *
@@ -103,7 +107,11 @@ export class Global66Parser implements ExtractoParser {
 
     const fecha = tsMatch[1];
     const horaOriginal = tsMatch[2];
-    const rest = line.slice(tsMatch[0].length).trim();
+    let rest = line.slice(tsMatch[0].length).trim();
+    // Cortar en "Totales" — la línea de resumen que pdfjs pega al final
+    // del último bloque de transacción (no es una transacción real).
+    const totalesIdx = rest.search(/\bTotales\b/);
+    if (totalesIdx >= 0) rest = rest.slice(0, totalesIdx).trim();
 
     // Find all $amount patterns (after merge, these are complete numbers)
     const amountPattern = new RegExp(`\\$(${NUM})`, 'g');
@@ -138,18 +146,25 @@ export class Global66Parser implements ExtractoParser {
       };
     }
 
-    // 2 amounts: amount + saldo. In Global66 real data, the amount is always
-    // in the Débito column (money leaving the account). Abono credits are rare.
+    // 2 amounts: primer amount + saldo. El primer amount puede ser de la
+    // columna Débito o Abono. Usamos palabras clave en la descripción para
+    // determinar si es débito o crédito (misma lógica que el script Python).
     const firstAmount = parseMonto(amounts[0].value);
 
+    const isDebito = DEBIT_KEYWORDS.some(kw => descripcion.toLowerCase().includes(kw));
+
+    if (isDebito) {
+      return {
+        fecha, horaOriginal, descripcion,
+        debito: firstAmount,
+        saldo, moneda: 'COP', bancoOrigen: this.banco,
+      };
+    }
+
     return {
-      fecha,
-      horaOriginal,
-      descripcion,
-      debito: firstAmount,
-      saldo,
-      moneda: 'COP',
-      bancoOrigen: this.banco,
+      fecha, horaOriginal, descripcion,
+      credito: firstAmount,
+      saldo, moneda: 'COP', bancoOrigen: this.banco,
     };
   }
 

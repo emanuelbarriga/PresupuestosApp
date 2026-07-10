@@ -78,9 +78,12 @@ async function _runPipeline(
     // Step 2: Extract PDF text from the in-memory buffer (no network needed)
     let texto: string;
     try {
-      // Usar row-layout (Y-grouping) para convertir páginas columnares
-      // en texto fila-por-fila. Funciona para todos los bancos.
-      texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
+      // Usar flat mode: une todos los items de cada página con espacios.
+      // Los parsers individuales detectan sus patrones (fechas, OFICINA,
+      // montos $, etc.) independientemente del layout. row-layout rompe
+      // los textos para bancos como Global66 cuyos montos están en
+      // diferentes Y-groups dentro de una misma fila.
+      texto = await extractPdfTextFromBuffer(buffer, undefined, 'flat');
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;
       throw new Error(msg);
@@ -176,8 +179,8 @@ export async function parseForPreview(
   buffer: ArrayBuffer,
   bancoConfirmado?: Banco | null,
 ): Promise<ParsePreviewResult> {
-  // Step 1: Extract PDF text
-  const texto = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
+  // Step 1: Extract PDF text (flat mode — ver comentario en _runPipeline)
+  const texto = await extractPdfTextFromBuffer(buffer, undefined, 'flat');
 
   // Step 2: Detect bank
   const banco = bancoConfirmado ?? detectarBanco(texto);

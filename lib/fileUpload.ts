@@ -44,12 +44,15 @@ export function generateFilePath(
  * Returns the download URL and storage path on success.
  */
 export async function uploadFile(
-  file: File,
+  file: Blob | ArrayBuffer | Uint8Array,
   path: string,
   onProgress?: (progress: number) => void,
 ): Promise<UploadResult> {
   const storageRef = ref(storage, path);
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  // Si no es Blob (File), agregar contentType explícito para que pase
+  // la regla de Storage que requiere application/pdf
+  const metadata = file instanceof Blob ? undefined : { contentType: 'application/pdf' };
+  const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
   return new Promise((resolve, reject) => {
     uploadTask.on(
