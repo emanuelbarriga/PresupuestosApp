@@ -574,6 +574,23 @@ export async function updateTercero(
   await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { ...data, updatedAt: serverTimestamp() });
 }
 
+export async function deleteTercero(terceroId: string): Promise<void> {
+  await deleteDoc(doc(db, TERCEROS_COLLECTION, terceroId));
+}
+
+/**
+ * Check if a tercero has asociada ejecuciones in a company.
+ * Returns the count of ejecuciones referencing this entityId.
+ */
+export async function countEjecucionesByTercero(companyId: string, terceroId: string): Promise<number> {
+  const q = query(
+    collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
+    where('entityId', '==', terceroId),
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
 // ── Cuentas Bancarias ──
 
 export function subscribeCuentasBancarias(

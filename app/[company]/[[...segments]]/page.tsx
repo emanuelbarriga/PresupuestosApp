@@ -30,7 +30,7 @@ import {
   batchAddMovimientos,
   updateExtractoStatus,
   updateMovimiento,
-  deleteBudget, deleteEjecucion,
+  deleteBudget, deleteEjecucion, deleteTercero,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
@@ -39,6 +39,7 @@ import { Construction } from '@/components/Construction';
 import { Configuracion } from '@/components/Configuracion';
 import { EstadoResultados } from '@/components/EstadoResultados';
 import { Extractos } from '@/components/Extractos';
+import { CommandPalette } from '@/components/CommandPalette';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
 
@@ -305,6 +306,14 @@ export default function CompanyPage({ params }: Props) {
     }
   };
 
+  const handleDeleteTercero = async (terceroId: string) => {
+    try {
+      await deleteTercero(terceroId);
+    } catch (err) {
+      toast.error('Error al borrar el tercero. Intentá de nuevo.');
+    }
+  };
+
   const handleTerceroClick = (detail: RecordDetail) => {
     if (isConjunto) return;
     if (detail.type === 'detalle-tercero') {
@@ -498,7 +507,7 @@ export default function CompanyPage({ params }: Props) {
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
                 companyName={companies.find(c => c.id === companyId)?.name}
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord}
-                onDeleteBudget={handleDeleteBudget} onDeleteEjecucion={handleDeleteEjecucion} />
+                onDeleteBudget={handleDeleteBudget} onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero} />
             )}
             {activeView === 'EstadoResultados' && (
               <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
@@ -526,6 +535,7 @@ export default function CompanyPage({ params }: Props) {
             onProjectsChange={setSelectedProjects}
             onSearchChange={setProjectSearch} />
         </main>
+        <CommandPalette onNavigate={(view, tab) => navigateTo(view, tab)} onAddNew={(type, defaults) => handleAddNew(type, defaults)} />
       </div>
   );
 }

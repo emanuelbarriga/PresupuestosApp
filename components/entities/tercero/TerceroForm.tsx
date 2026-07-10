@@ -29,8 +29,11 @@ export function TerceroForm({
   record,
   defaults,
   onFormSubmit,
-  saving,
+  saving: externalSaving,
 }: TerceroFormProps) {
+  const [localSaving, setLocalSaving] = useState(false);
+  const saving = externalSaving || localSaving;
+
   const [fields, setFields] = useState<TerceroFormData>(() => {
     if (mode === 'edit' && record) {
       const r = record as any;
@@ -59,7 +62,13 @@ export function TerceroForm({
   const set = (k: keyof TerceroFormData, v: string) => setFields(prev => ({ ...prev, [k]: v }));
 
   const handleSubmit = async () => {
-    await onFormSubmit({ ...fields });
+    if (saving) return;
+    setLocalSaving(true);
+    try {
+      await onFormSubmit({ ...fields });
+    } finally {
+      setLocalSaving(false);
+    }
   };
 
   return (

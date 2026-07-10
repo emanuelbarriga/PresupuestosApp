@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada } from '@/lib/firestore';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, deleteTercero } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
@@ -93,7 +93,7 @@ const RangeSlider = ({ min, max, values, onChange, formatLabel }: {
 };
 
 export function Datos({
-  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteBudget, onDeleteEjecucion,
+  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteBudget, onDeleteEjecucion, onDeleteTercero: parentOnDeleteTercero,
 }: {
   budgets: Budget[];
   ejecuciones: Ejecucion[];
@@ -106,6 +106,7 @@ export function Datos({
   onEditRecord?: (form: any) => void;
   onDeleteBudget?: (budgetId: string) => void;
   onDeleteEjecucion?: (ejecucionId: string) => void;
+  onDeleteTercero?: (terceroId: string) => void;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Terceros', 'Settings', 'Bancos'];
@@ -769,6 +770,35 @@ export function Datos({
     setCurrentPage(1);
   };
 
+  const handleDeleteTercero = useCallback(async (terceroId: string, terceroName: string) => {
+    // Check for asociada ejecuciones
+    const count = await countEjecucionesByTercero(companyId, terceroId);
+    if (count > 0) {
+      toast.error(`No se puede eliminar "${terceroName}" — tiene ${count} ejecución${count !== 1 ? 'es' : ''} asociada${count !== 1 ? 's' : ''}`);
+      return;
+    }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast((t) => (
+        <div className="text-sm space-y-3">
+          <p className="text-slate-700 font-medium">¿Eliminar tercero &ldquo;{terceroName}&rdquo;?</p>
+          <p className="text-xs text-slate-500">Esta acción no se puede deshacer.</p>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { toast.dismiss(t.id); resolve(false); }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">No</button>
+            <button onClick={() => { toast.dismiss(t.id); resolve(true); }}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">Sí</button>
+          </div>
+        </div>
+      ), { duration: Infinity });
+    });
+    if (!confirmed) return;
+    try {
+      await parentOnDeleteTercero?.(terceroId);
+    } catch {
+      toast.error('Error al eliminar el tercero');
+    }
+  }, [companyId, parentOnDeleteTercero]);
+
   const PaginationControls = ({ totalItems }: { totalItems: number }) => {
     const pages = Math.ceil(totalItems / pageSize) || 1;
     if (totalItems === 0) return null;
@@ -1283,7 +1313,10 @@ export function Datos({
                             {t.tipo === 'cliente' ? 'Cliente' : t.tipo === 'proveedor' ? 'Proveedor' : 'Ambos'}
                           </span>
                         </td>
-                        <ActionCell><EditBtn onClick={() => edit('tercero', t)} /></ActionCell>
+                        <ActionCell>
+                          <EditBtn onClick={() => edit('tercero', t)} />
+                          <DeleteBtn onDelete={() => handleDeleteTercero(t.id, t.name)} />
+                        </ActionCell>
                       </tr>
                     ))}
                   </tbody>
