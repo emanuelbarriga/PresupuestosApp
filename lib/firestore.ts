@@ -941,14 +941,18 @@ export async function createInvitation(invitation: Omit<Invitacion, 'id'>): Prom
   return docRef.id;
 }
 
-export function subscribeCompanyInvitations(
-  companyId: string,
+/**
+ * Subscribe to invitations created by a specific admin.
+ * Replaces the old subscribeCompanyInvitations which relied on companyId.
+ */
+export function subscribeCreatedInvitations(
+  adminUid: string,
   onData: (invitations: Invitacion[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
   const q = query(
     collection(db, INVITATIONS_COLLECTION),
-    where('companyId', '==', companyId),
+    where('invitedBy', '==', adminUid),
   );
   return onSnapshot(
     q,
@@ -957,6 +961,17 @@ export function subscribeCompanyInvitations(
     },
     onError,
   );
+}
+
+/** @deprecated Invitations no longer have companyId. Use subscribeCreatedInvitations instead. */
+export function subscribeCompanyInvitations(
+  _companyId: string,
+  _onData: (invitations: Invitacion[]) => void,
+  _onError?: (err: Error) => void,
+): Unsubscribe {
+  // Return a no-op unsubscribe — this function no longer filters by company.
+  console.warn('subscribeCompanyInvitations is deprecated. Use subscribeCreatedInvitations instead.');
+  return () => {};
 }
 
 // ── Member Management ──
@@ -971,6 +986,62 @@ export async function blockMember(companyId: string, memberId: string, blocked: 
 
 export async function deleteInvitation(invitationId: string): Promise<void> {
   await deleteDoc(doc(db, INVITATIONS_COLLECTION, invitationId));
+}
+
+// ── Unassigned Users (pendingAssignment flag) ──
+
+/**
+ * Subscribe to users with pendingAssignment === true.
+ * These are users who accepted an invitation but haven't been assigned to a company yet.
+ */
+export function subscribeUnassignedUsers(
+  onData: (users: Array<{ id: string; email: string }>) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'users'),
+    where('pendingAssignment', '==', true),
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => {
+        const data = d.data();
+        return { id: d.id, email: data.email ?? '' };
+      }));
+    },
+    onError,
+  );
+}
+
+/**
+ * Assign a user to a company by creating the membership and clearing the pendingAssignment flag.
+ * NOTE: This writes directly to Firestore. If you need this via API, use POST /api/companies/assign-user instead.
+ */
+export async function assignUserToCompany(
+  userId: string,
+  companyId: string,
+  role: string,
+  email?: string,
+): Promise<void> {
+  const batch = writeBatch(db);
+
+  batch.set(
+    doc(db, COMPANIES_COLLECTION, companyId, 'members', userId),
+    {
+      id: userId,
+      email: email ?? '',
+      role,
+      joinedAt: new Date().toISOString(),
+    },
+  );
+
+  batch.update(
+    doc(db, 'users', userId),
+    { pendingAssignment: false },
+  );
+
+  await batch.commit();
 }
 
 export async function updateInvitation(

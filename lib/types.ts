@@ -203,16 +203,13 @@ export interface CompanyMember {
 
 export interface Invitacion {
   id?: string;         // Firestore doc ID
-  companyId: string;
-  companyName: string;
   email: string;       // invited user's email
-  role: UserRole;
   status: 'pendiente' | 'aceptada';
   invitedBy: string;   // UID of admin who invited
   createdAt: string;
-  expiresAt?: string;        // NEW — 7 days from creation
-  acceptedAt?: string;       // NEW — when accepted
-  acceptedBy?: string;       // NEW — who accepted
+  expiresAt?: string;        // 7 days from creation
+  acceptedAt?: string;       // when accepted
+  acceptedBy?: string;       // who accepted
 }
 
 export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
