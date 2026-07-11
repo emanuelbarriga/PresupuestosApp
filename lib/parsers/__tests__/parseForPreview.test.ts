@@ -40,8 +40,12 @@ describe('parseForPreview', () => {
   });
 
   it('should extract, detect, parse, and reconcile without persisting', async () => {
-    // Mock PDF text extraction
-    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue('bancolombia.com extracto bancario');
+    // Mock PDF text extraction — devuelve { flat, rowLayout } con flat no-columnar
+    // para que el pipeline use flat (Bancolombia sin patrón columnar).
+    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue({
+      flat: 'bancolombia.com extracto bancario',
+      rowLayout: 'bancolombia.com extracto bancario',
+    });
 
     // Mock bank detection
     vi.mocked(detectarBanco).mockReturnValue('Bancolombia');
@@ -66,7 +70,7 @@ describe('parseForPreview', () => {
     const result = await parseForPreview(mockBuffer);
 
     // Verify non-persisting pipeline steps
-    expect(extractPdfTextFromBuffer).toHaveBeenCalledWith(mockBuffer, undefined, 'flat');
+    expect(extractPdfTextFromBuffer).toHaveBeenCalledWith(mockBuffer, undefined);
     expect(detectarBanco).toHaveBeenCalledWith('bancolombia.com extracto bancario');
     expect(getParser).toHaveBeenCalledWith('Bancolombia');
     expect(reconciliar).toHaveBeenCalledWith(mockMovimientos, 1000000);
@@ -83,7 +87,10 @@ describe('parseForPreview', () => {
   });
 
   it('should use bancoConfirmado when provided instead of detecting', async () => {
-    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue('some bank text');
+    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue({
+      flat: 'some bank text',
+      rowLayout: 'some bank text',
+    });
     vi.mocked(getParser).mockReturnValue({
       banco: 'Bancoomeva',
       parse: vi.fn().mockReturnValue({
@@ -101,14 +108,20 @@ describe('parseForPreview', () => {
   });
 
   it('should throw when bank is No detectado and no confirmation', async () => {
-    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue('unknown bank text');
+    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue({
+      flat: 'unknown bank text',
+      rowLayout: 'unknown bank text',
+    });
     vi.mocked(detectarBanco).mockReturnValue('No detectado');
 
     await expect(parseForPreview(mockBuffer)).rejects.toThrow('Banco no reconocido');
   });
 
   it('should fall back to periodoHasta and default year when periodo is missing', async () => {
-    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue('bancolombia.com');
+    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue({
+      flat: 'bancolombia.com',
+      rowLayout: 'bancolombia.com',
+    });
     vi.mocked(detectarBanco).mockReturnValue('Bancolombia');
     vi.mocked(getParser).mockReturnValue({
       banco: 'Bancolombia',
@@ -129,7 +142,10 @@ describe('parseForPreview', () => {
   });
 
   it('should not call any Firestore functions (no persistence)', async () => {
-    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue('bancolombia.com');
+    vi.mocked(extractPdfTextFromBuffer).mockResolvedValue({
+      flat: 'bancolombia.com',
+      rowLayout: 'bancolombia.com',
+    });
     vi.mocked(detectarBanco).mockReturnValue('Bancolombia');
     vi.mocked(getParser).mockReturnValue({
       banco: 'Bancolombia',

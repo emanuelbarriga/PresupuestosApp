@@ -172,7 +172,7 @@ describe('Bancolombia PDF — comparación completa contra Python CSV', () => {
       // 2. Extract with Y-grouping (row-layout) — same as browser
       const { extractPdfTextFromBuffer } = await import('@/lib/parsers/pdfText');
       const buffer = new Uint8Array(readFileSync(pdfPath)).buffer;
-      const text = await extractPdfTextFromBuffer(buffer, undefined, 'row-layout');
+      const { rowLayout: text } = await extractPdfTextFromBuffer(buffer, undefined);
 
       const parser = new BancolombiaParser();
       const result = parser.parse(text);

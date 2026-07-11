@@ -75,27 +75,35 @@ async function _runPipeline(
       'updateExtractoStatus(Parseando)',
     );
 
-    // Step 2: Extract PDF text from the in-memory buffer (no network needed)
-    let texto: string;
+    // Step 2: Extract PDF text from the in-memory buffer (no network needed).
+    // Extraemos flat + row-layout en una sola pasada del PDF.
+    type ExtractResult = { flat: string; rowLayout: string };
+    let texts: ExtractResult;
     try {
-      // Usar flat mode: une todos los items de cada página con espacios.
-      // Los parsers individuales detectan sus patrones (fechas, OFICINA,
-      // montos $, etc.) independientemente del layout. row-layout rompe
-      // los textos para bancos como Global66 cuyos montos están en
-      // diferentes Y-groups dentro de una misma fila.
-      texto = await extractPdfTextFromBuffer(buffer, undefined, 'flat');
+      texts = await extractPdfTextFromBuffer(buffer, undefined);
     } catch (err) {
       const msg = `Error al leer el PDF: ${err instanceof Error ? err.message : 'Error desconocido'}`;
       throw new Error(msg);
     }
+    const { flat: flatText, rowLayout: rowLayoutText } = texts;
 
-    // Step 3: Detect bank
-    const banco = bancoConfirmado ?? detectarBanco(texto);
+    // Step 3: Detect bank (siempre desde flat mode, que funciona para todos los bancos)
+    const banco = bancoConfirmado ?? detectarBanco(flatText);
     if (banco === 'No detectado') {
       throw new Error('Banco no reconocido');
     }
 
-    // Step 4: Parse
+    // Step 4: Seleccionar modo de texto según el banco.
+    //   - Bancos como Global66 necesitan flat (sus montos están en diferentes
+    //     Y-groups dentro de una misma fila y row-layout los separaría).
+    //   - Bancolombia con 2+ páginas produce formato columnar en flat pero
+    //     row-layout lo convierte a filas correctas.
+    const esBancolombiaColumnar =
+      banco === 'Bancolombia' &&
+      /\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/.test(flatText);
+    const texto = esBancolombiaColumnar ? rowLayoutText : flatText;
+
+    // Step 5: Parse
     const parser = getParser(banco);
     const parseResult = parser.parse(texto);
 
@@ -179,16 +187,22 @@ export async function parseForPreview(
   buffer: ArrayBuffer,
   bancoConfirmado?: Banco | null,
 ): Promise<ParsePreviewResult> {
-  // Step 1: Extract PDF text (flat mode — ver comentario en _runPipeline)
-  const texto = await extractPdfTextFromBuffer(buffer, undefined, 'flat');
+  // Step 1: Extract PDF text (flat + row-layout en una sola pasada)
+  const { flat: flatText, rowLayout: rowLayoutText } = await extractPdfTextFromBuffer(buffer, undefined);
 
-  // Step 2: Detect bank
-  const banco = bancoConfirmado ?? detectarBanco(texto);
+  // Step 2: Detect bank (siempre desde flat mode)
+  const banco = bancoConfirmado ?? detectarBanco(flatText);
   if (banco === 'No detectado') {
     throw new Error('Banco no reconocido');
   }
 
-  // Step 3: Parse
+  // Step 3: Seleccionar modo de texto según el banco
+  const esBancolombiaColumnar =
+    banco === 'Bancolombia' &&
+    /\b(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}\/\d{1,2})\b/.test(flatText);
+  const texto = esBancolombiaColumnar ? rowLayoutText : flatText;
+
+  // Step 4: Parse
   const parser = getParser(banco);
   const parseResult = parser.parse(texto);
 

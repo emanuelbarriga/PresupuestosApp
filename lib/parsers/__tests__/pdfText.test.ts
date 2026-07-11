@@ -32,10 +32,12 @@ describe('extractPdfTextFromBuffer', () => {
     const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     (pdfjsModule.getDocument as any).mockReturnValue(mockPdf(['Página uno', 'Página dos']));
 
-    const texto = await extractPdfTextFromBuffer(new ArrayBuffer(10));
+    const { flat, rowLayout } = await extractPdfTextFromBuffer(new ArrayBuffer(10));
 
-    expect(texto).toContain('Página uno');
-    expect(texto).toContain('Página dos');
+    expect(flat).toContain('Página uno');
+    expect(flat).toContain('Página dos');
+    expect(rowLayout).toContain('Página uno');
+    expect(rowLayout).toContain('Página dos');
   });
 
   it('invokes onProgress once per page with (current, total)', async () => {
@@ -75,6 +77,8 @@ describe('extractPdfTextFromBuffer', () => {
     const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     (pdfjsModule.getDocument as any).mockReturnValue(mockPdf(['Texto sin progreso']));
 
-    await expect(extractPdfTextFromBuffer(new ArrayBuffer(10))).resolves.toContain('Texto sin progreso');
+    const { flat, rowLayout } = await extractPdfTextFromBuffer(new ArrayBuffer(10));
+    expect(flat).toContain('Texto sin progreso');
+    expect(rowLayout).toContain('Texto sin progreso');
   });
 });

@@ -7,7 +7,10 @@ import { parseMonto } from '@/lib/parsers/strategies/bancolombia';
 // whitespace. So instead of splitting on '\n' and expecting one row per line,
 // we strip the recurring noise blocks (repeated on every page: the running
 // summary and the legal disclaimer) and then locate transaction rows by their
-// "DD-MM-YYYY OFICINA" anchor, wherever it appears in the text.
+// "DD-MM-YYYY" date anchor, wherever it appears in the text.
+// The office/location varies ("OFICINA UNICENTRO BOGOTA", "LABORATORIO - CORE",
+// etc.), so we split on any date boundary and filter by the presence of N/C or
+// N/D (Nota Crédito / Nota Débito) which every transaction row contains.
 
 // Combined number pattern matching en-US ("1,478.29"), es-CO ("1.478,29"),
 // and bare decimals like ".83" (Bancoomeva omits the leading 0 for amounts < 1 peso).
@@ -21,9 +24,11 @@ const DISCLAIMER_PATTERN = /Nuestra línea de Atención[\s\S]*?autónoma de Banc
 // Running summary block repeated at the top of every page after page 1.
 const SUMMARY_PATTERN = new RegExp(`SALDO INICIAL\\s+\\$\\s*(?:${NUM})[\\s\\S]*?SALDO FINAL\\s+\\$\\s*(?:${NUM})`, 'g');
 
-// Anchor for a transaction row: a date followed by "OFICINA", capturing
-// everything up to (but not including) the next such anchor or the end.
-const ROW_PATTERN = /(\d{2}-\d{2}-\d{4})\s+(OFICINA[\s\S]*?)(?=\d{2}-\d{2}-\d{4}\s+OFICINA|$)/g;
+// Split text at date boundaries to isolate each transaction row.
+// Every row starts with DD-MM-YYYY followed by a location name.
+// Non-row dates (e.g. header "DEL: 01-05-2026 AL: 29-05-2026") are filtered
+// out by the N/C | N/D check below.
+const ROW_SPLIT = /(?=\b\d{2}-\d{2}-\d{4}\s+)/;
 
 export class BancoomevaParser implements ExtractoParser {
   readonly banco: Banco = 'Bancoomeva';
@@ -41,16 +46,21 @@ export class BancoomevaParser implements ExtractoParser {
     const movimientos: MovimientoBancarioInput[] = [];
     let ordinal = 0;
 
-    const rowRegex = new RegExp(ROW_PATTERN);
-    let match: RegExpExecArray | null;
-    while ((match = rowRegex.exec(cleaned)) !== null) {
-      const rowText = `${match[1]} ${match[2]}`.trim();
-      const mov = this.parseRow(rowText);
+    // Split by date boundaries — each transaction row starts with DD-MM-YYYY.
+    // Non-row segments (header dates like "AL: DD-MM-YYYY", summary fragments)
+    // are filtered out by checking for N/C or N/D (Nota Crédito / Nota Débito),
+    // which every real Bancoomeva transaction row contains.
+    const segments = cleaned.split(ROW_SPLIT);
+    for (const segment of segments) {
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      // Skip segments that don't look like transaction rows
+      if (!/N\/[CD]/i.test(trimmed)) continue;
+      const mov = this.parseRow(trimmed);
       if (mov) {
         ordinal++;
         movimientos.push({ ...mov, ordinal });
       }
-      if (match.index === rowRegex.lastIndex) rowRegex.lastIndex++;
     }
 
     return {

@@ -71,7 +71,7 @@ describe('BancoomevaParser', () => {
       const text = [
         'Extracto de Cuenta  PERIODO  DEL: 01-01-2026  AL: 30-01-2026',
         'FECHA   OFICINA   DESCRIPCION   VALOR DEBITO   VALOR CREDITO   SALDO',
-        '01-01-2026   OFICINA ATRANSFERENCIA  500,000.00    1,000,000.00',
+        '01-01-2026   OFICINA CENTRON/D TRANSFERENCIA  500,000.00    1,000,000.00',
         'SALDO INICIAL  $ 9,673,999.80',
         'RENDIMIENTOS No  $ 8,490.81',
         'TOTAL DEBITO  $ 78,640,146.41',
