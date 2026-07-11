@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { ViewType } from '@/lib/types';
 import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, TrendingUp, Settings, LogOut } from 'lucide-react';
 import clsx from 'clsx';
@@ -17,13 +17,14 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePath }: SidebarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { selectedCompany, companies, setCompany, userRole } = useCompany();
   const { user, signOut } = useAuth();
 
   const handleCompanySelect = (id: string) => {
-    setCompany(id);
-    const currentPath = window.location.pathname.replace(/^\/[^/]+/, `/${id}`);
-    router.push(currentPath);
+    const companySlug = pathname.split('/')[1];
+    const restOfPath = pathname.slice(companySlug.length + 1);
+    router.push(`/${id}${restOfPath}`);
   };
 
   const handleNav = (view: ViewType) => {
