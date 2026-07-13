@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "clean": "next clean",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "emulators": "firebase emulators:start --project planningsaman-3cf7e --only auth,firestore",
     "seed": "FIRESTORE_EMULATOR_HOST=localhost:8081 npx tsx e2e/seed/seed-emulator.ts",
     "test:e2e": "npm run emulators & sleep 5 && npm run seed && NEXT_PUBLIC_EMULATOR_HOST=localhost NEXT_PUBLIC_EMULATOR_PORTS=8081,9099 next dev & sleep 8 && npx playwright test --config e2e/playwright.config.ts; kill $(lsof -ti:3000 -ti:8081 -ti:9099 -ti:4000) 2>/dev/null; true",

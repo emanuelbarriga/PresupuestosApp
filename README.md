@@ -517,6 +517,14 @@ Ejecutadas con **Vitest 4**:
 npm run test
 ```
 
+Para medir cobertura (incluye `lib/`, `components/`, `context/`, `app/`):
+
+```bash
+npm run test:coverage
+```
+
+Genera reporte en consola (`text`) y archivo `coverage/lcov.info` para IDE.
+
 Cobertura:
 
 - **Firestore**: Tests de la capa de datos (`lib/__tests__/firestore.test.ts`).
