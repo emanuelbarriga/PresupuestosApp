@@ -36,6 +36,9 @@ import { detectarBanco, getParser } from '@/lib/parsers/index';
 import { reconciliar } from '@/lib/parsers/reconciliador';
 import { detectarDuplicados } from '@/lib/parsers/detectordup';
 import { updateExtractoStatus, batchAddMovimientos } from '@/lib/firestore';
+// @ts-expect-error — fetchMovimientoHashes was removed from the real firestore module
+// but is provided by the vi.mock factory above for test dedup scenarios.
+import { fetchMovimientoHashes } from '@/lib/firestore';
 
 describe('runParsePipeline', () => {
   const companyId = 'company-1';

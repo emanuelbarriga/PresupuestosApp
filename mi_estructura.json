@@ -1,0 +1,664 @@
+{
+  "companies": {
+    "pcora": {
+      "name": "Pácora",
+      "createdBy": "0yJ45MfxOoNblIuR1NrcFfU1OWL2",
+      "createdAt": "2026-07-05T03:20:06.241Z"
+    },
+    "saman": {
+      "name": "Samán",
+      "createdAt": "2026-07-01T21:42:47.728Z"
+    }
+  },
+  "invitations": {
+    "pUuymWPY5d9uZpksFpoH": {
+      "email": "henry.soto@pacoraproducciones.com",
+      "status": "pendiente",
+      "invitedBy": "0yJ45MfxOoNblIuR1NrcFfU1OWL2",
+      "createdAt": "2026-07-10T19:35:16.331Z",
+      "expiresAt": "2026-07-11T19:35:16.331Z"
+    }
+  },
+  "settings": {
+    "categorias": {
+      "stateProject": [
+        {
+          "name": "Negociación",
+          "color": "#f97316",
+          "order": 0
+        },
+        {
+          "name": "Aprobado",
+          "color": "#3b82f6",
+          "order": 1
+        },
+        {
+          "name": "En ejecución",
+          "color": "#6366f1",
+          "order": 2
+        },
+        {
+          "name": "Finalizado",
+          "color": "#10b981",
+          "order": 3
+        },
+        {
+          "name": "Cancelado",
+          "color": "#ef4444",
+          "order": 4
+        }
+      ],
+      "unidades": [
+        {
+          "color": "#628d8d",
+          "order": 0,
+          "name": "episodios"
+        },
+        {
+          "color": "#5b8d8d",
+          "name": "secuencias",
+          "order": 1
+        },
+        {
+          "color": "#5b8d8d",
+          "name": "plano",
+          "order": 2
+        },
+        {
+          "order": 3,
+          "name": "película",
+          "color": "#5b8d8d"
+        }
+      ],
+      "tipoComprobante": [
+        {
+          "order": 0,
+          "color": "#7879a5",
+          "name": "Factura de Compra"
+        },
+        {
+          "name": "Factura de Venta",
+          "color": "#7879a5",
+          "order": 1
+        },
+        {
+          "name": "Recibo de Caja",
+          "color": "#7879a5",
+          "order": 2
+        },
+        {
+          "name": "Comrpobante de pago",
+          "order": 3,
+          "color": "#7879a5"
+        },
+        {
+          "order": 4,
+          "color": "#7879a5",
+          "name": "Cuenta de Cobro"
+        },
+        {
+          "color": "#7879a5",
+          "order": 5,
+          "name": "Planilla SS"
+        }
+      ],
+      "tipoProyectos": [
+        {
+          "color": "#62748e",
+          "name": "Serie",
+          "order": 0
+        },
+        {
+          "name": "Película",
+          "color": "#62748e",
+          "order": 1
+        },
+        {
+          "order": 2,
+          "color": "#62748e",
+          "name": "Reallity"
+        },
+        {
+          "order": 3,
+          "name": "Shot",
+          "color": "#62748e"
+        },
+        {
+          "color": "#62748e",
+          "name": "Administrativo",
+          "order": 4
+        },
+        {
+          "order": 5,
+          "color": "#62748e",
+          "name": "Impuestos"
+        },
+        {
+          "order": 6,
+          "name": "Comisiones Bancarias",
+          "color": "#62748e"
+        },
+        {
+          "name": "Intereses",
+          "color": "#62748e",
+          "order": 7
+        }
+      ],
+      "updatedAt": {
+        "_seconds": 1783656610,
+        "_nanoseconds": 71000000
+      }
+    }
+  },
+  "terceros": {
+    "06akExU7StJ0fbEz0Tu6": {
+      "name": "Google Samán",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783018473,
+        "_nanoseconds": 647000000
+      }
+    },
+    "2gmchVaKIHnTG5XepX2G": {
+      "name": "Pácora Producciones SAS",
+      "apodo": "Pácora",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "901170033",
+      "lugar": "Colombia",
+      "tipo": "ambos",
+      "createdAt": "2026-07-02T16:59:40.781Z"
+    },
+    "2xHAYHxvMYlhJBbeuESn": {
+      "name": "Google Pácora",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783018556,
+        "_nanoseconds": 156000000
+      }
+    },
+    "31jJlePpzF6wrUfeHnok": {
+      "name": "Juan Francisco Lopez",
+      "apodo": "Juan Francisco",
+      "naturaleza": "Persona Natural",
+      "documento": "CI",
+      "numeroDocumento": "1718217548",
+      "lugar": "Ecuador",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:42.005Z"
+    },
+    "3lZAzYUq6VToBnydtSfm": {
+      "name": "Andrés Azcárate",
+      "apodo": "Borondo",
+      "naturaleza": "Persona Natural",
+      "documento": "ID",
+      "numeroDocumento": "AANA820915825",
+      "lugar": "México",
+      "tipo": "cliente",
+      "createdAt": "2026-07-02T16:59:42.596Z"
+    },
+    "4WgUK3jmntEnJUcWbwxh": {
+      "name": "Claro",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783703893,
+        "_nanoseconds": 643000000
+      }
+    },
+    "6099YwvqiKJ6vpLp8Mzw": {
+      "name": "Gases de Occidente",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783703969,
+        "_nanoseconds": 971000000
+      }
+    },
+    "6Yybt8TaVV2evDv6unwe": {
+      "name": "Pago Simple",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783704447,
+        "_nanoseconds": 112000000
+      }
+    },
+    "ApBBukN5wXL3ANJ5lVWB": {
+      "name": "DIAN",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783653989,
+        "_nanoseconds": 791000000
+      }
+    },
+    "Da2lF71H8ZAIhgN5rW3w": {
+      "name": "Sanitas EPS",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783704272,
+        "_nanoseconds": 265000000
+      }
+    },
+    "DiySKeU64lfVY5fhG3tj": {
+      "name": "Riccardo Gabrielli",
+      "tipo": "cliente",
+      "apodo": "Riccardo",
+      "createdAt": "Timestamp(seconds=1783014120, nanoseconds=102000000)",
+      "naturaleza": "Persona Jurídica",
+      "lugar": "Estados Unidos",
+      "updatedAt": {
+        "_seconds": 1783014149,
+        "_nanoseconds": 110000000
+      }
+    },
+    "Eklu7Gi37O4T6ZPFA0O3": {
+      "name": "Manuel Felipe Castañeda",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783702846,
+        "_nanoseconds": 353000000
+      }
+    },
+    "F1U2ScJhX7RZ5uUf0rJd": {
+      "name": "LucidLink Classic",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783032355,
+        "_nanoseconds": 278000000
+      }
+    },
+    "GGV5olKBfUzkXQKiKSzC": {
+      "name": "Bancos",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783654118,
+        "_nanoseconds": 668000000
+      }
+    },
+    "H8eLunPge4zB5v02LsUC": {
+      "name": "Federico Castañeda",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783703446,
+        "_nanoseconds": 184000000
+      }
+    },
+    "HtrQPYxPj07w9alf54eg": {
+      "name": "EvoLink",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783023941,
+        "_nanoseconds": 501000000
+      }
+    },
+    "LF5ComS34ftKib8s09D8": {
+      "apodo": "TVgroup México",
+      "naturaleza": "Persona Jurídica",
+      "documento": "RFC",
+      "numeroDocumento": "TTD040518T21",
+      "tipo": "cliente",
+      "createdAt": "2026-07-02T16:59:43.294Z",
+      "lugar": "México",
+      "name": "TVGROUP MÉXICO SAS",
+      "updatedAt": {
+        "_seconds": 1783014042,
+        "_nanoseconds": 463000000
+      }
+    },
+    "LoL0x0gKA4uBxQMODW4r": {
+      "name": "OpenCodeGo",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783032791,
+        "_nanoseconds": 919000000
+      }
+    },
+    "NnVlQXoqwP0IMMGXvOas": {
+      "name": "PNUD",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783700175,
+        "_nanoseconds": 247000000
+      }
+    },
+    "O6xa1FtK7R1Y7cp3bBHH": {
+      "name": "Henry Soto",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783700335,
+        "_nanoseconds": 752000000
+      }
+    },
+    "PT3qRSSJJOd6cnapPCxP": {
+      "name": "Juan Martín Rincón",
+      "apodo": "Edi",
+      "naturaleza": "Persona Natural",
+      "documento": "CC",
+      "numeroDocumento": "1141117434",
+      "lugar": "Colombia",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:42.239Z"
+    },
+    "RSi0iQ80PZrUA9U2pnpY": {
+      "name": "Bancolombia",
+      "apodo": "Bancolombia",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "",
+      "lugar": "",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783730835,
+        "_nanoseconds": 574000000
+      }
+    },
+    "UFVdhG6Sidiq3a1py7zS": {
+      "name": "Ruby Ramirez",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783700917,
+        "_nanoseconds": 428000000
+      }
+    },
+    "VhzXlCTpffVq0B3rxOqV": {
+      "name": "Adobe 01",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783035265,
+        "_nanoseconds": 475000000
+      }
+    },
+    "W8kB67dpS0GbU3aWFSFj": {
+      "name": "Amazon Web Service",
+      "apodo": "Amazon Web Service - Dominio",
+      "naturaleza": "Persona Jurídica",
+      "documento": "",
+      "numeroDocumento": "",
+      "lugar": "USA",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783731459,
+        "_nanoseconds": 42000000
+      }
+    },
+    "YEeS2UwfKGsgYqhZ61FI": {
+      "name": "Maria Camila Rojas Miranda",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783703119,
+        "_nanoseconds": 310000000
+      }
+    },
+    "a2KomgylbrqQphPd90Gg": {
+      "name": "Seguridad Social",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783700718,
+        "_nanoseconds": 490000000
+      }
+    },
+    "bGq41uhW8ao8C4p6Bajn": {
+      "name": "Diana Mosquera",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783019151,
+        "_nanoseconds": 617000000
+      }
+    },
+    "bLKRdXBlRDp8N2nmq4kz": {
+      "name": "Felipe Burbano",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783024234,
+        "_nanoseconds": 402000000
+      }
+    },
+    "c50A4tQ6j0FLNqtspSvL": {
+      "name": "Paula Andrea López P",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783703209,
+        "_nanoseconds": 612000000
+      }
+    },
+    "cYbMd6a5O4F57wJQC8aR": {
+      "name": "Adobe 02",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783035309,
+        "_nanoseconds": 363000000
+      }
+    },
+    "cqcwmp26FGRUD1g2e59X": {
+      "name": "EMCALI",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783704115,
+        "_nanoseconds": 520000000
+      }
+    },
+    "eOjw4IZWmyqfi1PAQ8gr": {
+      "name": "Impuestos",
+      "apodo": "DIAN",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "1",
+      "lugar": "Colombia",
+      "tipo": "proveedor",
+      "createdAt": {
+        "_seconds": 1783655067,
+        "_nanoseconds": 501000000
+      }
+    },
+    "faBRedP5jzUybDP07nXf": {
+      "name": "Emanuel Barriga",
+      "apodo": "Emanuel",
+      "naturaleza": "Persona Natural",
+      "documento": "CC",
+      "numeroDocumento": "1143824777",
+      "lugar": "Colombia",
+      "createdAt": "2026-07-02T16:59:39.858Z",
+      "tipo": "ambos",
+      "updatedAt": {
+        "_seconds": 1783703737,
+        "_nanoseconds": 890000000
+      }
+    },
+    "gKdK6ZoXfuGq98KhzbHj": {
+      "name": "Spacom",
+      "apodo": "Spacom - Proveedor Internet",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "",
+      "lugar": "",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783731312,
+        "_nanoseconds": 569000000
+      }
+    },
+    "jKS8ErT2pulExAkFAOJp": {
+      "name": "Juan Torres",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783699153,
+        "_nanoseconds": 559000000
+      }
+    },
+    "l0GwdZ2lir6TXQYIv4kF": {
+      "name": "Global66",
+      "apodo": "Global66",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "",
+      "lugar": "",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783730823,
+        "_nanoseconds": 474000000
+      }
+    },
+    "lJUaNdWb6R3xbfOFuI7L": {
+      "name": "Claudia Hurtado",
+      "apodo": "Clao",
+      "naturaleza": "Persona Natural",
+      "documento": "CC",
+      "numeroDocumento": "1144033592",
+      "lugar": "Colombia",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:40.204Z"
+    },
+    "mLkzX2K18F0n6GUZaj2M": {
+      "apodo": "TVgroup Colombia",
+      "naturaleza": "Persona Jurídica",
+      "documento": "NIT",
+      "numeroDocumento": "900873797",
+      "lugar": "Colombia",
+      "tipo": "cliente",
+      "createdAt": "2026-07-02T16:59:43.083Z",
+      "name": "TVGROUP COLOMBIA SAS",
+      "updatedAt": {
+        "_seconds": 1783014027,
+        "_nanoseconds": 125000000
+      }
+    },
+    "nDFP2SHXLQi6joZ4bzou": {
+      "name": "Samán Estudio VFX",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783699799,
+        "_nanoseconds": 883000000
+      }
+    },
+    "pRdZ9vJRhlaGVHbTh31U": {
+      "name": "Camara Comercio Cali",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783702108,
+        "_nanoseconds": 889000000
+      }
+    },
+    "rUTuNRxAFFzigJlEtJrf": {
+      "name": "Serge Ercey",
+      "apodo": "Serge",
+      "naturaleza": "Persona Natural",
+      "documento": "CC",
+      "numeroDocumento": "80729477",
+      "lugar": "Colombia",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:40.485Z"
+    },
+    "rsM1YfeXwq2wNlzXQFft": {
+      "name": "Giovanny Sabogal",
+      "apodo": "Sabo",
+      "naturaleza": "Persona Natural",
+      "documento": "RUC",
+      "numeroDocumento": "1756202451001",
+      "lugar": "Ecuador",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:41.383Z"
+    },
+    "uDN2oFqOvhE8045xpYr6": {
+      "name": "Luis Moreira",
+      "apodo": "Luis",
+      "naturaleza": "Persona Natural",
+      "documento": "RUC",
+      "numeroDocumento": "1716567811001",
+      "lugar": "Ecuador",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:41.662Z"
+    },
+    "uIRFTKLbIbYEYwBrB57G": {
+      "name": "WindsurfAI",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783032580,
+        "_nanoseconds": 648000000
+      }
+    },
+    "vgkfeN99OuOY3p4AolB7": {
+      "name": "Frame.io",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783032303,
+        "_nanoseconds": 339000000
+      }
+    },
+    "xAub16dZ5nZEmS0IUHZL": {
+      "name": "Interno",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783016397,
+        "_nanoseconds": 732000000
+      }
+    },
+    "yD3PjHyV9sy4UrBuBz1V": {
+      "name": "Camara de Comercio  Bogotá",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783702306,
+        "_nanoseconds": 452000000
+      }
+    },
+    "yPSOhcWajDmEobOSsOuQ": {
+      "name": "Meshy AI",
+      "apodo": "Meshy Plataforma de IA 3D",
+      "naturaleza": "Persona Jurídica",
+      "documento": "",
+      "numeroDocumento": "",
+      "lugar": "Exterior",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783732067,
+        "_nanoseconds": 964000000
+      }
+    },
+    "zHaxyxKPCgYdwocJXXLN": {
+      "name": "Lovable",
+      "apodo": "Lovable",
+      "naturaleza": "Persona Jurídica",
+      "documento": "",
+      "numeroDocumento": "",
+      "lugar": "Extranjero",
+      "tipo": "proveedor",
+      "createdAt": {
+        "_seconds": 1783656775,
+        "_nanoseconds": 958000000
+      }
+    },
+    "zlnjj7O2uOfXmggD3LVu": {
+      "name": "Soncora",
+      "tipo": "cliente",
+      "createdAt": {
+        "_seconds": 1783699285,
+        "_nanoseconds": 43000000
+      }
+    },
+    "zpg8zk7Wgp0raXbmjamK": {
+      "name": "Alexis Loaiza",
+      "apodo": "",
+      "naturaleza": "Persona Natural",
+      "documento": "RUC",
+      "numeroDocumento": "1792458250001",
+      "lugar": "Ecuador",
+      "tipo": "proveedor",
+      "createdAt": "2026-07-02T16:59:41.079Z"
+    }
+  },
+  "users": {
+    "0yJ45MfxOoNblIuR1NrcFfU1OWL2": {
+      "id": "0yJ45MfxOoNblIuR1NrcFfU1OWL2",
+      "email": "emanuel.barriga@pacoraproducciones.com",
+      "createdAt": "2026-07-05T03:20:06.241Z"
+    },
+    "GVfk76SIivWLJHeEjXxFBRArmsu2": {
+      "createdAt": "2026-07-10T19:25:48.895Z",
+      "id": "GVfk76SIivWLJHeEjXxFBRArmsu2",
+      "email": "emanuel.barriga@samanestudio.com",
+      "pendingAssignment": false
+    },
+    "ozpvJjskOqY7MtKfYJaMbGCj1q53": {
+      "id": "ozpvJjskOqY7MtKfYJaMbGCj1q53",
+      "email": "pacora.producciones.sas@gmail.com",
+      "createdAt": "2026-07-05T00:53:31.756Z"
+    }
+  }
+}

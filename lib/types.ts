@@ -133,6 +133,8 @@ export interface Ejecucion {
   cuentaName?: string;
   comprobantes: Comprobante[];
   archivado?: boolean;
+  _movimientoId?: string;
+  _extractoId?: string;
 }
 
 type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';

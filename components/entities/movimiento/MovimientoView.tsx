@@ -276,6 +276,7 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
         onBancoChange={() => {}}
         onSave={() => {}}
         onCancel={handleCerrarExtracto}
+        defaultSearch={movimiento.descripcion}
       />
     </div>
   );

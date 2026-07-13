@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react';
-import { Ejecucion, Budget, Comprobante, NavScreen, EntityType } from '@/lib/types';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { Ejecucion, Budget, Comprobante, NavScreen, EntityType, MovimientoBancario } from '@/lib/types';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscribeBudgets, removeBudgetLink, updateEjecucion } from '@/lib/firestore';
 import { deleteFile } from '@/lib/fileUpload';
 import { DF } from '@/components/shared/DF';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
 import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
-import { Link2, Unlink, FileText, Plus } from 'lucide-react';
+import { Link2, Unlink, ExternalLink, FileText, Plus } from 'lucide-react';
 import clsx from 'clsx';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -29,6 +29,33 @@ interface EjecucionViewProps {
 export function EjecucionView({ ejecucion, companyId, onSubmit, onNavigate }: EjecucionViewProps) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
+
+  // ── Extracto / Movimiento vinculado ──
+  const movId = (ejecucion as any)._movimientoId as string | undefined;
+  const extId = (ejecucion as any)._extractoId as string | undefined;
+  const [extractoInfo, setExtractoInfo] = useState<{ mes: string; anio: number } | null>(null);
+  const [movimientoData, setMovimientoData] = useState<MovimientoBancario | null>(null);
+  const [loadingExtracto, setLoadingExtracto] = useState(false);
+
+  useEffect(() => {
+    if (!movId || !extId || !ejecucion.cuentaId) return;
+    setLoadingExtracto(true);
+
+    const extRef = doc(db, 'companies', companyId, 'cuentasBancarias', ejecucion.cuentaId, 'extractos', extId);
+    getDoc(extRef).then(snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setExtractoInfo({ mes: d.mes as string, anio: d.anio as number });
+      }
+    });
+
+    const movRef = doc(db, 'companies', companyId, 'cuentasBancarias', ejecucion.cuentaId, 'extractos', extId, 'movimientos', movId);
+    getDoc(movRef).then(snap => {
+      if (snap.exists()) {
+        setMovimientoData({ id: snap.id, ...snap.data() } as MovimientoBancario);
+      }
+    }).finally(() => setLoadingExtracto(false));
+  }, [companyId, ejecucion.cuentaId, movId, extId]);
 
   useEffect(() => {
     const unsub = subscribeBudgets(companyId, setBudgets);
@@ -87,6 +114,41 @@ export function EjecucionView({ ejecucion, companyId, onSubmit, onNavigate }: Ej
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
       <DF label="Cuenta bancaria" v={ejecucion.cuentaName || 'Sin cuenta bancaria'} />
+
+      {/* Extracto / Movimiento vinculado */}
+      {movId && extId && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+            <ExternalLink size={12} /> Extracto bancario
+          </p>
+          <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 space-y-1.5">
+            {loadingExtracto ? (
+              <p className="text-[11px] text-slate-400 italic">Cargando...</p>
+            ) : (
+              <>
+                <p className="text-[11px] text-slate-600">
+                  {extractoInfo
+                    ? <>Extracto de <span className="font-semibold text-slate-800">{extractoInfo.mes} de {extractoInfo.anio}</span></>
+                    : <span className="italic text-slate-400">Extracto no encontrado</span>}
+                </p>
+                {movimientoData && (
+                  <p className="text-[11px] text-slate-600">
+                    Movimiento: <span className="font-semibold text-slate-800">{movimientoData.descripcion}</span>
+                  </p>
+                )}
+                {movimientoData && (
+                  <button
+                    onClick={() => onNavigate({ type: 'entity', entity: 'movimiento', mode: 'view', record: movimientoData, defaults: { _cuentaId: ejecucion.cuentaId ?? '', _extractoId: extId } })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-2.5 py-1 rounded-lg transition-all mt-1"
+                  >
+                    <ExternalLink size={11} /> Ver movimiento en extracto
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="border-t border-slate-100 pt-4">
         <div className="flex items-center justify-between mb-2">

@@ -4,7 +4,7 @@ import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
-import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import {
   subscribeBudgets,
@@ -59,6 +59,48 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'estado-resultados') return { view: 'EstadoResultados' };
   if (main === 'configuracion') return { view: 'Configuración' };
   return { view: 'Dashboard' };
+}
+
+/**
+ * Find an unconverted bank movement that matches an ejecucion by cuenta + fecha + monto + tipo.
+ * Scans extractos for the given cuenta and returns the first matching movimiento.
+ * Returns null if no unique match is found.
+ */
+async function findMatchingMovimiento(
+  companyId: string,
+  cuentaId: string,
+  fecha: string,
+  monto: number,
+  tipo: string,
+): Promise<{ extractoId: string; movimientoId: string } | null> {
+  try {
+    const extractosSnap = await getDocs(
+      collection(db, 'companies', companyId, 'cuentasBancarias', cuentaId, 'extractos'),
+    );
+
+    for (const extDoc of extractosSnap.docs) {
+      const extractoId = extDoc.id;
+      const movimientosSnap = await getDocs(
+        collection(db, 'companies', companyId, 'cuentasBancarias', cuentaId, 'extractos', extractoId, 'movimientos'),
+      );
+
+      for (const movDoc of movimientosSnap.docs) {
+        const mov = movDoc.data();
+        // Skip already converted
+        if (mov.convertido) continue;
+        // Match fecha
+        if (mov.fecha !== fecha) continue;
+        // Match monto by tipo (debito for egreso, credito for ingreso)
+        const montoMov = tipo === 'egreso' ? mov.debito : mov.credito;
+        if (montoMov !== monto) continue;
+        // Found a match
+        return { extractoId, movimientoId: movDoc.id };
+      }
+    }
+  } catch (err) {
+    console.error('[findMatchingMovimiento] error:', err);
+  }
+  return null;
 }
 
 export default function CompanyPage({ params }: Props) {
@@ -338,20 +380,40 @@ export default function CompanyPage({ params }: Props) {
           const preGeneratedId = data._preGeneratedId as string | undefined;
           const budgetLinks = data._budgetLinks as Array<{ budgetId: string; monto: number }> | undefined;
           // Mark movimiento as converted (from Extractos flow)
-          const movCuentaId = data._cuentaId as string | undefined;
-          const movExtractoId = data._extractoId as string | undefined;
-          const movMovimientoId = data._movimientoId as string | undefined;
+          let movCuentaId = data._cuentaId as string | undefined;
+          let movExtractoId = data._extractoId as string | undefined;
+          let movMovimientoId = data._movimientoId as string | undefined;
           delete data._preGeneratedId;
           delete data._budgetLinks;
           delete data._cuentaId;
           delete data._extractoId;
           delete data._movimientoId;
+          // Auto-match: when creating from EjecucionForm with cuentaId but no explicit movimiento refs
+          if (!movCuentaId && !movExtractoId && !movMovimientoId && data.cuentaId) {
+            try {
+              const match = await findMatchingMovimiento(
+                companyId, data.cuentaId,
+                data.fechaEjecutado, data.montoEjecutado, data.tipo,
+              );
+              if (match) {
+                movCuentaId = data.cuentaId;
+                movExtractoId = match.extractoId;
+                movMovimientoId = match.movimientoId;
+              }
+            } catch (err) {
+              console.error('[page] auto-match movimiento falló:', err);
+            }
+          }
           // Use writeBatch for atomic creation of ejecucion + budgetLinks + budget totals
           const batch = writeBatch(db);
           const ejecucionRef = preGeneratedId
             ? doc(db, 'companies', companyId, 'ejecuciones', preGeneratedId)
             : doc(collection(db, 'companies', companyId, 'ejecuciones'));
-          batch.set(ejecucionRef, { ...data, createdAt: serverTimestamp() });
+          batch.set(ejecucionRef, {
+            ...data,
+            createdAt: serverTimestamp(),
+            ...(movMovimientoId ? { _movimientoId: movMovimientoId, _extractoId: movExtractoId } : {}),
+          });
           if (budgetLinks && budgetLinks.length > 0) {
             for (const link of budgetLinks) {
               const linkRef = doc(collection(db, ejecucionRef.path, 'budgetLinks'));

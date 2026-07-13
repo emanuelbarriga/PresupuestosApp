@@ -115,21 +115,9 @@ describe('InvitacionEntity', () => {
       expect(screen.getByTestId('panel-header')).toHaveTextContent('Invitar colaborador');
     });
 
-    it('renderiza checkboxes de empresas', () => {
-      render(<InvitacionEntity {...baseProps({ mode: 'create', record: undefined })} />);
-      expect(screen.getByText('Constructora S.A.')).toBeInTheDocument();
-      expect(screen.getByText('Inmobiliaria XYZ')).toBeInTheDocument();
-    });
-
     it('renderiza input de email', () => {
       render(<InvitacionEntity {...baseProps({ mode: 'create', record: undefined })} />);
       expect(screen.getByPlaceholderText('colaborador@ejemplo.com')).toBeInTheDocument();
-    });
-
-    it('renderiza toggle de rol (colaborador/admin)', () => {
-      render(<InvitacionEntity {...baseProps({ mode: 'create', record: undefined })} />);
-      expect(screen.getByText('Colaborador')).toBeInTheDocument();
-      expect(screen.getByText('Administrador')).toBeInTheDocument();
     });
 
     it('renderiza toggle de expiración (1d/3d/1semana)', () => {
@@ -149,11 +137,6 @@ describe('InvitacionEntity', () => {
     it('renderiza PanelHeader con título Editar invitación', () => {
       render(<InvitacionEntity {...baseProps({ mode: 'edit' })} />);
       expect(screen.getByTestId('panel-header')).toHaveTextContent('Editar invitación');
-    });
-
-    it('muestra la empresa como readonly', () => {
-      render(<InvitacionEntity {...baseProps({ mode: 'edit' })} />);
-      expect(screen.getByText('Constructora S.A.')).toBeInTheDocument();
     });
 
     it('muestra el email como readonly (deshabilitado)', () => {

@@ -41,6 +41,8 @@ interface ExtractoParseModalProps {
   onMovimientosChange?: (movimientos: MovimientoBancarioInput[]) => void;
   onSave: (header: ExtractoParseHeader) => void;
   onCancel: () => void;
+  /** Pre-fill the search filter when modal opens */
+  defaultSearch?: string;
 }
 
 const BANCOS_CONOCIDOS: Banco[] = ['Bancolombia', 'Bancoomeva', 'Global66'];
@@ -68,6 +70,7 @@ export function ExtractoParseModal({
   onMovimientosChange,
   onSave,
   onCancel,
+  defaultSearch,
 }: ExtractoParseModalProps) {
   const savingRef = useRef(false);
   const syncedRef = useRef(false);
@@ -92,6 +95,7 @@ export function ExtractoParseModal({
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (!open) { setCorrigiendo(false); setModalSearch(''); }
+    if (open && defaultSearch) { setModalSearch(defaultSearch); }
   }
 
   // Sync movimientos → editMovimientos once per modal session:

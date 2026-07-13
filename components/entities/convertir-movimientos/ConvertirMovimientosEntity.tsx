@@ -118,6 +118,10 @@ export function ConvertirMovimientosEntity({ mode, companyId, record, defaults, 
       const desc = descriptions[mov.id]?.trim() || mov.descripcion;
 
       try {
+        // Use individual extractoId from movimiento (for "Todos" mode) or the common one
+        const movExtractoId = (mov as any)._extractoId as string | undefined;
+        const targetExtractoId = movExtractoId || extractoId;
+
         const ejecucionId = await addEjecucion(companyId, {
           descripcion: desc,
           fechaEjecutado: mov.fecha,
@@ -131,11 +135,11 @@ export function ConvertirMovimientosEntity({ mode, companyId, record, defaults, 
           cuentaId,
           cuentaName,
           comprobantes: [],
+        }, {
+          _movimientoId: mov.id,
+          _extractoId: targetExtractoId || null,
         });
 
-        // Use individual extractoId from movimiento (for "Todos" mode) or the common one
-        const movExtractoId = (mov as any)._extractoId as string | undefined;
-        const targetExtractoId = movExtractoId || extractoId;
         if (targetExtractoId) {
           await updateMovimiento(companyId, cuentaId, targetExtractoId, mov.id, { convertido: true, _ejecucionId: ejecucionId });
         }

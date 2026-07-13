@@ -271,6 +271,8 @@ function subscribeEjecucionesWithFilter(
           cuentaName: data.cuentaName ?? undefined,
           comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
           archivado: data.archivado ?? false,
+          _movimientoId: data._movimientoId ?? undefined,
+          _extractoId: data._extractoId ?? undefined,
         } as Ejecucion;
       }));
     },
@@ -302,6 +304,8 @@ export function subscribeEjecuciones(
           cuentaId: data.cuentaId ?? undefined,
           cuentaName: data.cuentaName ?? undefined,
           comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
+          _movimientoId: data._movimientoId ?? undefined,
+          _extractoId: data._extractoId ?? undefined,
           archivado: data.archivado ?? false,
         } as Ejecucion;
       }));
@@ -332,10 +336,11 @@ export async function addBudget(
 export async function addEjecucion(
   companyId: string,
   ejecucion: Omit<Ejecucion, 'id'>,
+  extraFields?: Record<string, unknown>,
 ): Promise<string> {
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
-    { ...ejecucion, createdAt: serverTimestamp() },
+    { ...ejecucion, ...extraFields, createdAt: serverTimestamp() },
   );
   return docRef.id;
 }

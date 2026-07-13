@@ -3,6 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
 import type { Comprobante, SettingsItem } from '@/lib/types';
 
+vi.mock('@/lib/fileUpload', () => ({
+  deleteFile: vi.fn().mockResolvedValue(undefined),
+  validateFile: vi.fn().mockReturnValue(null),
+}));
+
 const mockTipos: SettingsItem[] = [
   { name: 'Factura', color: '#000000', order: 1 },
   { name: 'Cuenta de cobro', color: '#000000', order: 2 },

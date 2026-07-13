@@ -167,6 +167,12 @@ export function EjecucionForm({
   const handleSubmit = async () => {
     setInternalSaving(true);
     const data: Record<string, any> = { ...fields };
+    // Preserve private movement-linking fields from defaults (set by Extractos direct conversion)
+    if (defaults) {
+      if (defaults._cuentaId) data._cuentaId = defaults._cuentaId;
+      if (defaults._extractoId) data._extractoId = defaults._extractoId;
+      if (defaults._movimientoId) data._movimientoId = defaults._movimientoId;
+    }
     const entries: Record<string, any>[] = [];
     const reps = recurring && mode === 'add' ? Math.max(1, recurringCount) : 1;
 

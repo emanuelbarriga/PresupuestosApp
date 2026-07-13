@@ -9,6 +9,15 @@ import { ProjectEntity } from './ProjectEntity';
 const mockUnsub = vi.fn();
 
 vi.mock('@/lib/firestore', () => ({
+  subscribeSettings: vi.fn((onData: (data: any) => void) => {
+    onData({
+      stateProject: [{ name: 'Activo', color: '#22c55e', order: 0 }, { name: 'Cerrado', color: '#ef4444', order: 1 }],
+      tipoProyectos: [{ name: 'Obra', color: '#6366f1', order: 0 }],
+      unidades: [{ name: 'Metros', color: '#6366f1', order: 0 }],
+      tipoComprobante: [],
+    });
+    return mockUnsub;
+  }),
   subscribeCompanySettings: vi.fn((_companyId: string, onData: (data: any) => void) => {
     onData({
       stateProject: [{ name: 'Activo', color: '#22c55e', order: 0 }, { name: 'Cerrado', color: '#ef4444', order: 1 }],
@@ -225,7 +234,7 @@ describe('ProjectEntity', () => {
       const firestore = await import('@/lib/firestore');
       renderEntity();
       expect(firestore.subscribeProjects).toHaveBeenCalledWith('c1', expect.any(Function), expect.any(Function));
-      expect(firestore.subscribeCompanySettings).toHaveBeenCalledWith('c1', expect.any(Function));
+      expect(firestore.subscribeSettings).toHaveBeenCalledWith(expect.any(Function), expect.any(Function));
       expect(firestore.subscribeTerceros).toHaveBeenCalledWith(expect.any(Function));
     });
   });
