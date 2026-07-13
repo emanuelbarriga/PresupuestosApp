@@ -1,6 +1,6 @@
 # Cuenta Bancaria de Ejecucion Specification
 
-> Change: `mejorar-ejecutados` · Capability: `cuenta-bancaria-ejecucion` · Date: 2026-07-05
+> Changes: `mejorar-ejecutados` (2026-07-05), `bugfix-budget-links` (2026-07-13), `integridad-datos-financieros` (2026-07-13) · Capability: `cuenta-bancaria-ejecucion`
 
 ## Purpose
 
@@ -89,6 +89,109 @@ The Datos ejecucion list SHALL show the bank account name (or "Sin cuenta bancar
 - WHEN the EjecucionView renders
 - THEN a field "Cuenta bancaria" displays the `cuentaName`
 - AND clicking the field navigates to the bank account detail if available
+
+### Requirement: Movimiento Reset on Ejecucion Delete
+
+Al borrar una ejecución que tiene `_movimientoId`, el sistema DEBE resetear el `MovimientoBancario` correspondiente a `convertido: false` y `_ejecucionId: ''`.
+
+#### Scenario: Movimiento reset on delete
+
+- GIVEN una ejecución con `_movimientoId: "mov456"`, sin budgetLinks
+- WHEN `deleteEjecucion` es llamada
+- THEN el documento `MovimientoBancario` "mov456" se actualiza con `{ convertido: false, _ejecucionId: '' }`
+- AND la ejecución es borrada
+
+#### Scenario: Movimiento reset with budgetLinks
+
+- GIVEN una ejecución con `_movimientoId: "mov789"` Y un budgetLink a Budget A por $500k
+- WHEN `deleteEjecucion` es llamada
+- THEN el budget es reintegrado (writeBatch)
+- AND el movimiento es reseteado
+- AND ambas operaciones se completan (cada una en su propio mecanismo atómico)
+
+#### Scenario: Delete ejecucion without movimiento
+
+- GIVEN una ejecución sin `_movimientoId`
+- WHEN `deleteEjecucion` es llamada
+- THEN ningún documento de `MovimientoBancario` es modificado
+- AND la ejecución es borrada normalmente
+
+### Requirement: Budget Selection in Conversion Flow
+
+The "Convertir movimientos a ejecuciones" flow (ConvertirMovimientosEntity) SHALL include a `SearchableSelect` budget picker populated from the company's budgets. When a budget is selected, each auto-created ejecucion SHALL receive a budgetLink to the selected budget via `addBudgetLink()`.
+
+#### Scenario: Convert with budget selected
+
+- GIVEN the user is converting 3 bank movements to ejecuciones
+- WHEN the user selects "Proyecto Q1 2026" from the budget picker
+- THEN each of the 3 ejecuciones gets a budgetLink to that budget
+- AND the budget's `totalEjecutado` increments by the sum of all 3 montos
+
+#### Scenario: Convert without budget
+
+- GIVEN the user is converting bank movements to ejecuciones
+- WHEN the user leaves the budget picker empty
+- THEN ejecuciones are created without budgetLinks
+- AND the conversion succeeds without errors
+
+### Requirement: Reactive Budget-Ejecucion Subscription
+
+The `subscribeEjecucionesByBudget` function MUST use a reactive `collectionGroup('budgetLinks')` query filtering by `budgetId` and `companyId`. The onSnapshot callback MUST guard against stale invocations after unsubscribe via an `isSubscribed` flag.
+
+#### Scenario: Budget view updates in real-time
+
+- GIVEN the user is viewing a budget's linked ejecuciones
+- WHEN another user creates a new ejecucion linked to this budget
+- THEN the budget view updates within 500ms without manual refresh
+
+#### Scenario: Unsubscribe prevents stale callback
+
+- GIVEN the component using `subscribeEjecucionesByBudget` has unmounted
+- WHEN a budgetLink change occurs
+- THEN the onSnapshot callback is NOT invoked
+
+### Requirement: Tolerance Validation on EjecucionForm Submit
+
+The `EjecucionForm.handleSubmit` SHALL compute `|montoEjecutado - sum(links.monto)|` and reject submission with a toast error if the difference exceeds 1 COP. This prevents drift between the ejecucion's amount and its budgetLink total.
+
+#### Scenario: Valid tolerance allows submission
+
+- GIVEN an ejecucion with montoEjecutado = $500k and budgetLinks summing to $499,999.50
+- WHEN the user submits the form
+- THEN the submission proceeds
+- AND the budget's totalEjecutado is updated
+
+#### Scenario: Tolerance exceeded blocks submission
+
+- GIVEN an ejecucion with montoEjecutado = $500k and budgetLinks summing to $498k
+- WHEN the user submits the form
+- THEN the submission is blocked
+- AND a toast error displays: "La diferencia entre el monto ejecutado y la suma de los vínculos presupuestales supera el límite permitido"
+
+### Requirement: CuentaName Resolution via Global Subscription
+
+La UI SHALL resolver `cuentaName` a través de la suscripción global `subscribeCuentasBancarias(companyId)` usando el `cuentaId` como key para buscar el nombre actualizado. El campo denormalizado `cuentaName` del snapshot SHALL usarse solo como fallback si la cuenta fue eliminada (ya no existe en la subcolección).
+
+#### Scenario: CuentaName resolved from live subscription
+
+- GIVEN una ejecución con `cuentaId: "bcol-123"` y `cuentaName: "Bancolombia - Ahorros 5678"` (snapshot anterior)
+- WHEN el `nombre` de la cuenta bancaria fue cambiado a "Bancolombia - Ahorros Operativa"
+- THEN la UI resuelve el nombre desde `subscribeCuentasBancarias` lookup por ID
+- AND muestra "Bancolombia - Ahorros Operativa" (nombre actualizado)
+
+#### Scenario: Fallback to snapshot when cuenta deleted
+
+- GIVEN una ejecución con `cuentaId: "eliminada-123"` y `cuentaName: "Banco Viejo"` en el snapshot
+- WHEN la cuenta bancaria fue eliminada de la subcolección
+- THEN la UI usa `ejecucion.cuentaName` como fallback
+- AND muestra "Banco Viejo" con un indicador visual de "Cuenta eliminada"
+
+#### Scenario: Ejecucion without cuentaId
+
+- GIVEN una ejecución sin `cuentaId` ni `cuentaName`
+- WHEN la UI renderiza la fila
+- THEN muestra "Sin cuenta bancaria"
+- AND no realiza ningún lookup
 
 ## Security Rules
 

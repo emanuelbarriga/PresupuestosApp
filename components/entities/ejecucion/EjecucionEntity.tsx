@@ -60,6 +60,7 @@ export function EjecucionEntity({ mode, companyId, record, defaults, onSubmit, o
           <EjecucionView
             ejecucion={record as any}
             companyId={companyId}
+            cuentas={cuentas}
             onNavigate={onNavigate}
             onSubmit={onSubmit}
           />

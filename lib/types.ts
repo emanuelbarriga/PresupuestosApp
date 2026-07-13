@@ -60,6 +60,7 @@ export interface Tercero {
   numeroDocumento?: string;
   lugar?: string;
   tipo: 'cliente' | 'proveedor' | 'ambos';
+  archivado?: boolean;
 }
 
 export interface Project {

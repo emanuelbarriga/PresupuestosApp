@@ -95,11 +95,16 @@ export function subscribeProviders(
 export function subscribeTerceros(
   onData: (terceros: Tercero[]) => void,
   onError?: (err: Error) => void,
+  includeArchivados: boolean = false,
 ): Unsubscribe {
   return onSnapshot(
     collection(db, TERCEROS_COLLECTION),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Tercero));
+      let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Tercero);
+      if (!includeArchivados) {
+        docs = docs.filter((t) => t.archivado !== true);
+      }
+      onData(docs);
     },
     onError,
   );
@@ -515,43 +520,47 @@ export function subscribeEjecucionesByBudget(
   onData: (ejecuciones: Ejecucion[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  // Subscribe to the budget doc to read denormalized linkedEjecuciones (no collectionGroup needed)
-  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, 'budgets', budgetId);
-  return onSnapshot(
-    budgetRef,
-    async (snapshot) => {
-      const data = snapshot.data();
-      const linked = (data?.linkedEjecuciones as Array<{ ejecucionId: string; monto: number }>) ?? [];
-      if (linked.length === 0) {
-        onData([]);
-        return;
-      }
-      try {
-        const linkedIds = linked.map(l => l.ejecucionId);
-        const ejecucionPath = `${COMPANIES_COLLECTION}/${companyId}/${EJECUCIONES_COLLECTION}`;
-        const filtered = await fetchDocsByIds(ejecucionPath, linkedIds, (id, data) => ({
-          id,
-          descripcion: (data.descripcion as string) ?? '',
-          projectId: (data.projectId as string) ?? '',
-          projectName: (data.projectName as string) ?? (data.proyectoAsignado as string) ?? '',
-          entityId: (data.entityId as string) ?? '',
-          entityName: (data.entityName as string) ?? (data.clienteOProveedor as string) ?? '',
-          entityType: (data.entityType as string) ?? '',
-          tipo: (data.tipo as string) ?? 'ingreso',
-          montoEjecutado: (data.montoEjecutado as number) ?? 0,
-          fechaEjecutado: (data.fechaEjecutado as string) ?? '',
-          cuentaId: (data.cuentaId as string | undefined) ?? undefined,
-          cuentaName: (data.cuentaName as string | undefined) ?? undefined,
-          comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
-          archivado: (data.archivado as boolean) ?? false,
-        } as Ejecucion));
-        onData(filtered);
-      } catch (err) {
-        onError?.(err as Error);
-      }
-    },
-    onError,
+  const q = query(
+    collectionGroup(db, BUDGET_LINKS_COLLECTION),
+    where('companyId', '==', companyId),
+    where('budgetId', '==', budgetId),
   );
+  let isSubscribed = true;
+  const unsub = onSnapshot(q, async (snapshot) => {
+    if (!isSubscribed) return;
+    const linkedIds = snapshot.docs.map(d => d.ref.path.split('/')[3]);
+    if (linkedIds.length === 0) {
+      onData([]);
+      return;
+    }
+    try {
+      const ejecucionPath = `${COMPANIES_COLLECTION}/${companyId}/${EJECUCIONES_COLLECTION}`;
+      const filtered = await fetchDocsByIds(ejecucionPath, linkedIds, (id, data) => ({
+        id,
+        descripcion: (data.descripcion as string) ?? '',
+        projectId: (data.projectId as string) ?? '',
+        projectName: (data.projectName as string) ?? (data.proyectoAsignado as string) ?? '',
+        entityId: (data.entityId as string) ?? '',
+        entityName: (data.entityName as string) ?? (data.clienteOProveedor as string) ?? '',
+        entityType: (data.entityType as string) ?? '',
+        tipo: (data.tipo as string) ?? 'ingreso',
+        montoEjecutado: (data.montoEjecutado as number) ?? 0,
+        fechaEjecutado: (data.fechaEjecutado as string) ?? '',
+        cuentaId: (data.cuentaId as string) ?? undefined,
+        cuentaName: (data.cuentaName as string) ?? undefined,
+        comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
+        archivado: (data.archivado as boolean) ?? false,
+      } as Ejecucion));
+      if (isSubscribed) onData(filtered);
+    } catch (err) {
+      if (isSubscribed) onError?.(err as Error);
+    }
+  }, onError);
+  // Return an unsubscribe function that also sets the guard flag
+  return () => {
+    isSubscribed = false;
+    unsub();
+  };
 }
 
 export async function updateProject(companyId: string, projectId: string, data: Partial<Project>): Promise<void> {
@@ -580,7 +589,7 @@ export async function updateTercero(
 }
 
 export async function deleteTercero(terceroId: string): Promise<void> {
-  await deleteDoc(doc(db, TERCEROS_COLLECTION, terceroId));
+  await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { archivado: true, updatedAt: serverTimestamp() });
 }
 
 /**
@@ -1108,9 +1117,48 @@ export async function deleteBudget(companyId: string, budgetId: string): Promise
 
 export async function deleteEjecucion(companyId: string, ejecucionId: string): Promise<void> {
   const ejecucionRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId);
+  const ejecucionSnap = await getDoc(ejecucionRef);
   const linksSnap = await getDocs(collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION));
   const batch = writeBatch(db);
-  linksSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Reintegro de budgetLinks
+  linksSnap.docs.forEach(d => {
+    const data = d.data();
+    const budgetId = data.budgetId as string;
+    const monto = data.monto as number;
+    if (budgetId && monto) {
+      const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId);
+      batch.update(budgetRef, {
+        totalEjecutado: increment(-monto),
+        linkedEjecuciones: arrayRemove({ ejecucionId, monto }),
+      });
+    }
+    batch.delete(d.ref);
+  });
+
+  // Reset del movimiento bancario asociado (si existe)
+  if (ejecucionSnap && typeof ejecucionSnap.exists === 'function' && ejecucionSnap.exists()) {
+    const ejecucionData = ejecucionSnap.data();
+    const movId = ejecucionData._movimientoId as string | undefined;
+    const extId = ejecucionData._extractoId as string | undefined;
+    const ctaId = ejecucionData.cuentaId as string | undefined;
+    if (movId && extId && ctaId) {
+      const movimientoRef = doc(
+        db,
+        COMPANIES_COLLECTION, companyId,
+        CUENTAS_BANCARIAS_COLLECTION, ctaId,
+        EXTRACTOS_COLLECTION, extId,
+        MOVIMIENTOS_COLLECTION, movId,
+      );
+      batch.update(movimientoRef, { convertido: false, _ejecucionId: '' });
+    } else if (movId) {
+      console.warn(
+        `[deleteEjecucion] ejecucion ${ejecucionId} tiene _movimientoId pero falta cuentaId o _extractoId — no se resetea el movimiento`,
+        { cuentaId: ctaId, extractoId: extId, movimientoId: movId },
+      );
+    }
+  }
+
   batch.delete(ejecucionRef);
   await batch.commit();
 }

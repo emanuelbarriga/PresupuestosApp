@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { CuentaBancaria, ExtractoBancario, MovimientoBancario, MONTHS, NavScreen } from '@/lib/types';
-import { subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, getEjecucion, updateMovimiento } from '@/lib/firestore';
-import { deleteDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
+import { subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, getEjecucion, updateMovimiento, deleteEjecucion } from '@/lib/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Search, X, TrendingUp, TrendingDown, List, Download, ChevronLeft, ChevronRight, Banknote, ArrowRight, CheckSquare, Square, Eye, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -537,12 +537,8 @@ export function Extractos({ companyId, onNavigate }: { companyId: string; onNavi
     });
     if (!confirmed) return;
 
-    const delMovExtractoId = (mov as any)._extractoId as string | undefined;
     try {
-      await deleteDoc(doc(db, 'companies', companyId, 'ejecuciones', ejecId));
-      if (selectedAccountId && (delMovExtractoId || extractoInfo?.id)) {
-        await updateMovimiento(companyId, selectedAccountId, delMovExtractoId || extractoInfo!.id!, mov.id, { convertido: false, _ejecucionId: '' });
-      }
+      await deleteEjecucion(companyId, ejecId);
       toast.success('Ejecución eliminada');
     } catch (err) {
       console.error('[Extractos] Error al eliminar ejecucion:', err);

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Project, Budget, Ejecucion, SettingsCategorias, NavScreen, EntityType } from '@/lib/types';
 import { subscribeCompanySettings, subscribeBudgets, subscribeEjecuciones } from '@/lib/firestore';
 import { DF } from '@/components/shared/DF';
-import { Save, ChevronDown, ChevronRight } from 'lucide-react';
+import { Save, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { groupByEntity } from '@/components/utils/groupByEntity';
 import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
@@ -81,7 +81,7 @@ export function ProjectView({ project, projects, companyId, settingsData, year, 
     }
   }, [project.id, project.estado]);
 
-  const isInferred = !(projects || []).some(p => p.name === project.name);
+  const isInferred = !project.id || !(projects || []).some(p => p.id === project.id);
   const hasChanges = selectedState !== project.estado;
 
   const handleSaveState = async () => {
@@ -111,6 +111,18 @@ export function ProjectView({ project, projects, companyId, settingsData, year, 
 
   return (
     <>
+      {/* Banner proyecto fantasma */}
+      {isInferred && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-orange-800">Proyecto no encontrado</p>
+              <p className="text-xs text-orange-600">Este proyecto no existe en la base de datos. Podría haber sido eliminado o estar mal referenciado. Los datos mostrados son históricos.</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
         {!isInferred && project.id && (

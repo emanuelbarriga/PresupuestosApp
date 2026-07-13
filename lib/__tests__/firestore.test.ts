@@ -34,7 +34,12 @@ const {
     setDoc: vi.fn(),
     query: vi.fn((col) => col),
     where: vi.fn(() => ({ type: 'where' as const })),
-    writeBatch: vi.fn(() => ({ set: vi.fn(), commit: mockBatchCommit })),
+    writeBatch: vi.fn(() => ({
+      set: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      commit: mockBatchCommit,
+    })),
     collectionGroup: vi.fn(() => ({ type: 'collectionGroup' as const })),
     deleteDoc: vi.fn().mockResolvedValue(undefined),
     mockUnsub,
@@ -82,8 +87,8 @@ function makeMockSnapshot(
 
 // ─── Imports (resolved after mocks) ──────────────────────────────────────────
 
-import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget } from '@/lib/firestore';
-import type { Budget, Ejecucion, EjecucionBudgetLink } from '@/lib/types';
+import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros } from '@/lib/firestore';
+import type { Budget, Ejecucion, EjecucionBudgetLink, Tercero } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test suites
@@ -681,23 +686,34 @@ describe('budget-links (PR3): subscribeEjecucionesByBudget', () => {
     vi.clearAllMocks();
   });
 
-  it('subscribes to budget doc and reads linkedEjecuciones denormalized array', () => {
+  it('subscribes to collectionGroup budgetLinks and fetches linked ejecuciones', () => {
     const onData = vi.fn();
     const mockUnsub = vi.fn();
 
-    const linkedEjecuciones = [
-      { ejecucionId: 'ej-1', monto: 50000 },
-      { ejecucionId: 'ej-2', monto: 25000 },
-    ];
+    // Mock: collectionGroup returns a base ref, query composes it
+    (collectionGroup as Mock).mockReturnValue({ type: 'collectionGroup' as const, path: 'budgetLinks' });
+    (query as Mock).mockReturnValue({ type: 'query' as const, collectionGroup: 'budgetLinks' });
 
-    (doc as Mock).mockReturnValue({ type: 'doc' as const, id: 'b-1', path: 'companies/c1/budgets/b-1' });
-    (onSnapshot as Mock).mockImplementation((_ref: any, onNext: any, _onError: any) => {
-      // Simulate a budget doc with linkedEjecuciones
+    // Mock: onSnapshot calls back with budgetLink docs whose paths encode ejecucionId
+    (onSnapshot as Mock).mockImplementation((_q: any, onNext: any, _onError: any) => {
       onNext({
-        data: () => ({ linkedEjecuciones }),
+        docs: [
+          {
+            id: 'link-1',
+            ref: { path: 'companies/c1/ejecuciones/ej-1/budgetLinks/link-1' },
+            data: () => ({ companyId: 'c1', budgetId: 'b-1', monto: 50000 }),
+          },
+          {
+            id: 'link-2',
+            ref: { path: 'companies/c1/ejecuciones/ej-2/budgetLinks/link-2' },
+            data: () => ({ companyId: 'c1', budgetId: 'b-1', monto: 25000 }),
+          },
+        ],
       });
       return mockUnsub;
     });
+
+    // Mock: fetchDocsByIds → getDocs returns the ejecucion documents
     (getDocs as Mock).mockResolvedValue({
       docs: [
         { id: 'ej-1', data: () => ({ descripcion: 'Pago 1', montoEjecutado: 50000, tipo: 'egreso', comprobantes: [] }) },
@@ -707,21 +723,256 @@ describe('budget-links (PR3): subscribeEjecucionesByBudget', () => {
 
     subscribeEjecucionesByBudget('c1', 'b-1', onData);
 
-    expect(doc).toHaveBeenCalledWith(expect.any(Object), 'companies', 'c1', 'budgets', 'b-1');
+    expect(collectionGroup).toHaveBeenCalledWith(expect.any(Object), 'budgetLinks');
+    expect(query).toHaveBeenCalled();
     expect(onSnapshot).toHaveBeenCalled();
   });
 
-  it('calls onData with empty array when budget has no linkedEjecuciones', () => {
+  it('calls onData with empty array when no budgetLinks exist', () => {
     const onData = vi.fn();
 
-    (doc as Mock).mockReturnValue({ type: 'doc' as const, id: 'b-1', path: 'companies/c1/budgets/b-1' });
-    (onSnapshot as Mock).mockImplementation((_ref: any, onNext: any, _onError: any) => {
-      onNext({ data: () => ({}) });
+    (collectionGroup as Mock).mockReturnValue({ type: 'collectionGroup' as const, path: 'budgetLinks' });
+    (query as Mock).mockReturnValue({ type: 'query' as const, collectionGroup: 'budgetLinks' });
+    (onSnapshot as Mock).mockImplementation((_q: any, onNext: any, _onError: any) => {
+      onNext({ docs: [] });
       return vi.fn();
     });
 
     subscribeEjecucionesByBudget('c1', 'b-1', onData);
 
     expect(onData).toHaveBeenCalledWith([]);
+  });
+});
+
+describe('budget-links: deleteEjecucion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('decrements budget totalEjecutado and removes linkedEjecuciones for each link', async () => {
+    const docs = [
+      { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
+      { id: 'link-2', data: () => ({ budgetId: 'b-2', monto: 25000 }) },
+    ];
+    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    // Should have called batch.update for each link's budget
+    expect(writeBatch).toHaveBeenCalledTimes(1);
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).toHaveBeenCalledTimes(2);
+    expect(batch.delete).toHaveBeenCalledTimes(3); // 2 links + 1 ejecucion
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not update budgets when ejecucion has no budget links', async () => {
+    (getDocs as Mock).mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).not.toHaveBeenCalled();
+    expect(batch.delete).toHaveBeenCalledTimes(1); // solo ejecucion doc
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses increment(-monto) and arrayRemove for denormalized fields', async () => {
+    const docs = [
+      { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
+    ];
+    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        totalEjecutado: { __increment: -50000 },
+        linkedEjecuciones: { __arrayRemove: { ejecucionId: 'ej-1', monto: 50000 } },
+      }),
+    );
+  });
+});
+
+describe('budget-links: subscribeEjecucionesByBudget isSubscribed guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not call onData after unsubscribe', () => {
+    const onData = vi.fn();
+    let capturedOnNext: any;
+    const mockUnsub = vi.fn();
+
+    (collectionGroup as Mock).mockReturnValue({ type: 'collectionGroup' as const });
+    (query as Mock).mockReturnValue({ type: 'query' as const });
+    (onSnapshot as Mock).mockImplementation((_q: any, onNext: any, _onError: any) => {
+      capturedOnNext = onNext;
+      return mockUnsub;
+    });
+
+    const unsub = subscribeEjecucionesByBudget('c1', 'b-1', onData);
+
+    // Unsubscribe first
+    unsub();
+
+    // Then a snapshot fires (stale callback)
+    capturedOnNext({ docs: [] });
+
+    // onData should NOT have been called after unsubscribe
+    expect(onData).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T9 — Delete Ejecucion con movimiento reset (PR1-T1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('deleteEjecucion con movimiento reset (PR1-T1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resets linked movimiento when ejecucion has _movimientoId + budgetLinks', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        _movimientoId: 'mov1',
+        _extractoId: 'ext1',
+        cuentaId: 'c1',
+      }),
+    });
+
+    const docs = [
+      { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
+    ];
+    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    expect(writeBatch).toHaveBeenCalledTimes(1);
+    const batch = (writeBatch as Mock).mock.results[0].value;
+
+    // Budget reintegration update
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        totalEjecutado: { __increment: -50000 },
+        linkedEjecuciones: { __arrayRemove: { ejecucionId: 'ej-1', monto: 50000 } },
+      }),
+    );
+
+    // Movimiento reset update
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ convertido: false, _ejecucionId: '' }),
+    );
+
+    // 1 link delete + 1 ejecucion delete
+    expect(batch.delete).toHaveBeenCalledTimes(2);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips movimiento reset when ejecucion has no _movimientoId and no links', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ descripcion: 'test' }),
+    });
+
+    (getDocs as Mock).mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).not.toHaveBeenCalled();
+    expect(batch.delete).toHaveBeenCalledTimes(1); // solo ejecucion doc
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T9 — Tercero archiving (PR3): deleteTercero + subscribeTerceros
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('tercero-archiving (PR3): deleteTercero soft delete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls updateDoc with archivado: true instead of deleteDoc', async () => {
+    await deleteTercero('t1');
+
+    expect(updateDoc).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ archivado: true }),
+    );
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe('tercero-archiving (PR3): subscribeTerceros with includeArchivados', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('filters out archivados by default (includeArchivados=false)', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeTerceros(onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      { id: 't1', name: 'Activo 1', archivado: false },
+      { id: 't2', name: 'Archivado', archivado: true },
+      { id: 't3', name: 'Activo 2', archivado: false },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as Tercero[];
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('t1');
+    expect(result[1].id).toBe('t3');
+  });
+
+  it('includes archivados when includeArchivados=true', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeTerceros(onData, onError, true);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      { id: 't1', name: 'Activo 1', archivado: false },
+      { id: 't2', name: 'Archivado', archivado: true },
+      { id: 't3', name: 'Activo 2' }, // sin archivado field
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as Tercero[];
+    expect(result).toHaveLength(3);
+  });
+
+  it('handles docs without archivado field (undefined)', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeTerceros(onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      { id: 't1', name: 'Legacy doc' }, // sin archivado
+      { id: 't2', name: 'Archivado', archivado: true },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as Tercero[];
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('t1');
   });
 });

@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { MovimientoBancario, NavScreen, Ejecucion, EntityType, MovimientoBancarioInput, Banco } from '@/lib/types';
-import { getEjecucion, updateMovimiento, subscribeMovimientos } from '@/lib/firestore';
+import { getEjecucion, updateMovimiento, subscribeMovimientos, deleteEjecucion } from '@/lib/firestore';
 import { ArrowRight, Pencil, Trash2, Eye, FileText } from 'lucide-react';
-import { deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
+import { ConfirmDeleteModal } from '@/components/entities/ejecucion/ConfirmDeleteModal';
 
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
@@ -33,6 +34,7 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
   const monto = isDebito ? movimiento.debito! : movimiento.credito ?? 0;
   const ejecucionId = (movimiento as any)._ejecucionId as string | undefined;
   const [loadingEjec, setLoadingEjec] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const handleConvertir = () => {
     onNavigate({
@@ -76,40 +78,18 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
     if (ejecucion) onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'edit', record: ejecucion });
   };
 
-  const handleEliminarEjecucion = async () => {
+  const handleEliminarEjecucion = () => {
     if (!ejecucionId) return;
-    const confirmed = await new Promise<boolean>((resolve) => {
-      toast((t) => (
-        <div className="text-sm space-y-3">
-          <p className="text-slate-700 font-medium">¿Eliminar la ejecución asociada?</p>
-          <p className="text-xs text-slate-500">El movimiento volverá a estado "no convertido".</p>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => { toast.dismiss(t.id); resolve(false); }}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">No</button>
-            <button onClick={() => { toast.dismiss(t.id); resolve(true); }}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">Sí</button>
-          </div>
-        </div>
-      ), { duration: Infinity });
-    });
-    if (!confirmed) return;
+    setShowDeleteModal(true);
+  };
 
-    console.log('[MovimientoView] Deletando ejecucion:', { companyId, ejecucionId, cuentaId, extractoId, movimientoId: movimiento.id });
+  const handleConfirmDelete = async () => {
+    if (!ejecucionId) return;
     try {
-      const ejecRef = doc(db, 'companies', companyId, 'ejecuciones', ejecucionId);
-      console.log('[MovimientoView] Referencia:', ejecRef.path);
-      await deleteDoc(ejecRef);
-      console.log('[MovimientoView] deleteDoc OK');
-
-      if (cuentaId && extractoId) {
-        console.log('[MovimientoView] Marcando movimiento como no convertido');
-        await updateMovimiento(companyId, cuentaId, extractoId, movimiento.id, { convertido: false, _ejecucionId: '' });
-        console.log('[MovimientoView] updateMovimiento OK');
-      }
-
+      await deleteEjecucion(companyId, ejecucionId);
+      setShowDeleteModal(false);
       onClose();
       toast.success('Ejecución eliminada');
-      console.log('[MovimientoView] Proceso completado');
     } catch (err) {
       console.error('[MovimientoView] Error al eliminar:', err);
       toast.error('Error al eliminar la ejecución');
@@ -277,6 +257,17 @@ export function MovimientoView({ movimiento, cuentaName, cuentaId, extractoId, c
         onSave={() => {}}
         onCancel={handleCerrarExtracto}
         defaultSearch={movimiento.descripcion}
+      />
+      <ConfirmDeleteModal
+        open={showDeleteModal}
+        ejecucion={{
+          descripcion: movimiento.descripcion,
+          montoEjecutado: Math.round(monto),
+          tieneMovimientoVinculado: true,
+          movimientoNombre: movimiento.descripcion,
+        }}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteModal(false)}
       />
     </div>
   );

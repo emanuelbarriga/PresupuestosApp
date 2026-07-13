@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, deleteBudget, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, deleteTercero } from '@/lib/firestore';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, deleteTercero } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
@@ -93,7 +93,7 @@ const RangeSlider = ({ min, max, values, onChange, formatLabel }: {
 };
 
 export function Datos({
-  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteBudget, onDeleteEjecucion, onDeleteTercero: parentOnDeleteTercero,
+  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteEjecucion, onDeleteTercero: parentOnDeleteTercero,
 }: {
   budgets: Budget[];
   ejecuciones: Ejecucion[];
@@ -104,7 +104,6 @@ export function Datos({
   onViewRecord?: (detail: RecordDetail) => void;
   onAddNew?: (type: FormType, defaults?: Record<string, string>) => void;
   onEditRecord?: (form: any) => void;
-  onDeleteBudget?: (budgetId: string) => void;
   onDeleteEjecucion?: (ejecucionId: string) => void;
   onDeleteTercero?: (terceroId: string) => void;
 }) {
@@ -1120,33 +1119,6 @@ export function Datos({
                         </td>
                         <ActionCell>
                           <EditBtn onClick={() => edit('budget', b)} />
-                          <DeleteBtn onDelete={async () => {
-                            const confirmed = await new Promise<boolean>((resolve) => {
-                              toast((t) => (
-                                <div className="text-sm space-y-3">
-                                  <p className="text-slate-700 font-medium">¿Borrar presupuesto &ldquo;{b.descripcion}&rdquo;?</p>
-                                  <p className="text-xs text-slate-500">Esta acción no se puede deshacer.</p>
-                                  <div className="flex justify-end gap-2">
-                                    <button
-                                      onClick={() => { toast.dismiss(t.id); resolve(false); }}
-                                      className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                                    >
-                                      No
-                                    </button>
-                                    <button
-                                      onClick={() => { toast.dismiss(t.id); resolve(true); }}
-                                      className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-                                    >
-                                      Sí
-                                    </button>
-                                  </div>
-                                </div>
-                              ), { duration: Infinity });
-                            });
-                            if (confirmed) {
-                              onDeleteBudget?.(b.id);
-                            }
-                          }} />
                         </ActionCell>
                       </tr>);
                     })}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react';
-import { Ejecucion, Budget, Comprobante, NavScreen, EntityType, MovimientoBancario } from '@/lib/types';
+import { Ejecucion, Budget, Comprobante, NavScreen, EntityType, MovimientoBancario, CuentaBancaria } from '@/lib/types';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscribeBudgets, removeBudgetLink, updateEjecucion } from '@/lib/firestore';
@@ -17,6 +17,7 @@ const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 
 interface EjecucionViewProps {
   ejecucion: Ejecucion;
   companyId: string;
+  cuentas?: CuentaBancaria[];
   onSubmit: (action: {
     mode: 'create' | 'edit' | 'archive';
     entity: EntityType;
@@ -26,9 +27,12 @@ interface EjecucionViewProps {
   onNavigate: (screen: NavScreen) => void;
 }
 
-export function EjecucionView({ ejecucion, companyId, onSubmit, onNavigate }: EjecucionViewProps) {
+export function EjecucionView({ ejecucion, companyId, cuentas, onSubmit, onNavigate }: EjecucionViewProps) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>(() => ejecucion.comprobantes || []);
+
+  // ── Resolver nombre de cuenta bancaria ──
+  const cuentaDisplayName = cuentas?.find(c => c.id === ejecucion.cuentaId)?.nombre || ejecucion.cuentaName || 'Sin cuenta bancaria';
 
   // ── Extracto / Movimiento vinculado ──
   const movId = (ejecucion as any)._movimientoId as string | undefined;
@@ -113,7 +117,7 @@ export function EjecucionView({ ejecucion, companyId, onSubmit, onNavigate }: Ej
       <DF label="Tipo" v={ejecucion.tipo} />
       <DF label="Monto" v={formatCurrency(ejecucion.montoEjecutado)} />
       <DF label="Fecha" v={ejecucion.fechaEjecutado} />
-      <DF label="Cuenta bancaria" v={ejecucion.cuentaName || 'Sin cuenta bancaria'} />
+      <DF label="Cuenta bancaria" v={cuentaDisplayName} />
 
       {/* Extracto / Movimiento vinculado */}
       {movId && extId && (

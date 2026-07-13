@@ -569,7 +569,7 @@ export default function CompanyPage({ params }: Props) {
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
                 companyName={companies.find(c => c.id === companyId)?.name}
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord}
-                onDeleteBudget={handleDeleteBudget} onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero} />
+                onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero} />
             )}
             {activeView === 'EstadoResultados' && (
               <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />

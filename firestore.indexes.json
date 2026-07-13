@@ -7,6 +7,14 @@
         { "fieldPath": "companyId", "order": "ASCENDING" },
         { "fieldPath": "budgetId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "budgetLinks",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "budgetId", "order": "ASCENDING" },
+        { "fieldPath": "companyId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
