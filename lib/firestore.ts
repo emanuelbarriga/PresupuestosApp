@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Company, Client, Project, Provider, Budget, Ejecucion, EjecucionBudgetLink, StateProject, Tercero, SettingsCategorias, CuentaBancaria, ExtractoBancario, ExtractoEstado, CompanyMember, Invitacion, MovimientoBancarioInput, MovimientoBancario } from './types';
+import { budgetSchema, ejecucionSchema, partialBudgetSchema, partialEjecucionSchema } from './schemas';
 
 const COMPANIES_COLLECTION = 'companies';
 const BUDGETS_COLLECTION = 'budgets';
@@ -331,6 +332,7 @@ export async function addBudget(
   companyId: string,
   budget: Omit<Budget, 'id'>,
 ): Promise<string> {
+  budgetSchema.parse(budget);
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),
     { ...budget, createdAt: serverTimestamp() },
@@ -343,6 +345,7 @@ export async function addEjecucion(
   ejecucion: Omit<Ejecucion, 'id'>,
   extraFields?: Record<string, unknown>,
 ): Promise<string> {
+  ejecucionSchema.parse(ejecucion);
   const docRef = await addDoc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
     { ...ejecucion, ...extraFields, createdAt: serverTimestamp() },
@@ -387,10 +390,12 @@ export async function addProject(companyId: string, project: Omit<Project, 'id'>
 }
 
 export async function updateBudget(companyId: string, budgetId: string, data: Partial<Budget>): Promise<void> {
+  partialBudgetSchema.parse(data);
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function updateEjecucion(companyId: string, ejecucionId: string, data: Partial<Ejecucion>): Promise<void> {
+  partialEjecucionSchema.parse(data);
   await updateDoc(doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId), { ...data, updatedAt: serverTimestamp() });
 }
 
@@ -1161,4 +1166,30 @@ export async function deleteEjecucion(companyId: string, ejecucionId: string): P
 
   batch.delete(ejecucionRef);
   await batch.commit();
+}
+
+// ── ER Config (Estado de Resultados per-company config) ──
+
+import { ErConfig } from './types';
+import { DEFAULT_ER_CONFIG } from './er-config-defaults';
+
+const ER_CONFIG_PATH = 'settings';
+
+export async function getErConfig(companyId: string): Promise<ErConfig | null> {
+  const snap = await getDoc(doc(db, COMPANIES_COLLECTION, companyId, ER_CONFIG_PATH, 'er'));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    id: snap.id,
+    taxRegime: data.taxRegime ?? 'simple',
+    lineItems: data.lineItems ?? DEFAULT_ER_CONFIG.lineItems,
+  } as ErConfig;
+}
+
+export async function saveErConfig(companyId: string, config: Omit<ErConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
+  await setDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, ER_CONFIG_PATH, 'er'),
+    { ...config, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
 }

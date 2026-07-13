@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import type { EntityProps } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
-import { useCompany } from '@/context/CompanyContext';
+import { useCompanyStore } from '@/stores/companyStore';
 import { createInvitation, updateInvitation } from '@/lib/firestore';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { InvitacionView } from './InvitacionView';
@@ -22,7 +22,8 @@ export function InvitacionEntity({
   canGoBack,
 }: EntityProps) {
   const { user: currentUser } = useAuth();
-  const { companies, selectedCompany } = useCompany();
+  const companies = useCompanyStore(s => s.companies);
+  const selectedCompany = useCompanyStore(s => s.selectedCompany);
   const [saving, setSaving] = useState(false);
 
   const triggerPop = useCallback(async () => {

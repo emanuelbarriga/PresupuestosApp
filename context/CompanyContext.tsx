@@ -8,6 +8,7 @@ import { subscribeUserCompanies, getUserCompaniesSnapshot } from '@/lib/firestor
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Building2 } from 'lucide-react';
+import { useCompanyStore } from '@/stores/companyStore';
 
 export type CompanyMode = 'individual' | 'conjunto';
 
@@ -93,8 +94,10 @@ export function CompanyProvider({
             }
             const role = memberData?.role ?? 'colaborador';
             setMembershipUserRole(role);
+            useCompanyStore.getState().setUserRole(role as UserRole);
           } catch {
             setMembershipUserRole('colaborador'); // fallback — safer to deny
+            useCompanyStore.getState().setUserRole('colaborador' as UserRole);
           }
           setMembershipState('granted');
           setMembershipChecked(true);
@@ -120,6 +123,8 @@ export function CompanyProvider({
     if (!isCompanyRoute) {
       setCompanies([]);
       setSelectedCompany(null);
+      useCompanyStore.getState().setCompanies([]);
+      useCompanyStore.getState().setSelectedCompany(null);
       setReady(true);
       return;
     }
@@ -129,6 +134,8 @@ export function CompanyProvider({
       if (!userId) {
         setCompanies([]);
         setSelectedCompany(null);
+        useCompanyStore.getState().setCompanies([]);
+        useCompanyStore.getState().setSelectedCompany(null);
         setReady(true);
       }
       return;
@@ -141,9 +148,11 @@ export function CompanyProvider({
       userId,
       (data) => {
         setCompanies(data);
+        useCompanyStore.getState().setCompanies(data);
 
         if (data.length === 0) {
           setSelectedCompany(null);
+          useCompanyStore.getState().setSelectedCompany(null);
           setReady(true);
           return;
         }
@@ -151,10 +160,14 @@ export function CompanyProvider({
         if (companyId === 'all') {
           setSelectedCompany(null);
           setMode('conjunto');
+          useCompanyStore.getState().setSelectedCompany(null);
+          useCompanyStore.getState().setMode('conjunto');
         } else {
           const found = data.find((c) => c.id === companyId);
           setSelectedCompany(found || data[0]);
           setMode('individual');
+          useCompanyStore.getState().setSelectedCompany(found || data[0]);
+          useCompanyStore.getState().setMode('individual');
         }
         setReady(true);
       },
@@ -175,15 +188,20 @@ export function CompanyProvider({
     if (company) {
       setSelectedCompany(company);
       setMode('individual');
+      useCompanyStore.getState().setSelectedCompany(company);
+      useCompanyStore.getState().setMode('individual');
     }
   };
 
   const handleSetMode = (newMode: CompanyMode) => {
     setMode(newMode);
+    useCompanyStore.getState().setMode(newMode);
     if (newMode === 'conjunto') {
       setSelectedCompany(null);
+      useCompanyStore.getState().setSelectedCompany(null);
     } else if (companies.length > 0 && !selectedCompany) {
       setSelectedCompany(companies[0]);
+      useCompanyStore.getState().setSelectedCompany(companies[0]);
     }
   };
 

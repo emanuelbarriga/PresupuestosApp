@@ -103,7 +103,17 @@ const mockBudgets: Budget[] = [
   { id: 'b2', descripcion: 'Materiales', projectId: 'p1', projectName: 'Proyecto A', entityId: '', entityName: '', entityType: 'client', tipo: 'egreso', montoPresupuestado: 500000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo' },
 ];
 
-// ─── Helper ─────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Fill required form fields so Zod validation passes before submit */
+function fillRequiredFields() {
+  const descInput = screen.getByTestId('form-input-Descripción').querySelector('input');
+  if (descInput) {
+    fireEvent.change(descInput, { target: { value: 'Test desc' } });
+  }
+  // fechaEjecutado defaults to today via new Date().toISOString().split('T')[0],
+  // so it's always valid as long as the form renders in a browser context.
+}
 
 function renderForm(props: Partial<Parameters<typeof EjecucionForm>[0]> = {}) {
   const onFormSubmit = vi.fn().mockResolvedValue(undefined);
@@ -141,6 +151,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
       fireEvent.click(screen.getByTestId('add-pending-btn'));
       expect(screen.getByTestId('uploader-pending-count')).toHaveTextContent('1');
 
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
+
       // Submit
       fireEvent.click(screen.getByText('Crear'));
 
@@ -162,6 +175,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
 
       // Add pending comprobante
       fireEvent.click(screen.getByTestId('add-pending-btn'));
+
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
 
       // Submit
       fireEvent.click(screen.getByText('Crear'));
@@ -219,6 +235,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
       const select = screen.getByTestId('searchable-select-empty').querySelector('select')!;
       fireEvent.change(select, { target: { value: 'b1' } });
 
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
+
       // Submit
       fireEvent.click(screen.getByText('Crear'));
 
@@ -238,6 +257,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
     it('envía _budgetLinks vacío cuando no se selecciona ningún presupuesto', async () => {
       const { onFormSubmit } = renderForm();
 
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
+
       // Submit without selecting any budget
       fireEvent.click(screen.getByText('Crear'));
 
@@ -255,6 +277,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
       const { onFormSubmit } = renderForm();
 
       fireEvent.click(screen.getByTestId('add-pending-btn'));
+
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
 
       fireEvent.click(screen.getByText('Crear'));
 
@@ -275,6 +300,9 @@ describe('EjecucionForm — Comprobante pipeline', () => {
 
       // Add a saved comprobante too
       fireEvent.click(screen.getByTestId('add-saved-btn'));
+
+      // Fill required fields to pass Zod validation
+      fillRequiredFields();
 
       fireEvent.click(screen.getByText('Crear'));
 

@@ -10,6 +10,9 @@ import { formatThousands, unformatThousands } from '@/lib/utils';
 import { Calculator } from '@/components/shared/Calculator';
 import { Plus } from 'lucide-react';
 import { addClient, addProject } from '@/lib/firestore';
+import { budgetSchema } from '@/lib/schemas';
+import { ZodError } from 'zod';
+import toast from 'react-hot-toast';
 
 interface BudgetFormProps {
   companyId: string;
@@ -209,6 +212,15 @@ export function BudgetForm({
     }
 
     for (const entry of entries) {
+      try {
+        budgetSchema.parse(entry);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          toast.error(err.issues[0].message);
+          return;
+        }
+        throw err;
+      }
       await onFormSubmit(entry);
     }
     // Parent handles screen pop via popScreen

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { EntityProps } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
-import { useCompany } from '@/context/CompanyContext';
+import { useCompanyStore } from '@/stores/companyStore';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ColaboradorView } from './ColaboradorView';
 import { ColaboradorEditForm } from './ColaboradorEditForm';
@@ -19,7 +19,7 @@ export function ColaboradorEntity({
   canGoBack,
 }: EntityProps) {
   const { user: currentUser } = useAuth();
-  const { companies: allCompanies } = useCompany();
+  const allCompanies = useCompanyStore(s => s.companies);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (

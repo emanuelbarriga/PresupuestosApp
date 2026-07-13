@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario, ErConfig } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
 import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -31,6 +31,7 @@ import {
   updateExtractoStatus,
   updateMovimiento,
   deleteBudget, deleteEjecucion, deleteTercero,
+  getErConfig, saveErConfig,
 } from '@/lib/firestore';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/components/Dashboard';
@@ -42,6 +43,7 @@ import { Extractos } from '@/components/Extractos';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Sidepanel } from '@/components/Sidepanel';
 import { Company } from '@/lib/types';
+import { DEFAULT_ER_CONFIG } from '@/lib/er-config-defaults';
 
 type Props = {
   params: Promise<{ company: string; segments?: string[] }>;
@@ -118,6 +120,11 @@ export default function CompanyPage({ params }: Props) {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [projectSearch, setProjectSearch] = useState('');
 
+  // ER Config state
+  const [erConfig, setErConfig] = useState<ErConfig | null>(null);
+  const [erDraftConfig, setErDraftConfig] = useState<ErConfig | null>(null);
+  const [erConfigLoading, setErConfigLoading] = useState(true);
+
   const current = navStack[navStack.length - 1];
   const canGoBack = navStack.length > 1;
 
@@ -186,6 +193,21 @@ export default function CompanyPage({ params }: Props) {
     return () => unsub();
   }, [companyId, isConjunto]);
 
+  // Load ER config for single company mode
+  useEffect(() => {
+    if (isConjunto) return;
+    setErConfigLoading(true);
+    getErConfig(companyId)
+      .then(config => {
+        setErConfig(config || DEFAULT_ER_CONFIG);
+        setErConfigLoading(false);
+      })
+      .catch(() => {
+        setErConfig(DEFAULT_ER_CONFIG);
+        setErConfigLoading(false);
+      });
+  }, [companyId, isConjunto]);
+
   const projectsForCompany = isConjunto ? [] : projects;
 
   const pushScreen = useCallback((screen: NavScreen) => {
@@ -214,6 +236,7 @@ export default function CompanyPage({ params }: Props) {
   }, [searchParams, pushScreen]);
 
   const closePanel = () => {
+    setErDraftConfig(null);
     clearScreens();
   };
 
@@ -257,6 +280,24 @@ export default function CompanyPage({ params }: Props) {
       pushScreen({ type: 'customize' });
     }
   };
+
+  const handleErConfigClick = useCallback(() => {
+    setErDraftConfig(null); // Clear any previous draft
+    pushScreen({
+      type: 'entity',
+      entity: 'er-config',
+      mode: 'edit',
+      record: {
+        config: erConfig || DEFAULT_ER_CONFIG,
+        projects: projectsForCompany || [],
+        onConfigChange: (draft: ErConfig) => setErDraftConfig(draft),
+      },
+    });
+  }, [erConfig, projectsForCompany]);
+
+  const handleErConfigChange = useCallback((draft: ErConfig) => {
+    setErDraftConfig(draft);
+  }, []);
 
   const handleEmptyCellClick = (year: number, projectId: string, projectName: string, month: Month, tipo: TransactionType, mode: 'Presupuestado' | 'Ejecutado', entityId?: string, entityName?: string, entityType?: string, value?: number) => {
     if (isConjunto) return;
@@ -520,6 +561,17 @@ export default function CompanyPage({ params }: Props) {
     record?: any;
     data: Record<string, any>;
   }) => {
+    // Handle ER config save directly
+    if (action.entity === 'er-config') {
+      const config = action.data as unknown as ErConfig;
+      await saveErConfig(companyId, config);
+      setErConfig(config);
+      setErDraftConfig(null);
+      toast.success('Configuración ER guardada');
+      popScreen();
+      return;
+    }
+
     if (action.mode === 'archive') {
       if (action.entity === 'budget' && action.record?.id) {
         await updateBudget(companyId, action.record.id, { archivado: action.data.archivado });
@@ -572,7 +624,13 @@ export default function CompanyPage({ params }: Props) {
                 onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero} />
             )}
             {activeView === 'EstadoResultados' && (
-              <EstadoResultados budgets={budgets} ejecuciones={ejecuciones} projects={projectsForCompany} />
+              <EstadoResultados
+                budgets={budgets}
+                ejecuciones={ejecuciones}
+                projects={projectsForCompany}
+                erConfig={erDraftConfig || erConfig || undefined}
+                onErConfigClick={handleErConfigClick}
+              />
             )}
             {activeView === 'Extractos' && (
               <Extractos companyId={companyId} onNavigate={(screen) => pushScreen(screen)} />

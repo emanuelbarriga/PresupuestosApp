@@ -4,8 +4,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ViewType } from '@/lib/types';
 import { LayoutDashboard, FolderKanban, Users, Building2, Database, FileText, ChevronLeft, ChevronRight, TrendingUp, Settings, LogOut } from 'lucide-react';
 import clsx from 'clsx';
-import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/context/AuthContext';
+import { useCompanyStore } from '@/stores/companyStore';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -18,7 +18,10 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, activeView, onViewChange, basePath }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { selectedCompany, companies, setCompany, userRole } = useCompany();
+  const selectedCompany = useCompanyStore(s => s.selectedCompany);
+  const companies = useCompanyStore(s => s.companies);
+  const setCompany = useCompanyStore(s => s.setCompany);
+  const userRole = useCompanyStore(s => s.userRole);
   const { user, signOut } = useAuth();
 
   const handleCompanySelect = (id: string) => {

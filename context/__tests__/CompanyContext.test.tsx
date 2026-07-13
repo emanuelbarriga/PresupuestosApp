@@ -4,6 +4,7 @@ import { act } from 'react';
 import React from 'react';
 import { CompanyProvider, useCompany } from '@/context/CompanyContext';
 import { subscribeUserCompanies } from '@/lib/firestore';
+import { useCompanyStore } from '@/stores/companyStore';
 
 // ─── Mock variables (permite cambiar retorno por test) ──────────────────────
 
@@ -239,7 +240,55 @@ describe('CompanyContext', () => {
     expect(screen.getByTestId('selected-name')).toHaveTextContent('Empresa A');
   });
 
-  // ── Test 5: Cleanup / Unsubscribe ───────────────────────────────────────
+  // ── Test 5: Dual-write to Zustand store ─────────────────────────────────
+
+  it('sincroniza el estado con el store de Zustand después de emitir datos', async () => {
+    mockPathname = '/empresa-a/dashboard';
+    mockSnapshotData = ALL_MOCK;
+
+    render(
+      <CompanyProvider userId="test-uid">
+        <TestConsumer />
+      </CompanyProvider>,
+    );
+
+    // Esperar membership guard
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await emitData(ALL_MOCK);
+
+    // Verificar que el store de Zustand tiene los mismos datos
+    const storeState = useCompanyStore.getState();
+    expect(storeState.companies).toEqual(ALL_MOCK);
+    expect(storeState.selectedCompany).toEqual(MOCK_A);
+    expect(storeState.mode).toBe('individual');
+  });
+
+  it('sincroniza el conjunto mode con el store de Zustand', async () => {
+    mockPathname = '/all/conjunto';
+
+    render(
+      <CompanyProvider userId="test-uid">
+        <TestConsumer />
+      </CompanyProvider>,
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await emitData(ALL_MOCK);
+
+    const storeState = useCompanyStore.getState();
+    expect(storeState.companies).toEqual(ALL_MOCK);
+    expect(storeState.selectedCompany).toBeNull();
+    expect(storeState.mode).toBe('conjunto');
+    expect(storeState.isConjunto).toBe(true);
+  });
+
+  // ── Test 6: Cleanup / Unsubscribe ───────────────────────────────────────
 
   it('se desuscribe de Firestore al desmontar el provider', async () => {
     mockPathname = '/empresa-a/dashboard';

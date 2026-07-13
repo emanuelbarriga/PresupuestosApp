@@ -10,6 +10,9 @@ import { Link2, X, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { Calculator } from '@/components/shared/Calculator';
 import { addClient, addProject } from '@/lib/firestore';
+import { ejecucionSchema } from '@/lib/schemas';
+import { ZodError } from 'zod';
+import toast from 'react-hot-toast';
 import { generateFilePath, uploadFile } from '@/lib/fileUpload';
 import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
 
@@ -242,6 +245,15 @@ export function EjecucionForm({
       entries.push(entry);
     }
     for (const entry of entries) {
+      try {
+        ejecucionSchema.parse(entry);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          toast.error(err.issues[0].message);
+          return;
+        }
+        throw err;
+      }
       await onFormSubmit(entry);
     }
     setInternalSaving(false);

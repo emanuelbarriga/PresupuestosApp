@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computePnL } from '@/components/EstadoResultados';
-import type { PnLRow } from '@/components/EstadoResultados';
+import { computePnL, type PnLRow } from '@/components/EstadoResultados';
+import type { ErConfig } from '@/lib/types';
+import { DEFAULT_ER_CONFIG } from '@/lib/er-config-defaults';
 
 interface TestRecord {
   projectName: string;
+  projectId?: string;
   tipo: 'ingreso' | 'egreso';
   monto: number;
 }
@@ -33,8 +35,8 @@ describe('computePnL', () => {
 
     const result = computePnL(records, 'Presupuestado', 0, 0);
 
-    // Verify all 12 rows exist
-    expect(result).toHaveLength(12);
+    // Verify all 13 rows exist (F1b added)
+    expect(result).toHaveLength(13);
 
     const byId = new Map(result.map(r => [r.id, r.value]));
 
@@ -67,7 +69,7 @@ describe('computePnL', () => {
   // ---- Edge case: zero data ----
   it('returns all zeroes with no records', () => {
     const result = computePnL([], 'Presupuestado', 0, 0);
-    expect(result).toHaveLength(12);
+    expect(result).toHaveLength(13);
     for (const row of result) {
       expect(row.value).toBe(0);
     }
@@ -141,18 +143,19 @@ describe('computePnL', () => {
     const result = computePnL([], 'Presupuestado', 0, 0);
 
     const rows: Record<string, { label: string; editable: boolean; bold: boolean }> = {
-      F1:  { label: 'Ingresos Brutos Operacionales',  editable: false, bold: false },
+      F1:  { label: 'Ingresos Brutos Operacionales',     editable: false, bold: false },
+      F1b: { label: 'Otros Ingresos Operacionales',      editable: false, bold: false },
       F2:  { label: 'Devoluciones, rebajas y descuentos', editable: true,  bold: false },
-      F3:  { label: 'Ingresos Netos',               editable: false, bold: true  },
-      F4:  { label: 'Costos de Operación',          editable: false, bold: false },
-      F5:  { label: 'Utilidad Bruta',               editable: false, bold: true  },
-      F6:  { label: 'Gastos Administrativos',       editable: false, bold: false },
-      F7:  { label: 'Gastos Financieros',           editable: true,  bold: false },
-      F8:  { label: 'GMF (4×1000)',                 editable: false, bold: false },
-      F9:  { label: 'Utilidad Operacional',         editable: false, bold: true  },
-      F10: { label: 'Impuesto SIMPLE (8.1%)',       editable: false, bold: false },
-      F11: { label: 'Descuento Tributario GMF',     editable: false, bold: false },
-      F12: { label: 'Utilidad Neta del Ejercicio',     editable: false, bold: true  },
+      F3:  { label: 'Ingresos Netos',                    editable: false, bold: true  },
+      F4:  { label: 'Costos de Operación',               editable: false, bold: false },
+      F5:  { label: 'Utilidad Bruta',                    editable: false, bold: true  },
+      F6:  { label: 'Gastos Administrativos',            editable: false, bold: false },
+      F7:  { label: 'Gastos Financieros',                editable: false, bold: false },
+      F8:  { label: 'GMF (4×1000)',                      editable: false, bold: false },
+      F9:  { label: 'Utilidad Operacional',              editable: false, bold: true  },
+      F10: { label: 'Impuesto SIMPLE (8.1%)',            editable: false, bold: false },
+      F11: { label: 'Descuento Tributario GMF',          editable: false, bold: false },
+      F12: { label: 'Utilidad Neta del Ejercicio',       editable: false, bold: true  },
     };
 
     for (const row of result) {
@@ -236,5 +239,147 @@ describe('computePnL', () => {
     expect(byId.get('F1')).toBe(2_000_000);
     expect(byId.get('F4')).toBe(0); // No non-Admin egresos
     expect(byId.get('F6')).toBe(1_000_000);
+  });
+
+  // ---- ER Config: default config produces identical output ----
+  it('default config produces identical output to no config', () => {
+    const records = makeRecords([
+      { projectName: 'Vivienda', tipo: 'ingreso', monto: 10_000_000 },
+      { projectName: 'Vivienda', tipo: 'egreso', monto: 3_000_000 },
+      { projectName: 'Admin', tipo: 'egreso', monto: 1_000_000 },
+      { projectName: 'Comercial', tipo: 'ingreso', monto: 5_000_000 },
+      { projectName: 'Comercial', tipo: 'egreso', monto: 2_000_000 },
+    ]);
+
+    const resultWithout = computePnL(records, 'Presupuestado', 0, 0);
+    const resultWith = computePnL(records, 'Presupuestado', 0, 0, DEFAULT_ER_CONFIG);
+
+    expect(resultWith).toEqual(resultWithout);
+  });
+
+  // ---- ER Config: Régimen Común tax formula ----
+  it('computes correctly under Régimen Común', () => {
+    const records = makeRecords([
+      { projectName: 'Vivienda', tipo: 'ingreso', monto: 10_000_000 },
+      { projectName: 'Vivienda', tipo: 'egreso', monto: 3_000_000 },
+      { projectName: 'Admin', tipo: 'egreso', monto: 1_000_000 },
+    ]);
+
+    const comunConfig: ErConfig = {
+      ...DEFAULT_ER_CONFIG,
+      taxRegime: 'comun',
+    };
+
+    const result = computePnL(records, 'Presupuestado', 0, 0, comunConfig);
+    const byId = new Map(result.map(r => [r.id, r.value]));
+
+    // F1 = 10M (ingresos)
+    // F4 = 3M (non-Admin egresos)
+    // F6 = 1M (Admin egresos)
+    // F5 = F3 - F4 = 10M - 3M = 7M
+    // F8 = 0 (no GMF in común regime)
+    expect(byId.get('F8')).toBe(0);
+    // F9 = F5 - F6 - F7 - F8 = 7M - 1M - 0 - 0 = 6M
+    expect(byId.get('F9')).toBe(6_000_000);
+    // F10 = F9 * 0.35 = 6M * 0.35 = 2,100,000
+    expect(byId.get('F10')).toBe(2_100_000);
+    // F11 = 0 (no GMF discount in común regime)
+    expect(byId.get('F11')).toBe(0);
+    // F12 = F9 - F10 = 6M - 2.1M = 3,900,000
+    expect(byId.get('F12')).toBe(3_900_000);
+    // Dynamic label
+    const f10Row = result.find(r => r.id === 'F10');
+    expect(f10Row?.label).toBe('Impuesto Renta (35%)');
+  });
+
+  // ---- ER Config: projectIds filter for gastosAdmin ----
+  it('filters gastosAdmin by projectIds', () => {
+    const records = makeRecords([
+      { projectName: 'Admin', projectId: 'proj-admin', tipo: 'egreso', monto: 200_000 },
+      { projectName: 'Oficina', projectId: 'proj-oficina', tipo: 'egreso', monto: 500_000 },
+      { projectName: 'Vivienda', projectId: 'proj-viv', tipo: 'egreso', monto: 1_000_000 },
+    ]);
+
+    const customConfig: ErConfig = {
+      ...DEFAULT_ER_CONFIG,
+      lineItems: {
+        ...DEFAULT_ER_CONFIG.lineItems,
+        gastosAdmin: { projectIds: ['proj-oficina'] },
+      },
+    };
+
+    const result = computePnL(records, 'Presupuestado', 0, 0, customConfig);
+    const byId = new Map(result.map(r => [r.id, r.value]));
+
+    // F6 should only capture 'Oficina' (500k), not 'Admin' (200k)
+    expect(byId.get('F6')).toBe(500_000);
+  });
+
+  // ---- ER Config: ingresos filtered by projectIds ----
+  it('filters ingresos by projectIds', () => {
+    const records = [
+      { projectName: 'Vivienda', projectId: 'proj-a', tipo: 'ingreso' as const, montoPresupuestado: 10_000_000, montoEjecutado: 10_000_000 },
+      { projectName: 'Comercial', projectId: 'proj-b', tipo: 'ingreso' as const, montoPresupuestado: 5_000_000, montoEjecutado: 5_000_000 },
+      { projectName: 'Admin', projectId: 'proj-c', tipo: 'ingreso' as const, montoPresupuestado: 2_000_000, montoEjecutado: 2_000_000 },
+    ];
+
+    const customConfig: ErConfig = {
+      ...DEFAULT_ER_CONFIG,
+      lineItems: {
+        ...DEFAULT_ER_CONFIG.lineItems,
+        ingresos: { projectIds: ['proj-a', 'proj-c'] },
+      },
+    };
+
+    const result = computePnL(records, 'Presupuestado', 0, 0, customConfig);
+    const byId = new Map(result.map(r => [r.id, r.value]));
+
+    // F1 should only include proj-a (10M) + proj-c (2M) = 12M
+    expect(byId.get('F1')).toBe(12_000_000);
+  });
+
+  // ---- ER Config: match by projectName when no projectId ----
+  it('matches by projectName when no projectId set', () => {
+    const records = makeRecords([
+      { projectName: 'Vivienda', tipo: 'ingreso', monto: 10_000_000 },
+      { projectName: 'Comercial', tipo: 'ingreso', monto: 5_000_000 },
+    ]);
+
+    const customConfig: ErConfig = {
+      ...DEFAULT_ER_CONFIG,
+      lineItems: {
+        ...DEFAULT_ER_CONFIG.lineItems,
+        ingresos: { projectIds: ['Vivienda'] },
+      },
+    };
+
+    const result = computePnL(records, 'Presupuestado', 0, 0, customConfig);
+    const byId = new Map(result.map(r => [r.id, r.value]));
+
+    expect(byId.get('F1')).toBe(10_000_000);
+  });
+
+  // ---- ER Config: otrosIngresos ----
+  it('includes otrosIngresos in total', () => {
+    const records = makeRecords([
+      { projectName: 'Vivienda', projectId: 'a', tipo: 'ingreso', monto: 10_000_000 },
+      { projectName: 'Intereses', projectId: 'b', tipo: 'ingreso', monto: 2_000_000 },
+    ]);
+
+    const customConfig: ErConfig = {
+      ...DEFAULT_ER_CONFIG,
+      lineItems: {
+        ...DEFAULT_ER_CONFIG.lineItems,
+        ingresos: { projectIds: ['a'] },
+        otrosIngresos: { projectIds: ['b'] },
+      },
+    };
+
+    const result = computePnL(records, 'Presupuestado', 0, 0, customConfig);
+    const byId = new Map(result.map(r => [r.id, r.value]));
+
+    expect(byId.get('F1')).toBe(10_000_000);
+    expect(byId.get('F1b')).toBe(2_000_000);
+    expect(byId.get('F3')).toBe(12_000_000); // F1 + F1b - 0
   });
 });

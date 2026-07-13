@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useMemo, Fragment } from 'react';
-import { Budget, Ejecucion, Project } from '@/lib/types';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
+import { Budget, Ejecucion, Project, ErConfig, ErLineConfig } from '@/lib/types';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Settings } from 'lucide-react';
 import clsx from 'clsx';
+import { DEFAULT_ER_CONFIG } from '@/lib/er-config-defaults';
 
 export interface PnLRow {
   id: string;
@@ -65,53 +66,132 @@ const badgeColors: Record<string, string> = {
   'Pausado': 'bg-rose-100 text-rose-700',
 };
 
+/** Metadata de cada línea configurable del ER (para el panel de config) */
+export interface ErLineMeta {
+  key: keyof ErConfig['lineItems'];
+  label: string;
+  tipo: 'ingreso' | 'egreso';
+  defaultFallback: 'all-ingresos' | 'all-egresos' | 'all-egresos-no-admin' | 'admin-only' | 'none';
+}
+
+export const ER_LINES: ErLineMeta[] = [
+  { key: 'ingresos',          label: 'Ingresos Brutos',                tipo: 'ingreso', defaultFallback: 'all-ingresos' },
+  { key: 'otrosIngresos',     label: 'Otros Ingresos Operacionales',   tipo: 'ingreso', defaultFallback: 'none' },
+  { key: 'costos',            label: 'Costos de Operación',            tipo: 'egreso',  defaultFallback: 'all-egresos-no-admin' },
+  { key: 'gastosAdmin',       label: 'Gastos Administrativos',         tipo: 'egreso',  defaultFallback: 'admin-only' },
+  { key: 'gastosFinancieros', label: 'Gastos Financieros',             tipo: 'egreso',  defaultFallback: 'none' },
+];
+
+/**
+ * Filtra records según la configuración de una línea (projectIds o fallback por defecto).
+ */
+function filterRecordsByLine(
+  records: PnLRecord[],
+  line: ErLineMeta,
+  config: ErConfig,
+): PnLRecord[] {
+  const cfg = config.lineItems[line.key];
+  const tipoRecords = records.filter(r => r.tipo === line.tipo);
+
+  if (cfg?.projectIds?.length) {
+    return tipoRecords.filter(r =>
+      (r.projectId && cfg.projectIds.includes(r.projectId)) ||
+      cfg.projectIds.includes(r.projectName),
+    );
+  }
+
+  switch (line.defaultFallback) {
+    case 'all-ingresos':         return tipoRecords;
+    case 'all-egresos':          return tipoRecords;
+    case 'all-egresos-no-admin': return tipoRecords.filter(r => !isAdminProject(r.projectName));
+    case 'admin-only':           return tipoRecords.filter(r => isAdminProject(r.projectName));
+    default:                     return [];
+  }
+}
+
 export function computePnL(
   records: PnLRecord[],
   mode: 'Presupuestado' | 'Ejecutado',
   devoluciones: number,
   gastosFinancieros: number,
+  erConfig: ErConfig = DEFAULT_ER_CONFIG,
 ): PnLRow[] {
   const isPresupuestado = mode === 'Presupuestado';
   const getMonto = (r: PnLRecord): number =>
     isPresupuestado ? r.montoPresupuestado : r.montoEjecutado;
 
-  // F1: Ingresos (all projects)
-  const ingresosRecords = records.filter(r => r.tipo === 'ingreso');
-  const F1 = ingresosRecords.reduce((sum, r) => sum + getMonto(r), 0);
-  const F1Children = groupByProject(ingresosRecords, getMonto);
+  // Helper: compute records + sum for a configurable line
+  const lineSum = (meta: ErLineMeta): { records: PnLRecord[]; sum: number } => {
+    const cfg = erConfig.lineItems[meta.key];
+    const tipoRecords = records.filter(r => r.tipo === meta.tipo);
+    let filtered: PnLRecord[];
+    if (cfg?.projectIds?.length) {
+      filtered = tipoRecords.filter(r =>
+        (r.projectId && cfg.projectIds.includes(r.projectId)) ||
+        cfg.projectIds.includes(r.projectName),
+      );
+    } else {
+      switch (meta.defaultFallback) {
+        case 'all-ingresos':         filtered = tipoRecords; break;
+        case 'all-egresos':          filtered = tipoRecords; break;
+        case 'all-egresos-no-admin': filtered = tipoRecords.filter(r => !isAdminProject(r.projectName)); break;
+        case 'admin-only':           filtered = tipoRecords.filter(r => isAdminProject(r.projectName)); break;
+        default:                     filtered = []; break;
+      }
+    }
+    return { records: filtered, sum: filtered.reduce((s, r) => s + getMonto(r), 0) };
+  };
 
+  // Find line meta by key
+  const lineMeta = (key: keyof ErConfig['lineItems']): ErLineMeta =>
+    ER_LINES.find(l => l.key === key)!;
+
+  // F1: Ingresos Brutos
+  const { records: ingRecs, sum: F1 } = lineSum(lineMeta('ingresos'));
+
+  // F1b: Otros Ingresos Operacionales
+  const { sum: F1b } = lineSum(lineMeta('otrosIngresos'));
+
+  // F2: Devoluciones (siempre manual, desde el input del usuario)
   const F2 = devoluciones;
-  const F3 = F1 - F2;
+  const F3 = F1 + F1b - F2;
 
-  // F4: Costos (non-Admin projects)
-  const costosRecords = records.filter(r => r.tipo === 'egreso' && !isAdminProject(r.projectName));
-  const F4 = costosRecords.reduce((sum, r) => sum + getMonto(r), 0);
-  const F4Children = groupByProject(costosRecords, getMonto);
+  // F4: Costos
+  const { records: costRecs, sum: F4 } = lineSum(lineMeta('costos'));
 
   const F5 = F3 - F4;
 
   // F6: Gastos Admin
-  const adminRecords = records.filter(r => r.tipo === 'egreso' && isAdminProject(r.projectName));
-  const F6 = adminRecords.reduce((sum, r) => sum + getMonto(r), 0);
+  const { sum: F6 } = lineSum(lineMeta('gastosAdmin'));
 
-  const F7 = gastosFinancieros;
-  const F8 = (F4 + F6 + F7) * 0.004;
+  // F7: Gastos Financieros — usa proyectos si configurados, sino valor manual
+  const { sum: F7FromProjects } = lineSum(lineMeta('gastosFinancieros'));
+  const hasF7Projects = (erConfig.lineItems.gastosFinancieros.projectIds?.length ?? 0) > 0;
+  const F7 = hasF7Projects ? F7FromProjects : gastosFinancieros;
+
+  // Tax regime
+  const isSimple = erConfig.taxRegime === 'simple';
+  const F8 = isSimple ? (F4 + F6 + F7) * 0.004 : 0;
   const F9 = F5 - F6 - F7 - F8;
-  const F10 = F1 * 0.081;
-  const F11 = Math.min(F8, F10);
+  const totalIngresos = F1 + F1b;
+  const F10 = isSimple ? totalIngresos * 0.081 : F9 * 0.35;
+  const F11 = isSimple ? Math.min(F8, F10) : 0;
   const F12 = F9 - F10 + F11;
 
+  const f10Label = isSimple ? 'Impuesto SIMPLE (8.1%)' : 'Impuesto Renta (35%)';
+
   return [
-    { id: 'F1',  label: 'Ingresos Brutos Operacionales', value: F1,  editable: false, indent: 0, bold: false, children: F1Children },
+    { id: 'F1',  label: 'Ingresos Brutos Operacionales',  value: F1,  editable: false, indent: 0, bold: false, children: groupByProject(ingRecs, getMonto) },
+    { id: 'F1b', label: 'Otros Ingresos Operacionales',    value: F1b, editable: false, indent: 1, bold: false },
     { id: 'F2',  label: 'Devoluciones, rebajas y descuentos', value: F2,  editable: true,  indent: 1, bold: false },
     { id: 'F3',  label: 'Ingresos Netos',                   value: F3,  editable: false, indent: 1, bold: true  },
-    { id: 'F4',  label: 'Costos de Operación',              value: F4,  editable: false, indent: 0, bold: false, children: F4Children },
+    { id: 'F4',  label: 'Costos de Operación',              value: F4,  editable: false, indent: 0, bold: false, children: groupByProject(costRecs, getMonto) },
     { id: 'F5',  label: 'Utilidad Bruta',                   value: F5,  editable: false, indent: 1, bold: true  },
     { id: 'F6',  label: 'Gastos Administrativos',           value: F6,  editable: false, indent: 0, bold: false },
-    { id: 'F7',  label: 'Gastos Financieros',               value: F7,  editable: true,  indent: 1, bold: false },
+    { id: 'F7',  label: 'Gastos Financieros',               value: F7,  editable: false, indent: 1, bold: false },
     { id: 'F8',  label: 'GMF (4×1000)',                     value: F8,  editable: false, indent: 1, bold: false },
     { id: 'F9',  label: 'Utilidad Operacional',             value: F9,  editable: false, indent: 1, bold: true  },
-    { id: 'F10', label: 'Impuesto SIMPLE (8.1%)',           value: F10, editable: false, indent: 0, bold: false },
+    { id: 'F10', label: f10Label,                            value: F10, editable: false, indent: 0, bold: false },
     { id: 'F11', label: 'Descuento Tributario GMF',         value: F11, editable: false, indent: 1, bold: false },
     { id: 'F12', label: 'Utilidad Neta del Ejercicio',      value: F12, editable: false, indent: 0, bold: true  },
   ];
@@ -121,6 +201,8 @@ interface EstadoResultadosProps {
   budgets: Budget[];
   ejecuciones: Ejecucion[];
   projects?: Project[];
+  erConfig?: ErConfig;
+  onErConfigClick?: () => void;
 }
 
 function KpiCard({ label, value, isPercent = false, color, mode }: {
@@ -146,7 +228,7 @@ function KpiCard({ label, value, isPercent = false, color, mode }: {
   );
 }
 
-export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResultadosProps) {
+export function EstadoResultados({ budgets, ejecuciones, projects, erConfig, onErConfigClick }: EstadoResultadosProps) {
   const [mode, setMode] = useState<'Presupuestado' | 'Ejecutado'>('Presupuestado');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [devoluciones, setDevoluciones] = useState<number>(0);
@@ -201,9 +283,11 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
     [filteredRecords, projectMap],
   );
 
+  const effectiveConfig = erConfig ?? DEFAULT_ER_CONFIG;
+
   const rows = useMemo(
-    () => computePnL(recordsForPnL, mode, devoluciones, gastosFinancieros),
-    [recordsForPnL, mode, devoluciones, gastosFinancieros],
+    () => computePnL(recordsForPnL, mode, devoluciones, gastosFinancieros, effectiveConfig),
+    [recordsForPnL, mode, devoluciones, effectiveConfig],
   );
 
   // KPI values
@@ -225,11 +309,6 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
     if (!isNaN(n)) setDevoluciones(n);
   };
 
-  const handleF7Change = (val: string) => {
-    const n = Number(val);
-    if (!isNaN(n)) setGastosFinancieros(n);
-  };
-
   // Theme classes
   const containerBg = isP ? 'bg-sky-50/30' : 'bg-slate-50';
   const tableHeaderBg = isP ? 'bg-sky-50 border-sky-100' : 'bg-slate-800 border-slate-700';
@@ -243,7 +322,9 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
       <header className="h-14 border-b px-6 flex items-center justify-between shrink-0 bg-white border-slate-200">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">Estado de Resultados</h1>
-          <p className="text-[10px] uppercase tracking-wider font-medium text-slate-500">Profit &amp; Loss — Régimen Simple de Tributación</p>
+          <p className="text-[10px] uppercase tracking-wider font-medium text-slate-500">
+            Profit &amp; Loss — {effectiveConfig.taxRegime === 'comun' ? 'Régimen Común' : 'Régimen Simple de Tributación'}
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 border p-1 rounded-lg bg-slate-100 border-slate-200">
@@ -264,6 +345,9 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
           <button onClick={() => setShowNegociacion(prev => !prev)}
             className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
             Negociación {showNegociacion ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={onErConfigClick} className="px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5 bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600">
+            <Settings size={13} /> Configurar ER
           </button>
         </div>
       </header>
@@ -326,8 +410,8 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                       <td className="py-2.5 px-4 text-right">
                         {row.editable ? (
                           <input type="number"
-                            value={row.id === 'F2' ? (devoluciones || '') : (gastosFinancieros || '')}
-                            onChange={e => row.id === 'F2' ? handleF2Change(e.target.value) : handleF7Change(e.target.value)}
+                            value={devoluciones || ''}
+                            onChange={e => handleF2Change(e.target.value)}
                             onClick={e => e.stopPropagation()}
                             className="w-full text-right text-sm px-2 py-1 rounded border bg-yellow-50 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 text-slate-700"
                             placeholder="0"
@@ -336,17 +420,12 @@ export function EstadoResultados({ budgets, ejecuciones, projects }: EstadoResul
                           <span className={clsx(
                             'text-sm',
                             row.bold ? 'font-bold' : 'font-semibold',
-                            // Income rows (F1, F3, F11) → green
-                            (row.id === 'F1' || row.id === 'F3' || row.id === 'F11') && row.value !== 0 && 'text-emerald-600',
-                            // Expense rows (F4, F6, F7, F8, F10) → red
+                            (row.id === 'F1' || row.id === 'F1b' || row.id === 'F3' || row.id === 'F11') && row.value !== 0 && 'text-emerald-600',
                             (row.id === 'F4' || row.id === 'F6' || row.id === 'F7' || row.id === 'F8' || row.id === 'F10') && row.value !== 0 && 'text-rose-600',
-                            // Profit rows (F5, F9, F12) → green if positive, red if negative
                             (row.id === 'F5' || row.id === 'F9' || row.id === 'F12') && row.value > 0 && 'text-emerald-600',
                             (row.id === 'F5' || row.id === 'F9' || row.id === 'F12') && row.value < 0 && 'text-rose-600',
-                            // Fallback for unclassified rows
                             row.value === 0 && 'text-slate-400',
-                            // Negative unclassified
-                            row.value < 0 && !['F1','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'].includes(row.id) && 'text-rose-600',
+                            row.value < 0 && !['F1','F1b','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'].includes(row.id) && 'text-rose-600',
                           )}>
                             {formatCurrency(row.value)}
                           </span>

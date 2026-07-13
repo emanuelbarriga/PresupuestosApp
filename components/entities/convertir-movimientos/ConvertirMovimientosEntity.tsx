@@ -6,6 +6,8 @@ import { subscribeProjects, subscribeTerceros, addEjecucion, updateMovimiento } 
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { ArrowRight, CheckSquare, Pencil } from 'lucide-react';
+import { ejecucionSchema } from '@/lib/schemas';
+import { ZodError } from 'zod';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -117,25 +119,38 @@ export function ConvertirMovimientosEntity({ mode, companyId, record, defaults, 
       const monto = isDebito ? mov.debito! : mov.credito ?? 0;
       const desc = descriptions[mov.id]?.trim() || mov.descripcion;
 
-      try {
-        // Use individual extractoId from movimiento (for "Todos" mode) or the common one
-        const movExtractoId = (mov as any)._extractoId as string | undefined;
-        const targetExtractoId = movExtractoId || extractoId;
+      // Use individual extractoId from movimiento (for "Todos" mode) or the common one
+      const movExtractoId = (mov as any)._extractoId as string | undefined;
+      const targetExtractoId = movExtractoId || extractoId;
 
-        const ejecucionId = await addEjecucion(companyId, {
-          descripcion: desc,
-          fechaEjecutado: mov.fecha,
-          montoEjecutado: monto,
-          projectId,
-          projectName,
-          entityId,
-          entityName,
-          entityType,
-          tipo: isDebito ? 'egreso' : tipo,
-          cuentaId,
-          cuentaName,
-          comprobantes: [],
-        }, {
+      // Validate with Zod before calling Firestore
+      const ejecucionData = {
+        descripcion: desc,
+        fechaEjecutado: mov.fecha,
+        montoEjecutado: monto,
+        projectId,
+        projectName,
+        entityId,
+        entityName,
+        entityType,
+        tipo: isDebito ? 'egreso' : tipo,
+        cuentaId,
+        cuentaName,
+        comprobantes: [],
+      };
+      try {
+        ejecucionSchema.parse(ejecucionData);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          toast.error(`Error en "${desc}": ${err.issues[0].message}`);
+          fail++;
+          continue;
+        }
+        throw err;
+      }
+
+      try {
+        const ejecucionId = await addEjecucion(companyId, ejecucionData, {
           _movimientoId: mov.id,
           _extractoId: targetExtractoId || null,
         });

@@ -256,7 +256,7 @@ export type RecordDetail =
       diferencia: number;
     };
 
-export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role' | 'create-company';
+export type FormType = 'budget' | 'ejecucion' | 'project' | 'client' | 'provider' | 'tercero' | 'cuenta' | 'extracto' | 'invite-user' | 'edit-user-role' | 'create-company' | 'er-config';
 
 export type ActiveForm =
   | { mode: 'add'; type: FormType; defaults?: Record<string, string> }
@@ -271,12 +271,35 @@ export type ActiveForm =
   | { mode: 'edit'; type: 'invite-user'; record: Invitacion }
   | { mode: 'edit'; type: 'edit-user-role'; record: { userId: string; email: string; memberships: { companyId: string; companyName: string; role: string; blocked?: boolean }[] } };
 
+// ─── ER (Estado de Resultados) Config types ────────────────────────────────────
+
+export type ErTaxRegime = 'simple' | 'comun';
+
+export interface ErLineConfig {
+  projectIds: string[];
+}
+
+export interface ErConfig {
+  id?: string;
+  taxRegime: ErTaxRegime;
+  lineItems: {
+    ingresos: ErLineConfig;
+    otrosIngresos: ErLineConfig;
+    costos: ErLineConfig;
+    gastosAdmin: ErLineConfig;
+    gastosFinancieros: ErLineConfig;
+  };
+  createdAt?: Timestamp;
+  updatedAt?: string;
+}
+
 // ─── Entity types (sidepanel entity unification) ──────────────────────────────
 
 export type EntityType =
   | 'budget' | 'ejecucion' | 'project' | 'tercero'
   | 'cuenta' | 'extracto' | 'movimiento' | 'convertir-movimientos'
-  | 'settings' | 'invitacion' | 'colaborador' | 'compania';
+  | 'settings' | 'invitacion' | 'colaborador' | 'compania'
+  | 'er-config';
 
 // NavScreen — entity+mode replaces data/view/form dispatch.
 // Entity-list variant carries dashboard cell click data for EntityList rendering.

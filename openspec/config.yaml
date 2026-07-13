@@ -37,6 +37,10 @@ phases:
     notes: |
 
 archived_changes:
+  - name: company-context-zustand
+    archived_at: 2026-07-13
+    summary: "Zustand 5.0.14 dual-write migration: created companyStore.ts (53 lines, 7 actions, 17 tests), migrated Sidebar/InvitacionEntity/ColaboradorEntity to selector-based subscriptions, 606/606 tests passing, tsc zero new errors"
+    main_spec: ~
   - name: sidepanel-entity-unification
     archived_at: 2026-07-09
     summary: Unificó 10 entidades en componentes únicos create|edit|view, reemplazó FormPanel/ViewPanel/DataPanel, 29/29 tareas completadas, cutover sin regresiones
@@ -62,3 +66,9 @@ archived_changes:
   - name: nuevo-flujo-invitacion-registro
     archived_at: 2026-07-10
     summary: "Separó registro de membresía: invitación solo con email, registro manual, post-registro redirige a pending-assignment, admin asigna empresa/rol desde Configuración. 26/26 tareas completadas. Refactor puro de modelo y flujo, sin spec changes."
+  - name: data-date-validation
+    archived_at: 2026-07-13
+    summary: "Zod 4.4.3 date validation at write boundary: created lib/schemas.ts with yearMonthSchema/dateStringSchema/budgetSchema/ejecucionSchema, 39 tests, validated 4 firestore.ts write functions, integrated in BudgetForm/EjecucionForm/ConvertirMovimientosEntity, 645/645 tests passing, 0 tsc errors. Pure refactor — no spec changes."
+  - name: er-config-system
+    archived_at: 2026-07-13
+    summary: "Per-company ER config system: ErConfig type + Firestore subcollection, dual tax regime (simple 8.1% / común 35%), refactored computePnL with config-driven formulas, ErConfigPanel with regime selector + per-line formula config, wired into Sidepanel and page.tsx. 12/13 tasks complete, 650/650 tests passing, 0 tsc errors."

@@ -175,27 +175,6 @@ describe('EstadoResultados component', () => {
     expect(getCellValue('F3')).toContain('9.500.000');
   });
 
-  it('F7 input accepts manual value and F9/F12 recalculate', () => {
-    const budgets: Budget[] = [
-      makeBudget({ id: 'b1', projectName: 'Vivienda', tipo: 'ingreso', montoPresupuestado: 10_000_000 }),
-    ];
-
-    render(<EstadoResultados budgets={budgets} ejecuciones={[]} />);
-
-    // Find the F7 input (Gastos Financieros row)
-    const f7Input = getInputForRow('F7');
-    expect(f7Input).not.toBeNull();
-
-    // Type 100,000 into F7
-    fireEvent.change(f7Input!, { target: { value: '100000' } });
-
-    // F8 = (0 + 0 + 100k) * 0.004 = 400
-    expect(getCellValue('F8')).toContain('400');
-
-    // F9 = F5 - F6 - F7 - F8 = 10M - 0 - 100k - 400 = 9,899,600
-    expect(getCellValue('F9')).toContain('9.899.600');
-  });
-
   it('renders year selector with current year and allows navigation', () => {
     const thisYear = new Date().getFullYear();
     render(<EstadoResultados budgets={[]} ejecuciones={[]} />);
@@ -211,14 +190,13 @@ describe('EstadoResultados component', () => {
   it('renders empty state without crash when no data', () => {
     render(<EstadoResultados budgets={[]} ejecuciones={[]} />);
 
-    // All rows should show values — F2 and F7 are inputs (empty), other 10 are "$ 0"
-    for (const id of ['F1', 'F3', 'F4', 'F5', 'F6', 'F8', 'F9', 'F10', 'F11', 'F12']) {
+    // All rows should show $0 — F2 is input (empty), other 12 are "$ 0"
+    for (const id of ['F1', 'F1b', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12']) {
       const value = getCellValue(id);
       expect(value, `Row ${id} should show $0`).toContain('0');
     }
 
-    // F2 and F7 have inputs
+    // F2 has input (devoluciones manual)
     expect(getInputForRow('F2')).not.toBeNull();
-    expect(getInputForRow('F7')).not.toBeNull();
   });
 });

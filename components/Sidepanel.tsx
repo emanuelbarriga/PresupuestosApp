@@ -18,6 +18,7 @@ import { SettingsEntity } from '@/components/entities/settings/SettingsEntity';
 import { InvitacionEntity } from '@/components/entities/invitacion/InvitacionEntity';
 import { ColaboradorEntity } from '@/components/entities/colaborador/ColaboradorEntity';
 import { CompaniaEntity } from '@/components/entities/compania/CompaniaEntity';
+import { ErConfigPanel } from '@/components/panels/ErConfigPanel';
 
 interface SidepanelProps {
   screen: NavScreen | undefined;
@@ -99,6 +100,20 @@ function renderEntityScreen(
       return <ColaboradorEntity key={key} {...entityProps} />;
     case 'compania':
       return <CompaniaEntity key={key} {...entityProps} />;
+    case 'er-config': {
+      const record = screen.record || {};
+      return (
+        <ErConfigPanel
+          config={record.config ?? record}
+          projects={record.projects || []}
+          onSave={(config) => handleEntitySubmit({ mode: 'edit', entity: 'er-config', data: config })}
+          onConfigChange={record.onConfigChange}
+          onClose={onClose}
+          onBack={onBack}
+          canGoBack={canGoBack}
+        />
+      );
+    }
     default:
       return null;
   }
