@@ -64,6 +64,15 @@ Aplicación empresarial multi-empresa para el control y seguimiento de presupues
 | **Tests E2E** | Playwright + Firebase Emulator Suite |
 | **Herramientas** | Firebase CLI, ESLint 9 |
 
+### Gentle AI + Engram
+
+| Herramienta | Versión |
+|-------------|---------|
+| **Gentle AI** | 2.1.3 |
+| **Engram** | 1.19.0 |
+
+El proyecto usa [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) con el flujo SDD (Spec-Driven Development) para desarrollo asistido, y Engram como memoria persistente entre sesiones. Skills específicas del proyecto en `.agents/skills/`.
+
 ---
 
 ## Primeros pasos
