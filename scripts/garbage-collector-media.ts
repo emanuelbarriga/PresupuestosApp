@@ -354,7 +354,9 @@ if (isDirectRun) {
       db.settings({ host: process.env.FIRESTORE_EMULATOR_HOST, ssl: false });
     }
 
-    const bucket = getStorage().bucket();
+    const bucket = getStorage().bucket(
+      process.env.STORAGE_BUCKET || 'planningsaman-3cf7e.firebasestorage.app',
+    );
     const apply = process.argv.includes('--apply');
 
     console.log(`🧹 Starting garbage collection (${apply ? 'APPLY' : 'DRY-RUN'})...`);

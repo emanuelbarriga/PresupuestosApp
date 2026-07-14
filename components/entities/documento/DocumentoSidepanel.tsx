@@ -120,10 +120,20 @@ export function DocumentoSidepanel({
       />
 
       <div className="flex-1 overflow-y-auto">
-        {/* ── PDF Preview ── */}
+        {/* ── Preview ── */}
         <div className="bg-slate-50 border-b border-slate-200">
           <div className="h-48 bg-slate-100 flex items-center justify-center relative overflow-hidden">
-            {documento.mimeType === 'application/pdf' ? (
+            {documento.mimeType?.startsWith('image/') ? (
+              <img
+                src={documento.url}
+                alt={documento.fileName}
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : documento.mimeType === 'application/pdf' ? (
               <iframe
                 src={`${documento.url}#view=FitH`}
                 title="Vista previa del documento"
@@ -132,6 +142,13 @@ export function DocumentoSidepanel({
               />
             ) : (
               <div className="flex flex-col items-center gap-2 text-slate-400">
+                <FileText size={32} />
+                <span className="text-xs">Vista previa no disponible</span>
+              </div>
+            )}
+            {/* Fallback message if image load fails */}
+            {documento.mimeType?.startsWith('image/') && (
+              <div className="hidden absolute inset-0 flex flex-col items-center justify-center text-slate-400">
                 <FileText size={32} />
                 <span className="text-xs">Vista previa no disponible</span>
               </div>
