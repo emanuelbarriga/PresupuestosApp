@@ -35,30 +35,31 @@ function useFilteredProjects(projects: Project[], tipo: 'ingreso' | 'egreso', se
 }
 
 export function ErConfigPanel({ config, projects, onSave, onConfigChange, onClose, onBack, canGoBack, saving }: ErConfigPanelProps) {
-  const [taxRegime, setTaxRegime] = useState<ErTaxRegime>(config.taxRegime);
-  const [lineItems, setLineItems] = useState(config.lineItems);
+  const safeConfig = config || DEFAULT_ER_CONFIG;
+  const [taxRegime, setTaxRegime] = useState<ErTaxRegime>(safeConfig.taxRegime);
+  const [lineItems, setLineItems] = useState(safeConfig.lineItems);
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [showDropdown, setShowDropdown] = useState<Record<string, boolean>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
   // Notificar cambios al padre para live preview
   useEffect(() => {
-    const current: ErConfig = { ...config, taxRegime, lineItems };
+    const current: ErConfig = { ...safeConfig, taxRegime, lineItems };
     onConfigChange?.(current);
     setHasChanges(
-      taxRegime !== config.taxRegime ||
-      JSON.stringify(lineItems) !== JSON.stringify(config.lineItems),
+      taxRegime !== safeConfig.taxRegime ||
+      JSON.stringify(lineItems) !== JSON.stringify(safeConfig.lineItems),
     );
   }, [taxRegime, lineItems]);
 
   const handleSave = () => {
-    onSave({ ...config, taxRegime, lineItems });
+    onSave({ ...safeConfig, taxRegime, lineItems });
   };
 
   const handleDiscard = () => {
     // Revertir al estado inicial
-    setTaxRegime(config.taxRegime);
-    setLineItems(config.lineItems);
+    setTaxRegime(safeConfig.taxRegime);
+    setLineItems(safeConfig.lineItems);
     onClose();
   };
 

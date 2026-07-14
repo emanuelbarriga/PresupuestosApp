@@ -109,7 +109,6 @@ export default function CompanyPage({ params }: Props) {
   const { company: companyId, segments } = use(params);
   const router = useRouter();
   const { view: activeView, tab: activeTab } = viewFromSegments(segments);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [navStack, setNavStack] = useState<NavScreen[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
@@ -212,7 +211,6 @@ export default function CompanyPage({ params }: Props) {
 
   const pushScreen = useCallback((screen: NavScreen) => {
     setNavStack(prev => [...prev, screen]);
-    setSidebarCollapsed(true);
   }, []);
 
   const popScreen = useCallback(() => {
@@ -221,7 +219,6 @@ export default function CompanyPage({ params }: Props) {
 
   const clearScreens = useCallback(() => {
     setNavStack([]);
-    setSidebarCollapsed(false);
   }, []);
 
   // Auto-open create-company form when arriving with ?create-company=1
@@ -248,12 +245,6 @@ export default function CompanyPage({ params }: Props) {
     else if (view === 'EstadoResultados') path += '/estado-resultados';
     else path += `/${view.toLowerCase()}`;
     router.push(path);
-  };
-
-  const handleSidebarToggle = () => {
-    const newCollapsedState = !sidebarCollapsed;
-    setSidebarCollapsed(newCollapsedState);
-    if (!newCollapsedState) closePanel();
   };
 
   const handleCellClick = (data: SidepanelData) => {
@@ -608,8 +599,7 @@ export default function CompanyPage({ params }: Props) {
 
   return (
     <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} activeView={activeView}
-          onViewChange={(view) => navigateTo(view)} basePath={`/${companyId}`} />
+        <Sidebar activeView={activeView} basePath={`/${companyId}`} />
 
         <main className="flex-1 flex overflow-hidden relative min-w-0">
           <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
@@ -647,6 +637,7 @@ export default function CompanyPage({ params }: Props) {
             companyId={companyId} onClose={handleSidepanelClose}
             onSubmit={handleEntitySubmit}
             canGoBack={canGoBack}
+            activeView={activeView}
             onBack={handleSidepanelBack}
             onNavigate={pushScreen}
             projects={projectsForCompany}

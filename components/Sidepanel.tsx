@@ -1,9 +1,11 @@
 'use client'
 
-import { NavScreen, Project, EntityType } from '@/lib/types';
-import { FileText, Filter, Bell, Settings } from 'lucide-react';
+import { NavScreen, Project, EntityType, ViewType } from '@/lib/types';
+import { FileText, CheckCircle, FolderKanban, Users, CreditCard, Building2, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import { CustomizePanel } from '@/components/panels/CustomizePanel';
+import { useCompanyStore } from '@/stores/companyStore';
+import { Tooltip } from './Tooltip';
 import { TerceroGroupPanel } from '@/components/panels/TerceroGroupPanel';
 import { EntityList } from '@/components/entities/EntityList';
 import { BudgetEntity } from '@/components/entities/budget/BudgetEntity';
@@ -23,6 +25,7 @@ import { ErConfigPanel } from '@/components/panels/ErConfigPanel';
 interface SidepanelProps {
   screen: NavScreen | undefined;
   companyId: string;
+  activeView?: ViewType;
   onClose: () => void;
   onSubmit: (action: {
     mode: 'create' | 'edit' | 'archive';
@@ -132,8 +135,18 @@ export function Sidepanel({
   projectSearch = '',
   onProjectsChange,
   onSearchChange,
+  activeView,
 }: SidepanelProps) {
   const visible = !!screen;
+  const userRole = useCompanyStore(s => s.userRole);
+
+  const handleSettings = () => {
+    if (activeView === 'Dashboard') {
+      onNavigate({ type: 'customize' });
+    } else {
+      onNavigate({ type: 'entity', entity: 'settings', mode: 'edit' });
+    }
+  };
 
   const renderContent = () => {
     if (!screen) return null;
@@ -207,19 +220,54 @@ export function Sidepanel({
       )}
     >
       {!visible ? (
-        <div className="flex flex-col gap-6 w-full items-center text-slate-400">
-          <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl">
-            <FileText size={20} />
-          </button>
-          <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl">
-            <Filter size={20} />
-          </button>
-          <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl">
-            <Bell size={20} />
-          </button>
-          <button className="p-2 hover:bg-slate-100 hover:text-indigo-600 rounded-xl mt-auto">
-            <Settings size={20} />
-          </button>
+        <div className="flex flex-col items-center gap-3 mt-4">
+          <Tooltip label="Presupuestado" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'create', defaults: { tipo: 'credito' } })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all">
+              <FileText size={18} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Ejecutado" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'create', defaults: { tipo: 'debito' } })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
+              <CheckCircle size={18} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Proyecto" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'project', mode: 'create' })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all">
+              <FolderKanban size={18} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Tercero" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'tercero', mode: 'create' })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
+              <Users size={18} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Cuenta bancaria" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'cuenta', mode: 'create' })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-all">
+              <CreditCard size={18} />
+            </button>
+          </Tooltip>
+          <Tooltip label="Extracto" side="left">
+            <button onClick={() => onNavigate({ type: 'entity', entity: 'extracto', mode: 'create' })}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-all">
+              <Building2 size={18} />
+            </button>
+          </Tooltip>
+          {(userRole === 'admin') && (
+            <>
+              <div className="w-6 h-px bg-slate-200 my-1" />
+              <Tooltip label="Configuración" side="left">
+                <button onClick={handleSettings}
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
+                  <Settings size={18} />
+                </button>
+              </Tooltip>
+            </>
+          )}
         </div>
       ) : (
         renderContent()

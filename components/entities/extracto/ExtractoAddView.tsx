@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import type { Banco, MovimientoBancarioInput } from '@/lib/types';
+import type { Banco, MovimientoBancarioInput, CuentaBancaria } from '@/lib/types';
+import { subscribeCuentasBancarias } from '@/lib/firestore';
 import { parseForPreview } from '@/lib/parsers/parsePipeline';
 import { extractPdfTextFromBuffer } from '@/lib/parsers/pdfText';
 import { detectarBanco } from '@/lib/parsers/index';
@@ -32,6 +33,14 @@ export function ExtractoAddView({
   onBack,
   onClose,
 }: ExtractoAddViewProps) {
+  const [selectedAccountId, setSelectedAccountId] = useState(accountId);
+  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeCuentasBancarias(companyId, setCuentas, () => {});
+    return unsub;
+  }, [companyId]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -147,7 +156,7 @@ export function ExtractoAddView({
     setSaving(true);
     try {
       const data: Record<string, any> = {
-        accountId,
+        accountId: selectedAccountId,
         mes: finalHeader.mes,
         anio: finalHeader.anio,
         saldoInicial: finalHeader.saldoInicial,
@@ -185,6 +194,21 @@ export function ExtractoAddView({
 
   return (
     <>
+      {/* Account selector */}
+      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+        Cuenta bancaria
+      </label>
+      <select
+        value={selectedAccountId}
+        onChange={e => setSelectedAccountId(e.target.value)}
+        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white mb-4"
+      >
+        <option value="">Seleccioná una cuenta...</option>
+        {cuentas.map(c => (
+          <option key={c.id} value={c.id}>{c.nombre} — {c.banco}</option>
+        ))}
+      </select>
+
       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
         Extracto PDF
       </label>

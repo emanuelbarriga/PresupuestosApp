@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { SidepanelData, MONTHS, Month, ProjectState, Budget, Ejecucion, TransactionType, Project, DetalleTerceroGroup, RecordDetail } from '@/lib/types';
-import { ChevronLeft, ChevronRight, ChevronDown, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, FileText, CheckCircle, Handshake, Archive } from 'lucide-react';
 import clsx from 'clsx';
 
 const currentYear = new Date().getFullYear();
@@ -247,18 +247,15 @@ export function Dashboard({ onCellClick, onProjectClick, onEmptyCellClick, onTer
             <button onClick={() => setSelectedYear(y => y + 1)} className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-white transition-colors"><ChevronRight size={14}/></button>
           </div>
           <div className="p-1 rounded-lg flex border bg-slate-100 border-slate-200">
-            <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Presupuestado' ? "bg-sky-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Presupuestado')}>Presupuestado</button>
-            <button className={clsx("px-4 py-1 text-xs font-bold rounded-md transition-colors", mode === 'Ejecutado' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Ejecutado')}>Ejecutado</button>
+            <button className={clsx("px-3 py-1 text-xs font-bold rounded-md transition-colors flex items-center gap-1.5", mode === 'Presupuestado' ? "bg-sky-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Presupuestado')}><FileText size={13} /> Presupuestado</button>
+            <button className={clsx("px-3 py-1 text-xs font-bold rounded-md transition-colors flex items-center gap-1.5", mode === 'Ejecutado' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")} onClick={() => setMode('Ejecutado')}><CheckCircle size={13} /> Ejecutado</button>
           </div>
           {/* Detalle por Tercero: se accede haciendo clic en el nombre del tercero en las sub-filas expandidas */}
-          <button onClick={() => setShowNegociacion(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
-            Negociación {showNegociacion ? 'ON' : 'OFF'}
+          <button onClick={() => setShowNegociacion(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5", showNegociacion ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            <Handshake size={13} /> Negociación {showNegociacion ? 'ON' : 'OFF'}
           </button>
-          <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
-            {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
-          </button>
-          <button onClick={() => onCustomizeClick?.()} className="px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5 bg-slate-100 text-slate-500 border-slate-200 hover:text-indigo-600">
-            <Settings size={13} /> Configuración de Dashboard
+          <button onClick={() => setShowArchivados(prev => !prev)} className={clsx("px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors flex items-center gap-1.5", showArchivados ? "bg-slate-700 text-white border-slate-600" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            <Archive size={13} /> {showArchivados ? 'Ocultar archivados' : 'Mostrar archivados'}
           </button>
         </div>
       </header>
