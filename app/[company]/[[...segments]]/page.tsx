@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario, ErConfig } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario, ErConfig, TipoDocumentoMedio } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
 import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -609,6 +609,16 @@ export default function CompanyPage({ params }: Props) {
 
   const handleSidepanelBack = () => popScreen();
 
+  const handleDocumentoUpdatedSidepanel = useCallback((
+    _docId: string,
+    _newPeriodo: string,
+    _newTipo: TipoDocumentoMedio,
+  ) => {
+    // Close the sidepanel — the document was saved successfully
+    closePanel();
+    toast('Documento actualizado');
+  }, [closePanel]);
+
   return (
     <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
         <Sidebar activeView={activeView} basePath={`/${companyId}`} />
@@ -660,7 +670,8 @@ export default function CompanyPage({ params }: Props) {
             selectedProjects={selectedProjects}
             projectSearch={projectSearch}
             onProjectsChange={setSelectedProjects}
-            onSearchChange={setProjectSearch} />
+            onSearchChange={setProjectSearch}
+            onDocumentoUpdated={handleDocumentoUpdatedSidepanel} />
         </main>
         <CommandPalette onNavigate={(view, tab) => navigateTo(view, tab)} onAddNew={(type, defaults) => handleAddNew(type, defaults)} />
       </div>

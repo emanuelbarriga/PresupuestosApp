@@ -207,43 +207,43 @@ allow update: if isMember(companyId) && (
   - **DocumentGrid**: Cards con fileName, proveedorTexto (o "—"), projectName resuelto, montoTotal (formato COP con `Math.round()` antes de formatear para evitar decimales por punto flotante), periodo. onClick → `onNavigate({ type: 'entity', entity: 'documento', mode: 'edit', record: doc })`.
   - **SafeSum**: `Number()` + `isNaN()` guard en reduce + `Math.round()` antes de formatear. Indicador "X de Y documentos con monto".
 - **Criterios de aceptación**:
-  - [ ] BannerSinPeriodo usa `getCountFromServer()` (no `onSnapshot`) al montar
-  - [ ] Banner se refresca con `getCountFromServer()` después de cada `onDocumentoUpdated` exitoso
-  - [ ] Banner oculto si count === 0, visible con "{N} documentos sin periodo asignado" si count > 0
-  - [ ] Click en banner cambia selector a "Sin periodo"
-  - [ ] Selector año: options 2020–2030; selector mes: "Sin periodo", "Enero"–"Diciembre"
-  - [ ] **Cuando mes es "Sin periodo", año se deshabilita y muestra "—"** (evita estado confuso)
-  - [ ] Default al montar: año actual, mes actual → `selectedPeriod = '2026-07'`
-  - [ ] Al cambiar selector, se llama `onPeriodChange` con el nuevo valor
-  - [ ] **Error de índice en construcción**: Se captura `failed-precondition`, se muestra loader con mensaje amigable y botón reintentar
-  - [ ] 8 tabs siempre visibles: factura_venta, factura_compra, extracto_bancario, comprobante_egreso, comprobante_ingreso, planilla, contrato, otro
-  - [ ] Cada tab muestra badge con count de documentos en ese grupo
-  - [ ] Tabs vacías: badge "(0)", grid muestra empty state "No hay documentos de este tipo en {mes}"
-  - [ ] Query única: `subscribeDocumentosEnlazados(companyId, selectedPeriod, onError)` con agrupación cliente
-  - [ ] Documentos sin `tipoDocumento` caen en categoría "otro"
-  - [ ] Cambiar de tab de categoría es instantáneo (sin nueva query)
-  - [ ] Grid de documentos muestra fileName (truncado), proveedorTexto (o "—"), projectName, montoTotal (COP con `Math.round()`), periodo
-  - [ ] SafeSum: `Number(montoTotal)` + `isNaN()` guard + `Math.round()`, muestra total + "X de Y documentos con monto"
-  - [ ] Click en card → abre sidepanel con `mode: 'edit'`
-  - [ ] Al cambiar `selectedPeriod` (nuevo mes), se desuscribe del listener anterior y crea uno nuevo
-  - [ ] Cleanup de Firestore listener en unmount
-  - [ ] Props: `companyId`, `selectedPeriod`, `activeCategory`, `onPeriodChange`, `onCategoryChange`, `onNavigate`
+  - [x] BannerSinPeriodo usa `getCountFromServer()` (no `onSnapshot`) al montar
+  - [x] Banner se refresca con `getCountFromServer()` después de cada `onDocumentoUpdated` exitoso
+  - [x] Banner oculto si count === 0, visible con "{N} documentos sin periodo asignado" si count > 0
+  - [x] Click en banner cambia selector a "Sin periodo"
+  - [x] Selector año: options 2020–2030; selector mes: "Sin periodo", "Enero"–"Diciembre"
+  - [x] **Cuando mes es "Sin periodo", año se deshabilita y muestra "—"** (evita estado confuso)
+  - [x] Default al montar: año actual, mes actual → `selectedPeriod = '2026-07'`
+  - [x] Al cambiar selector, se llama `onPeriodChange` con el nuevo valor
+  - [x] **Error de índice en construcción**: Se captura `failed-precondition`, se muestra loader con mensaje amigable y botón reintentar
+  - [x] 8 tabs siempre visibles: factura_venta, factura_compra, extracto_bancario, comprobante_egreso, comprobante_ingreso, planilla, contrato, otro
+  - [x] Cada tab muestra badge con count de documentos en ese grupo
+  - [x] Tabs vacías: badge "(0)", grid muestra empty state "No hay documentos de este tipo en {mes}"
+  - [x] Query única: `subscribeDocumentosEnlazados(companyId, selectedPeriod, onError)` con agrupación cliente
+  - [x] Documentos sin `tipoDocumento` caen en categoría "otro"
+  - [x] Cambiar de tab de categoría es instantáneo (sin nueva query)
+  - [x] Grid de documentos muestra fileName (truncado), proveedorTexto (o "—"), projectName, montoTotal (COP con `Math.round()`), periodo
+  - [x] SafeSum: `Number(montoTotal)` + `isNaN()` guard + `Math.round()`, muestra total + "X de Y documentos con monto"
+  - [x] Click en card → abre sidepanel con `mode: 'edit'`
+  - [x] Al cambiar `selectedPeriod` (nuevo mes), se desuscribe del listener anterior y crea uno nuevo
+  - [x] Cleanup de Firestore listener en unmount
+  - [x] Props: `companyId`, `selectedPeriod`, `activeCategory`, `onPeriodChange`, `onCategoryChange`, `onNavigate`
 - **Estimación**: ~250 líneas (nuevo)
 
 ---
 
 ### T12: Sidepanel forwarding — Conexión del callback de filtro
 
-- **Archivos**: `components/media/MediaPage.tsx` (conexión final)
+- **Archivos**: `app/[company]/[[...segments]]/page.tsx` (conexión final)
 - **Dependencias**: T11, T8, T9
 - **Descripción**: Verificar que el callback `onDocumentoUpdated` fluye correctamente desde MediaPage → Sidepanel → DocumentoEntity → DocumentoSidepanel, y que `handleDocumentoUpdated` en MediaPage compara correctamente el resultado post-save con el filtro activo (`selectedPeriod`, `activeCategory`). Asegurar que `ArchivadorTab` recibe `onNavigate` y que al hacer clic en un documento del grid, el sidepanel se abre con `mode: 'edit'` y pre-fill. Verificar que al guardar un documento cuyo nuevo `periodo` o `tipoDocumento` no matchea el filtro, el sidepanel se cierra y el toast aparece. Verificar que al guardar sin cambios de filtro, no hay toast falso.
 - **Criterios de aceptación**:
-  - [ ] Documento clickeado en ArchivadorTab abre sidepanel con `mode: 'edit'` y documento pre-poblado
-  - [ ] Guardar documento con mismo periodo y tipo → sidepanel cierra, sin toast, documento permanece en grilla
-  - [ ] Guardar documento cambiando periodo a otro mes → sidepanel cierra, toast "Documento movido a {mes}", documento desaparece de grilla
-  - [ ] Guardar documento cambiando tipoDocumento → sidepanel cierra, toast "Documento reclasificado a {tipo}", documento desaparece de categoría actual
-  - [ ] Callback se llama UNA SOLA VEZ por save (sin duplicados)
-  - [ ] Error en save → no se llama onDocumentoUpdated, sidepanel permanece abierto
+  - [x] Documento clickeado en ArchivadorTab abre sidepanel con `mode: 'edit'` y documento pre-poblado
+  - [x] Guardar documento con mismo periodo y tipo → sidepanel cierra, sin toast, documento permanece en grilla
+  - [x] Guardar documento cambiando periodo a otro mes → sidepanel cierra, toast "Documento movido a {mes}", documento desaparece de grilla
+  - [x] Guardar documento cambiando tipoDocumento → sidepanel cierra, toast "Documento reclasificado a {tipo}", documento desaparece de categoría actual
+  - [x] Callback se llama UNA SOLA VEZ por save (sin duplicados)
+  - [x] Error en save → no se llama onDocumentoUpdated, sidepanel permanece abierto
 - **Estimación**: ~10 líneas (verificación de conexiones existentes, ajustes menores)
 
 ---
