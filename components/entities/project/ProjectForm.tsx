@@ -180,13 +180,13 @@ export function ProjectForm({
       <label className="flex items-center gap-2.5 cursor-pointer py-1">
         <input type="checkbox" checked={fields.soloEgresos === 'true'} onChange={e => set('soloEgresos', e.target.checked ? 'true' : 'false')}
           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-        <span className="text-xs font-medium text-slate-600 select-none">Solo egresos</span>
+        <span className="text-xs font-medium text-slate-600">Solo egresos</span>
         <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Ingresos)</span>
       </label>
       <label className="flex items-center gap-2.5 cursor-pointer py-1">
         <input type="checkbox" checked={fields.soloIngresos === 'true'} onChange={e => set('soloIngresos', e.target.checked ? 'true' : 'false')}
           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-        <span className="text-xs font-medium text-slate-600 select-none">Solo ingresos</span>
+        <span className="text-xs font-medium text-slate-600">Solo ingresos</span>
         <span className="text-[10px] text-slate-400 ml-auto">(no aparece en Egresos)</span>
       </label>
       <div className="pt-2">

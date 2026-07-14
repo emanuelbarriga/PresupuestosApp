@@ -204,19 +204,9 @@ describe('EjecucionEntity', () => {
       expect(screen.getByTestId('searchable-select-Proyecto')).toBeInTheDocument();
     });
 
-    it('renderiza inline "Nuevo proyecto" button', () => {
-      renderEntity({ mode: 'create', record: undefined });
-      expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument();
-    });
-
     it('renderiza SearchableSelect para cliente/proveedor', () => {
       renderEntity({ mode: 'create', record: undefined });
       expect(screen.getByTestId('searchable-select-Cliente / Proveedor')).toBeInTheDocument();
-    });
-
-    it('renderiza inline "Nuevo cliente" button', () => {
-      renderEntity({ mode: 'create', record: undefined });
-      expect(screen.getByText('Nuevo cliente')).toBeInTheDocument();
     });
 
     it('renderiza FormInput para descripción y monto', () => {

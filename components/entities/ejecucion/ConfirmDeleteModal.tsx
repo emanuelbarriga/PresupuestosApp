@@ -114,7 +114,7 @@ export function ConfirmDeleteModal({
                 disabled={loading}
                 className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <span className="text-xs text-slate-600 group-hover:text-slate-700 leading-relaxed select-none">
+              <span className="text-xs text-slate-600 group-hover:text-slate-700 leading-relaxed">
                 Entiendo que esto modificará los presupuestos vinculados y/o el movimiento bancario asociado
               </span>
             </label>

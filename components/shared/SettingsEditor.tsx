@@ -51,7 +51,7 @@ export function SettingsEditor({ category, title, items, companyId, onClose }: S
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <PanelHeader title={title} canGoBack={false} onBack={() => {}} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-6 space-y-3">
+      <div className="flex-1 overflow-y-auto p-6 space-y-3 select-text">
         {localItems.map((item: any, index: number) => (
           <div key={index} className="flex items-center gap-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
             <div className="flex flex-col gap-0.5">

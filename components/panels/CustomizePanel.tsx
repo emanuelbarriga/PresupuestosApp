@@ -67,7 +67,7 @@ export function CustomizePanel({ projects, selectedProjects, projectSearch, onPr
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <PanelHeader title="Configuración de Dashboard" canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto select-text">
         <div className="px-5 pt-4 pb-3">
           <div className="relative">
             <input type="text" placeholder="Buscar proyecto..." value={projectSearch}

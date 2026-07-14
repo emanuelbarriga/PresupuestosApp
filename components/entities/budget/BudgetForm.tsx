@@ -42,6 +42,7 @@ interface BudgetFields {
   fechaEjecutado: string;
   mesPresupuestado: string;
   fechaPresupuestado: string;
+  estadoProyecto: string;
 }
 
 export function BudgetForm({
@@ -77,6 +78,7 @@ export function BudgetForm({
         fechaEjecutado: fe,
         mesPresupuestado: String(r.mesPresupuestado ?? ''),
         fechaPresupuestado: fp,
+        estadoProyecto: String(r.estadoProyecto ?? 'Activo'),
       };
     }
     const defs = defaults || {};
@@ -92,6 +94,7 @@ export function BudgetForm({
       fechaEjecutado: defs.fechaEjecutado ?? '',
       mesPresupuestado: defs.mesPresupuestado ?? '',
       fechaPresupuestado: defs.fechaPresupuestado ?? '',
+      estadoProyecto: defs.estadoProyecto ?? 'Activo',
     };
   });
 
@@ -212,6 +215,7 @@ export function BudgetForm({
     }
 
     for (const entry of entries) {
+      entry.estadoProyecto = entry.estadoProyecto || 'Activo';
       try {
         budgetSchema.parse(entry);
       } catch (err) {
@@ -301,7 +305,7 @@ export function BudgetForm({
             <label className="flex items-center gap-2.5 cursor-pointer py-1 mb-3">
               <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-              <span className="text-xs font-medium text-slate-600 select-none">Recurrente</span>
+              <span className="text-xs font-medium text-slate-600">Recurrente</span>
             </label>
             {recurring && (
               <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">

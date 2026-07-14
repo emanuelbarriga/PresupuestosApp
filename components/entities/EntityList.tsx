@@ -130,7 +130,7 @@ export function EntityList({
       </div>
 
       {/* BODY — scrollable */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 select-text">
         {mode === 'Presupuestado' && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">

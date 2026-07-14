@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SearchableSelectProps {
@@ -10,13 +10,17 @@ interface SearchableSelectProps {
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder: string;
+  /** When provided, shows "Crear {createLabel}: {search}" when search has no match */
+  onCreate?: (searchText: string) => void;
+  createLabel?: string;
 }
 
-export function SearchableSelect({ label, value, onChange, options, placeholder }: SearchableSelectProps) {
+export function SearchableSelect({ label, value, onChange, options, placeholder, onCreate, createLabel }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const filtered = search ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase())) : options;
   const selected = options.find(o => o.value === value);
+  const showCreate = onCreate && search && filtered.length === 0;
 
   return (
     <div className="relative">
@@ -36,22 +40,30 @@ export function SearchableSelect({ label, value, onChange, options, placeholder 
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {filtered.map(o => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false); setSearch(''); }}
+                className={clsx(
+                  'w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors',
+                  o.value === value ? 'text-indigo-600 font-medium' : 'text-slate-700',
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+            {showCreate && (
+              <button
+                type="button"
+                onClick={() => { onCreate(search); setOpen(false); setSearch(''); }}
+                className="w-full text-left px-3 py-2 text-sm text-indigo-600 font-medium hover:bg-indigo-50 transition-colors border-t border-slate-100 flex items-center gap-1.5"
+              >
+                <Plus size={13} /> Crear {createLabel}: {search}
+              </button>
+            )}
+            {!showCreate && filtered.length === 0 && (
               <p className="p-3 text-xs text-slate-500 text-center">Sin resultados</p>
-            ) : (
-              filtered.map(o => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => { onChange(o.value); setOpen(false); setSearch(''); }}
-                  className={clsx(
-                    'w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors',
-                    o.value === value ? 'text-indigo-600 font-medium' : 'text-slate-700',
-                  )}
-                >
-                  {o.label}
-                </button>
-              ))
             )}
           </div>
         </>

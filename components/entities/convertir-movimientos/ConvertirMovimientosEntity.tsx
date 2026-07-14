@@ -188,7 +188,7 @@ export function ConvertirMovimientosEntity({ mode, companyId, record, defaults, 
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <PanelHeader title={`Convertir ${movimientos.length} movimientos`} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 select-text">
 
         {/* Common fields */}
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 space-y-3">

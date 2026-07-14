@@ -36,7 +36,7 @@ export function ProjectEntity({ mode, companyId, record, defaults, year, filterT
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 select-text">
         {mode === 'view' && record ? (
           <ProjectView
             project={record as Project}

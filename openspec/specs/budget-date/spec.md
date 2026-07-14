@@ -75,3 +75,28 @@ Existing test fixtures that create budgets SHALL include `fechaPresupuestado` wi
 - GIVEN the code changes are implemented and the migration script exists
 - WHEN `npm test` is executed
 - THEN all tests pass with no regressions
+
+### Requirement: BudgetForm validates estadoProyecto
+
+BudgetFields MUST include `estadoProyecto: string`. In `handleSubmit`, the entry MUST set `entry.estadoProyecto = fields.estadoProyecto || 'Activo'` BEFORE `budgetSchema.parse()`.
+
+#### Scenario: New budget saves with default
+
+- GIVEN BudgetForm for a new budget
+- WHEN the user submits after filling required fields
+- THEN budgetSchema.parse() receives estadoProyecto="Activo"
+- AND no "Invalid input" error
+
+#### Scenario: Existing budget preserves its value
+
+- GIVEN BudgetForm loads a budget with estadoProyecto="Finalizado"
+- WHEN the user modifies monto and submits
+- THEN entry.estadoProyecto is "Finalizado"
+- AND parse succeeds
+
+#### Scenario: Empty default
+
+- GIVEN estadoProyecto is not set
+- WHEN handleSubmit runs
+- THEN entry.estadoProyecto defaults to "Activo"
+- AND parse succeeds

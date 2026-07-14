@@ -7,10 +7,10 @@ import { FormInput } from '@/components/forms/FormInput';
 import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { TipoSwitch } from '@/components/forms/TipoSwitch';
 import { formatThousands, unformatThousands } from '@/lib/utils';
-import { Link2, X, Plus } from 'lucide-react';
+import { Link2, X } from 'lucide-react';
 import clsx from 'clsx';
 import { Calculator } from '@/components/shared/Calculator';
-import { addClient, addProject } from '@/lib/firestore';
+import { addClient, addProvider, addProject } from '@/lib/firestore';
 import { ejecucionSchema } from '@/lib/schemas';
 import { ZodError } from 'zod';
 import toast from 'react-hot-toast';
@@ -124,11 +124,7 @@ export function EjecucionForm({
   const [calcExpr, setCalcExpr] = useState('');
   const [recurring, setRecurring] = useState(false);
   const [recurringCount, setRecurringCount] = useState(3);
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectClient, setNewProjectClient] = useState('');
-  const [showNewClient, setShowNewClient] = useState(false);
-  const [newClientName, setNewClientName] = useState('');
+
   const [selectedBudgetLinks, setSelectedBudgetLinks] = useState<Array<{budgetId: string; budgetName: string; monto: string}>>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
   const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
@@ -138,26 +134,87 @@ export function EjecucionForm({
 
   const safeProjects = projects || [];
 
-  // Filter + sort budgets for smarter linking
+  // Filter + sort budgets for smart linking
   const filteredBudgets = useMemo(() => {
     const monto = Number(fields.montoEjecutado) || 0;
-    const ejecMonth = fields.fechaEjecutado
-      ? new Date(fields.fechaEjecutado + 'T12:00:00').getMonth()
-      : -1;
 
-    return allBudgets
-      .filter(b => b.tipo === fields.tipo)
-      .filter(b => !fields.projectId || b.projectId === fields.projectId)
-      .filter(b => !fields.entityId || b.entityId === fields.entityId)
+    // Fecha de la ejecución → mes (0-based) y año
+    let ejecMonth = -1, ejecYear = 0;
+    if (fields.fechaEjecutado) {
+      const d = new Date(fields.fechaEjecutado + 'T12:00:00');
+      ejecMonth = d.getMonth();
+      ejecYear = d.getFullYear();
+    }
+
+    // Normalize for lenient matching: lowercase, strip accents, collapse spaces
+    const normalize = (s: string) => {
+      try { return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+      catch { return s.toLowerCase().trim(); }
+    };
+
+    const step1 = allBudgets.filter(b => b.tipo === fields.tipo);
+    const step2 = step1.filter(b => {
+      if (fields.projectId) {
+        if (b.projectId === fields.projectId) return true; // match por ID
+        // ID no coincide → intentar por nombre
+        if (fields.projectName) return normalize(b.projectName) === normalize(fields.projectName);
+        return false;
+      }
+      if (fields.projectName) return normalize(b.projectName) === normalize(fields.projectName);
+      return true;
+    });
+    const step3 = step2.filter(b => {
+      if (fields.entityId) {
+        if (b.entityId === fields.entityId) return true; // match por ID
+        // ID no coincide → intentar por nombre
+        if (fields.entityName && fields.entityName !== 'Interno') return normalize(b.entityName) === normalize(fields.entityName);
+        return false;
+      }
+      if (fields.entityName && fields.entityName !== 'Interno') return normalize(b.entityName) === normalize(fields.entityName);
+      return true;
+    });
+    const step4 = step3.filter(b => {
+      if (ejecMonth < 0) return true;
+      const bMonth = MONTHS.indexOf(b.mesPresupuestado);
+      if (bMonth < 0) return true;
+      const diff = Math.min(Math.abs(bMonth - ejecMonth), 12 - Math.abs(bMonth - ejecMonth));
+      return diff <= 6;
+    });
+    const step5 = step4.filter(b => {
+      if (monto === 0) return true;
+      const ratio = Math.abs(b.montoPresupuestado - monto) / monto;
+      return ratio <= 0.2;
+    });
+
+    return step5
+      // 6. SCORING: ordenar por cercanía (proyecto + tercero + monto + fecha)
       .map(b => {
+        // Distancia de mes considerando vuelta de año
+        let monthDist = 0;
+        if (ejecMonth >= 0) {
+          const bMonth = MONTHS.indexOf(b.mesPresupuestado);
+          monthDist = bMonth >= 0 ? Math.min(Math.abs(bMonth - ejecMonth), 12 - Math.abs(bMonth - ejecMonth)) : 99;
+        }
+
+        // Distancia de monto como porcentaje (0 = exacto, 0.2 = 20% de diferencia)
+        const montoDist = monto > 0 ? Math.abs(b.montoPresupuestado - monto) / monto : 0;
+
+        // Match de tercero por ID (0) o por nombre (1)
+        const terceroMatch = fields.entityId
+          ? (b.entityId === fields.entityId ? 0 : 1)
+          : (fields.entityName && fields.entityName !== 'Interno')
+            ? (normalize(b.entityName) === normalize(fields.entityName) ? 1 : 2)
+            : 0;
+
+        // Score compuesto: tercero (25%) + montoDist (10%) + monthDist (5%)
+        // plus tiny montoDiff as tiebreaker so closer amounts rank first
         const montoDiff = Math.abs(b.montoPresupuestado - monto);
-        const monthDiff = ejecMonth >= 0
-          ? Math.abs(MONTHS.indexOf(b.mesPresupuestado) - ejecMonth)
-          : 0;
-        return { ...b, _score: montoDiff * 0.6 + monthDiff * 0.4 };
+        const _score = (terceroMatch * 0.25 + montoDist * 0.10 + monthDist * 0.05)
+          + montoDiff * 1e-9; // tiebreaker: closer amount wins
+        return { ...b, _score };
       })
       .sort((a, b) => a._score - b._score);
-  }, [allBudgets, fields.tipo, fields.projectId, fields.entityId, fields.montoEjecutado, fields.fechaEjecutado]);
+  }, [allBudgets, fields.tipo, fields.projectId, fields.projectName, fields.entityId, fields.entityName, fields.montoEjecutado, fields.fechaEjecutado]);
 
   const set = (k: keyof EjecucionFields, v: string) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -169,26 +226,6 @@ export function EjecucionForm({
       setPendingComprobantes([]);
     }
   }, [mode, record]);
-
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
-    const newId = await addProject(companyId, { name: newProjectName.trim(), clientName: newProjectClient.trim() || 'Sin cliente', clientId: '', estado: 'Activo' });
-    set('projectId', newId);
-    set('projectName', newProjectName.trim());
-    setNewProjectName('');
-    setNewProjectClient('');
-    setShowNewProject(false);
-  };
-
-  const handleCreateClient = async () => {
-    if (!newClientName.trim()) return;
-    const newId = await addClient({ name: newClientName.trim() });
-    set('entityId', newId);
-    set('entityName', newClientName.trim());
-    set('entityType', 'client');
-    setNewClientName('');
-    setShowNewClient(false);
-  };
 
   const handleSubmit = async () => {
     setInternalSaving(true);
@@ -289,42 +326,29 @@ export function EjecucionForm({
         <SearchableSelect label="Proyecto" value={fields.projectId || fields.projectName} onChange={v => {
           const p = safeProjects.find(p => p.id === v);
           if (p) { set('projectId', p.id); set('projectName', p.name); }
-        }} options={safeProjects.map(p => ({ value: p.id, label: p.name }))} placeholder="Buscar proyecto..." />
-        {!showNewProject && (
-          <button onClick={() => setShowNewProject(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
-            <Plus size={12} /> Nuevo proyecto
-          </button>
-        )}
-        {showNewProject && (
-          <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
-            <input type="text" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="Nombre del proyecto" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" autoFocus />
-            <input type="text" value={newProjectClient} onChange={e => setNewProjectClient(e.target.value)} placeholder="Cliente (opcional)" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" />
-            <div className="flex gap-2">
-              <button onClick={handleCreateProject} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 text-[11px] font-bold">Crear</button>
-              <button onClick={() => setShowNewProject(false)} className="px-3 text-slate-500 hover:text-slate-700 text-[11px] font-bold">Cancelar</button>
-            </div>
-          </div>
-        )}
+        }} options={safeProjects.map(p => ({ value: p.id, label: p.name }))} placeholder="Buscar proyecto..."
+          onCreate={async (name) => {
+            const newId = await addProject(companyId, { name, clientName: '', clientId: '', estado: 'Activo' });
+            set('projectId', newId);
+            set('projectName', name);
+          }}
+          createLabel="proyecto" />
         <SearchableSelect label="Cliente / Proveedor" value={fields.entityId || fields.entityName} onChange={v => {
           if (!v) { set('entityId', ''); set('entityName', 'Interno'); set('entityType', 'interno'); return; }
           const allEntities = [...clients.map(c => ({ id: c.id, name: c.name, type: 'client' as const })), ...providers.map(p => ({ id: p.id, name: p.name, type: 'provider' as const }))];
           const entity = allEntities.find(e => e.id === v);
           if (entity) { set('entityId', entity.id); set('entityName', entity.name); set('entityType', entity.type); }
-        }} options={clientsAndProviders} placeholder="Buscar cliente o proveedor..." />
-        {!showNewClient && (
-          <button onClick={() => setShowNewClient(true)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 -mt-3">
-            <Plus size={12} /> Nuevo cliente
-          </button>
-        )}
-        {showNewClient && (
-          <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200">
-            <input type="text" value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="Nombre del cliente" className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none" autoFocus />
-            <div className="flex gap-2">
-              <button onClick={handleCreateClient} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 text-[11px] font-bold">Crear</button>
-              <button onClick={() => setShowNewClient(false)} className="px-3 text-slate-500 hover:text-slate-700 text-[11px] font-bold">Cancelar</button>
-            </div>
-          </div>
-        )}
+        }} options={clientsAndProviders} placeholder="Buscar cliente o proveedor..."
+          onCreate={async (name) => {
+            const isIngreso = fields.tipo === 'ingreso';
+            const newId = isIngreso
+              ? await addClient({ name })
+              : await addProvider({ name });
+            set('entityId', newId);
+            set('entityName', name);
+            set('entityType', isIngreso ? 'client' : 'provider');
+          }}
+          createLabel="tercero" />
         <FormInput label="Descripción" value={fields.descripcion} onChange={v => set('descripcion', v)} />
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -359,9 +383,13 @@ export function EjecucionForm({
             if (!v) return;
             const b = filteredBudgets.find(b => b.id === v);
             if (b && !selectedBudgetLinks.some(l => l.budgetId === b.id)) {
-              setSelectedBudgetLinks(prev => [...prev, { budgetId: b.id, budgetName: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}`, monto: '' }]);
+              const tercero = b.entityName && b.entityName !== 'Interno' ? ` - ${b.entityName}` : '';
+              setSelectedBudgetLinks(prev => [...prev, { budgetId: b.id, budgetName: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}${tercero}`, monto: '' }]);
             }
-          }} options={filteredBudgets.filter(b => !selectedBudgetLinks.some(l => l.budgetId === b.id)).map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto para vincular..." />
+          }} options={filteredBudgets.filter(b => !selectedBudgetLinks.some(l => l.budgetId === b.id)).map(b => {
+            const tercero = b.entityName && b.entityName !== 'Interno' ? ` - ${b.entityName}` : '';
+            return { value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}${tercero}` };
+          })} placeholder="Buscar presupuesto para vincular..." />
           {selectedBudgetLinks.map((link, idx) => (
             <div key={link.budgetId} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2.5 mt-2 border border-slate-200">
               <div className="flex-1 min-w-0">
@@ -420,7 +448,7 @@ export function EjecucionForm({
             <label className="flex items-center gap-2.5 cursor-pointer py-1 mb-3">
               <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-              <span className="text-xs font-medium text-slate-600 select-none">Recurrente</span>
+              <span className="text-xs font-medium text-slate-600">Recurrente</span>
             </label>
             {recurring && (
               <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-200">

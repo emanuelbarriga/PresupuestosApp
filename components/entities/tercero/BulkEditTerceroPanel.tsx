@@ -80,7 +80,7 @@ export function BulkEditTerceroPanel({
         onBack={() => {}}
         onClose={() => onClose()}
       />
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 select-text">
         <p className="text-xs text-slate-500">
           {selectedIds.length} tercero{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}.
           Solo se actualizarán los campos que modifiques.

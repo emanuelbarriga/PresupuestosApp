@@ -73,7 +73,7 @@ export function ColaboradorEntity({
   return (
     <div className="flex flex-col h-full w-[360px] absolute inset-0">
       <PanelHeader title={title} canGoBack={canGoBack} onBack={onBack} onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 select-text">
         {mode === 'view' && record ? (
           <ColaboradorView
             email={(record as any).email}
