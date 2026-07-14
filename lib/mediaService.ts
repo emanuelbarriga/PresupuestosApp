@@ -49,6 +49,42 @@ export function subscribeDocumentos(
 }
 
 /**
+ * Subscribe to real-time updates of enlazado documents for a given periodo.
+ * Queries: where('periodo', '==', periodo).where('status', '==', 'enlazado').
+ * Requires composite index: periodo ASC, status ASC.
+ *
+ * Error handling: captures `failed-precondition` (index building) and propagates
+ * the error via onError for the UI to show a friendly message.
+ */
+export function subscribeDocumentosEnlazados(
+  companyId: string,
+  periodo: string,
+  onData: (docs: DocumentoMedio[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const ref = collection(db, `companies/${companyId}/documentos`);
+  const q = query(
+    ref,
+    where('periodo', '==', periodo),
+    where('status', '==', 'enlazado'),
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const docs = snapshot.docs.map((d) => {
+        const data = d.data();
+        return { id: d.id, ...data } as DocumentoMedio;
+      });
+      onData(docs);
+    },
+    (err) => {
+      onError?.(err);
+    },
+  );
+}
+
+/**
  * Create a new DocumentoMedio record in Firestore.
  * Sets uploadedAt, createdBy, and overrides _source.
  */
