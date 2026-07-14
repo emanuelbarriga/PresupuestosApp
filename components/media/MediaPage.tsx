@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { DocumentoMedio, NavScreen } from '@/lib/types';
+import type { DocumentoMedio, NavScreen, TipoDocumentoMedio } from '@/lib/types';
 import { subscribeDocumentos, createDocumento } from '@/lib/mediaService';
 import { uploadFileWithTask, validateFile, generateMediaFilePath } from '@/lib/fileUpload';
 import toast from 'react-hot-toast';
@@ -29,6 +29,9 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
   const [documentos, setDocumentos] = useState<DocumentoMedio[]>([]);
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [dropActive, setDropActive] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inbox' | 'archivador'>('inbox');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [activeCategory, setActiveCategory] = useState<TipoDocumentoMedio>('factura_venta');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeTasksRef = useRef<Map<string, import('firebase/storage').UploadTask>>(new Map());
 
@@ -50,6 +53,23 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
     );
     return () => unsub();
   }, [companyId]);
+
+  // Elegant disappearance callback — called after saving a document from Archivador
+  // Checks if the updated values still match the current filter; if not, shows toast
+  const handleDocumentoUpdated = useCallback((
+    _docId: string,
+    newPeriodo: string,
+    newTipo: TipoDocumentoMedio,
+  ) => {
+    if (activeTab !== 'archivador') return;
+
+    if (newPeriodo !== selectedPeriod) {
+      toast(`Documento movido a ${newPeriodo}`);
+    } else if (newTipo !== activeCategory) {
+      toast(`Documento reclasificado a ${newTipo}`);
+    }
+    // If both match, no toast — sidepanel closes normally
+  }, [activeTab, selectedPeriod, activeCategory]);
 
   const processFile = useCallback(async (file: File): Promise<void> => {
     const userId = 'current'; // Will be replaced with auth UID when auth is integrated

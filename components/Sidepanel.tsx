@@ -25,6 +25,7 @@ import { BulkEditTerceroPanel } from '@/components/entities/tercero/BulkEditTerc
 import { BulkEditPresupuestosPanel } from '@/components/entities/presupuesto/BulkEditPresupuestosPanel';
 import { BulkEditEjecucionesPanel } from '@/components/entities/ejecucion/BulkEditEjecucionesPanel';
 import { DocumentoEntity } from '@/components/entities/documento/DocumentoEntity';
+import type { TipoDocumentoMedio } from '@/lib/types';
 
 interface SidepanelProps {
   screen: NavScreen | undefined;
@@ -40,6 +41,7 @@ interface SidepanelProps {
   onNavigate: (screen: NavScreen) => void;
   onBack: () => void;
   canGoBack: boolean;
+  onDocumentoUpdated?: (docId: string, periodo: string, tipoDocumento: TipoDocumentoMedio) => void;
   // Dashboard customization props (for CustomizePanel)
   projects?: Project[];
   selectedProjects?: Set<string>;
@@ -56,6 +58,7 @@ function renderEntityScreen(
   onClose: SidepanelProps['onClose'],
   onBack: SidepanelProps['onBack'],
   canGoBack: boolean,
+  onDocumentoUpdated?: SidepanelProps['onDocumentoUpdated'],
 ) {
   const entityProps = {
     mode: screen.mode,
@@ -122,7 +125,7 @@ function renderEntityScreen(
       );
     }
     case 'documento':
-      return <DocumentoEntity key={key} {...entityProps} />;
+      return <DocumentoEntity key={key} {...entityProps} onDocumentoUpdated={onDocumentoUpdated} />;
     default:
       return null;
   }
@@ -142,6 +145,7 @@ export function Sidepanel({
   onProjectsChange,
   onSearchChange,
   activeView,
+  onDocumentoUpdated,
 }: SidepanelProps) {
   const visible = !!screen;
   const userRole = useCompanyStore(s => s.userRole);
@@ -159,7 +163,7 @@ export function Sidepanel({
 
     // Entity+mode routing
     if (screen.type === 'entity') {
-      return renderEntityScreen(screen, companyId, onSubmit, onNavigate, onClose, onBack, canGoBack);
+      return renderEntityScreen(screen, companyId, onSubmit, onNavigate, onClose, onBack, canGoBack, onDocumentoUpdated);
     }
 
     // Entity-list (dashboard data) — EntityList handles its own PanelHeader
