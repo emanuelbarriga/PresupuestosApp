@@ -532,7 +532,7 @@ export default function CompanyPage({ params }: Props) {
           await updateProvider(form.record.id, data as Partial<Provider>);
           break;
         case 'tercero':
-          await updateTercero(form.record.id, data);
+          await updateTercero(form.record.id, data, companyId);
           break;
         case 'cuenta':
           await updateCuentaBancaria(companyId, (form as any).record.id, data as Partial<CuentaBancaria>);
@@ -622,7 +622,8 @@ export default function CompanyPage({ params }: Props) {
                 onTabChange={(tab) => navigateTo('Datos', tab)} companyId={companyId}
                 companyName={companies.find(c => c.id === companyId)?.name}
                 onViewRecord={handleViewRecord} onAddNew={handleAddNew} onEditRecord={handleEditRecord}
-                onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero} />
+                onDeleteEjecucion={handleDeleteEjecucion} onDeleteTercero={handleDeleteTercero}
+                onNavigate={(screen) => pushScreen(screen)} />
             )}
             {activeView === 'EstadoResultados' && (
               <EstadoResultados
