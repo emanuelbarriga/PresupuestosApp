@@ -28,7 +28,7 @@ vi.mock('@/lib/firebase', () => ({
 
 // ─── Imports ────────────────────────────────────────────────────────────
 
-import { validateFile, generateFilePath, uploadFile, deleteFile } from '@/lib/fileUpload';
+import { validateFile, generateFilePath, generateMediaFilePath, uploadFile, deleteFile } from '@/lib/fileUpload';
 
 // ─── Tests ──────────────────────────────────────────────────────────────
 
@@ -125,6 +125,37 @@ describe('uploadFile', () => {
     errorCallback(new Error('Upload failed'));
 
     await expect(uploadPromise).rejects.toThrow('Upload failed');
+  });
+});
+
+describe('generateMediaFilePath', () => {
+  it('uses correct flat path format: companies/{cId}/documentos/{uuid}-{fileName}', () => {
+    const path = generateMediaFilePath('emp-1', 'factura.pdf');
+    expect(path).toMatch(/^emp-1\/documentos\/[a-f0-9-]+-factura\.pdf$/);
+  });
+
+  it('sanitizes unsafe characters in file name', () => {
+    const path = generateMediaFilePath('c1', 'Mi Factura (2) - copia.pdf');
+    // The path should contain c1/documentos/ prefix
+    expect(path).toContain('c1/documentos/');
+    // Unsafe chars (spaces, parens) should be replaced with underscores
+    expect(path).not.toContain(' Factura ');
+    expect(path).not.toContain('(');
+    expect(path).not.toContain(')');
+    expect(path).not.toContain(' - ');
+    // Should end with .pdf
+    expect(path).toMatch(/\.pdf$/);
+  });
+
+  it('preserves allowed special characters (. _ -)', () => {
+    const path = generateMediaFilePath('c1', 'my-file_v2.0.pdf');
+    expect(path).toContain('my-file_v2.0.pdf');
+  });
+
+  it('generates unique paths for same file name (different UUIDs)', () => {
+    const path1 = generateMediaFilePath('c1', 'doc.pdf');
+    const path2 = generateMediaFilePath('c1', 'doc.pdf');
+    expect(path1).not.toBe(path2);
   });
 });
 

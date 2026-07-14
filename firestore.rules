@@ -39,11 +39,43 @@ service cloud.firestore {
 
       // Scoped subcollections — membership required
       match /budgets/{doc} { allow read, write: if isMember(companyId); }
-      match /ejecuciones/{doc} { allow read, write: if isMember(companyId); }
+      // Ejecuciones — field-level write validation
+      match /ejecuciones/{ejecucionId} {
+        allow read: if isMember(companyId);
+        allow create: if isMember(companyId);
+        allow update: if isMember(companyId) && (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['descripcion', 'montoEjecutado', 'fechaEjecutado', 'tipo',
+                      'projectId', 'projectName',
+                      'entityId', 'entityName', 'entityType',
+                      'cuentaId', 'cuentaName', 'comprobantes',
+                      'archivado', 'updatedAt', 'createdAt',
+                      '_linkedDocumentos', '_estadoComprobantes',
+                      '_movimientoId', '_extractoId'])
+        );
+        allow delete: if false;
+      }
       match /projects/{doc} { allow read, write: if isMember(companyId); }
       match /cuentasBancarias/{doc} { allow read, write: if isMember(companyId); }
       match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
+
+      // Documentos collection — flat media storage
+      match /documentos/{doc} {
+        allow read: if isMember(companyId);
+        allow create: if isMember(companyId)
+          && request.resource.data.keys().hasAll(['fileName', 'storagePath', 'mimeType', 'size', 'status', 'uploadedAt'])
+          && request.resource.data.status in ['por_clasificar', 'enlazado'];
+        // Status transitions: enlazado → por_clasificar is allowed ONLY
+        // when ejecucionIds is being cleared (empty list), preventing
+        // accidental unlinking without lifecycle intent.
+        allow update: if isMember(companyId) && (
+          resource.data.status != 'enlazado'
+          || (request.resource.data.status == 'por_clasificar'
+              && request.resource.data.ejecucionIds.size() == 0)
+        );
+        allow delete: if false; // GC scripts only
+      }
 
       // BudgetLinks subcollection — same access as ejecuciones
       match /ejecuciones/{ejecucionId}/budgetLinks/{linkId} { allow read, write: if isMember(companyId); }

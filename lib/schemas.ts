@@ -3,6 +3,14 @@ import { z } from 'zod';
 const yyyymmRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
 const yyyymmddRegex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+const documentoStatusValues = ['por_clasificar', 'enlazado'] as const;
+const tipoDocumentoMedioValues = [
+  'factura_venta', 'factura_compra', 'extracto_bancario',
+  'comprobante_egreso', 'comprobante_ingreso',
+  'planilla', 'contrato', 'otro',
+] as const;
+const documentSourceValues = ['inbox-upload', 'ejecucion-form', 'migration'] as const;
+
 export const yearMonthSchema = z.string().regex(yyyymmRegex, 'fechaPresupuestado debe tener formato YYYY-MM con mes válido');
 export const dateStringSchema = z.string().regex(yyyymmddRegex, 'fechaEjecutado debe tener formato YYYY-MM-DD con fecha válida');
 
@@ -41,7 +49,34 @@ export const ejecucionSchema = z.object({
   archivado: z.boolean().optional(),
   _movimientoId: z.string().optional(),
   _extractoId: z.string().optional(),
+  _estadoComprobantes: z.enum(['Completada', 'Falta un comprobante', 'Sin comprobantes', '']).optional(),
+});
+
+export const documentoMedioSchema = z.object({
+  id: z.string().min(1),
+  fileName: z.string().min(1),
+  storagePath: z.string().min(1),
+  url: z.string().min(1),
+  size: z.number().positive(),
+  mimeType: z.string().min(1),
+  status: z.enum(documentoStatusValues),
+  tipoDocumento: z.enum(tipoDocumentoMedioValues).optional(),
+  periodo: yearMonthSchema.optional(),
+  terceroId: z.string().optional(),
+  projectId: z.string().optional(),
+  ejecucionIds: z.array(z.string()),
+  metadata: z.object({
+    proveedorTexto: z.string().optional(),
+    nit: z.string().optional(),
+    fechaDocumento: dateStringSchema.optional(),
+    montoTotal: z.number().optional(),
+  }).optional(),
+  _source: z.enum(documentSourceValues),
+  uploadedAt: z.string(),
+  updatedAt: z.string().optional(),
+  createdBy: z.string(),
 });
 
 export const partialBudgetSchema = budgetSchema.partial();
 export const partialEjecucionSchema = ejecucionSchema.partial();
+export const partialDocumentoMedioSchema = documentoMedioSchema.partial();

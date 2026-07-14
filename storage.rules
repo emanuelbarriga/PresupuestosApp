@@ -9,6 +9,17 @@ service firebase.storage {
       allow delete: if true;
     }
 
+    // Documentos media system — multi-tenant, member-only, validated
+    match /{companyId}/documentos/{fileName} {
+      allow read: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/companies/$(companyId)/members/$(request.auth.uid));
+      allow write: if request.auth != null
+        && firestore.exists(/databases/(default)/documents/companies/$(companyId)/members/$(request.auth.uid))
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/jpeg|image/png|image/webp');
+      allow delete: if false; // GC scripts only
+    }
+
     // Allow listing ejecuciones folders and files (for diagnostic/fix tools)
     match /{companyId}/ejecuciones/{allPaths=**} {
       allow list: if true;

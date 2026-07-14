@@ -35,8 +35,24 @@ export function generateFilePath(
   fileName: string,
 ): string {
   const uuid = crypto.randomUUID();
-  const sanitized = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const sanitized = fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${companyId}/ejecuciones/${ejecucionId}/${uuid}-${sanitized}`;
+}
+
+/**
+ * Generate a flat Storage path for a DocumentoMedio file.
+ * Format: companies/{companyId}/documentos/{uuid}-{sanitizedName}
+ */
+export function generateMediaFilePath(companyId: string, fileName: string): string {
+  const uuid = crypto.randomUUID();
+  const sanitized = fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `${companyId}/documentos/${uuid}-${sanitized}`;
 }
 
 /**

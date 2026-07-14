@@ -3,6 +3,44 @@ import type { Timestamp } from 'firebase/firestore';
 export type TransactionType = 'ingreso' | 'egreso';
 export type ProjectState = 'Activo' | 'Cerrado' | 'Negociación' | 'En ejecución' | 'Cancelado';
 
+// ─── Media / Document types ──────────────────────────────────────────────────
+
+export type DocumentoStatus = 'por_clasificar' | 'enlazado';
+
+export type TipoDocumentoMedio =
+  | 'factura_venta' | 'factura_compra' | 'extracto_bancario'
+  | 'comprobante_egreso' | 'comprobante_ingreso'
+  | 'planilla' | 'contrato' | 'otro';
+
+export type DocumentSource = 'inbox-upload' | 'ejecucion-form' | 'migration';
+
+export interface DocumentoMedioMetadata {
+  proveedorTexto?: string;
+  nit?: string;
+  fechaDocumento?: string; // YYYY-MM-DD
+  montoTotal?: number;
+}
+
+export interface DocumentoMedio {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  url: string;
+  size: number;
+  mimeType: string;
+  status: DocumentoStatus;
+  tipoDocumento?: TipoDocumentoMedio;
+  periodo?: string;             // YYYY-MM
+  terceroId?: string;
+  projectId?: string;
+  ejecucionIds: string[];
+  metadata?: DocumentoMedioMetadata;
+  _source: DocumentSource;
+  uploadedAt: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
 export interface SettingsItem {
   name: string;
   color: string;
@@ -136,6 +174,8 @@ export interface Ejecucion {
   archivado?: boolean;
   _movimientoId?: string;
   _extractoId?: string;
+  _linkedDocumentos?: Array<{ documentoId: string; tipoDocumento: string }>;
+  _estadoComprobantes?: 'Completada' | 'Falta un comprobante' | 'Sin comprobantes' | '';
 }
 
 type AccountType = 'Ahorros' | 'Corriente' | 'Tarjeta de Crédito' | 'Caja Menor / Efectivo';
