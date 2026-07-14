@@ -5,6 +5,7 @@ import type { NavScreen, TipoDocumentoMedio } from '@/lib/types';
 import { Inbox, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { InboxTab } from './InboxTab';
+import { ArchivadorTab } from './ArchivadorTab';
 
 interface MediaPageProps {
   companyId: string;
@@ -82,11 +83,14 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
         {activeTab === 'inbox' ? (
           <InboxTab companyId={companyId} onNavigate={onNavigate} />
         ) : (
-          <div className="p-6 space-y-6">
-            <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-              <p className="text-sm text-slate-500">Archivador contable (próximamente)</p>
-            </div>
-          </div>
+          <ArchivadorTab
+            companyId={companyId}
+            selectedPeriod={selectedPeriod}
+            activeCategory={activeCategory}
+            onPeriodChange={setSelectedPeriod}
+            onCategoryChange={setActiveCategory}
+            onNavigate={onNavigate}
+          />
         )}
       </div>
     </>
