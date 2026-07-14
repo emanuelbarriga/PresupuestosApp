@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import type { EntityProps } from '@/lib/types';
+import { useAuth } from '@/context/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
-import { blockMember, updateMemberRole, addMemberToCompany } from '@/lib/firestore';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ColaboradorView } from './ColaboradorView';
 import { ColaboradorEditForm } from './ColaboradorEditForm';
@@ -18,6 +18,7 @@ export function ColaboradorEntity({
   onBack,
   canGoBack,
 }: EntityProps) {
+  const { user: currentUser } = useAuth();
   const { companies: allCompanies } = useCompany();
   const [saving, setSaving] = useState(false);
 
@@ -25,22 +26,36 @@ export function ColaboradorEntity({
     memberships: any[],
     originalMemberships: any[],
   ) => {
-    if (!record) return;
+    if (!record || !currentUser) return;
     setSaving(true);
     try {
       const { userId, email } = record as any;
+      const token = await currentUser.getIdToken();
       const originalMap = new Map(originalMemberships.map((om: any) => [om.companyId, om]));
 
       for (const m of memberships) {
         const original = originalMap.get(m.companyId);
+
         if (m.isNew) {
-          await addMemberToCompany(m.companyId, userId, email, m.role);
+          await fetch('/api/companies/manage-member', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: 'add', companyId: m.companyId, userId, email, role: m.role }),
+          });
         } else if (original) {
           if (m.active !== !original.blocked) {
-            await blockMember(m.companyId, userId, !m.active);
+            await fetch('/api/companies/manage-member', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ action: 'block', companyId: m.companyId, userId, blocked: !m.active }),
+            });
           }
           if (m.role !== original.role) {
-            await updateMemberRole(m.companyId, userId, m.role);
+            await fetch('/api/companies/manage-member', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ action: 'update-role', companyId: m.companyId, userId, role: m.role }),
+            });
           }
         }
       }

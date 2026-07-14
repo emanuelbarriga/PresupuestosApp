@@ -46,13 +46,13 @@ Chain strategy: pending
 
 ## Phase 5: Admin UI
 
-- [ ] 5.1 `components/AssignUserModal.tsx` — Nuevo modal con selector de empresa + rol (`admin` | `colaborador`). Llama `POST /api/companies/assign-user`
-- [ ] 5.2 `components/Configuracion.tsx` — Agregar sección "Usuarios pendientes" con badge. Usar `subscribeUnassignedUsers`. Botón "Asignar" abre `AssignUserModal`
+- [x] 5.1 `components/AssignUserModal.tsx` — Nuevo modal con selector de empresa + rol (`admin` | `colaborador`). Llama `POST /api/companies/assign-user`
+- [x] 5.2 `components/Configuracion.tsx` — Agregar sección "Usuarios pendientes" con badge. Usar `subscribeUnassignedUsers`. Botón "Asignar" abre `AssignUserModal`
 
 ## Phase 6: Cleanup
 
-- [ ] 6.1 `components/entities/invitacion/InvitacionCreateForm.tsx` — Sacar selector empresas + rol. Solo email + expiración
-- [ ] 6.2 `components/entities/invitacion/InvitacionEditForm.tsx` — Sacar campos `companyId`/`companyName`/`role`
+- [x] 6.1 `components/entities/invitacion/InvitacionCreateForm.tsx` — Sacar selector empresas + rol. Solo email + expiración
+- [x] 6.2 `components/entities/invitacion/InvitacionEditForm.tsx` — Sacar campos `companyId`/`companyName`/`role`
 - [ ] 6.3 `app/select-company/page.tsx` — Manejar caso usuario sin empresas asignadas: mostrar mensaje en vez de lista vacía
 - [ ] 6.4 Migración: batch set `pendingAssignment = false` en todos los `users/{uid}` que tengan membership existente
 

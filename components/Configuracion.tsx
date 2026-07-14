@@ -5,13 +5,15 @@ import { useAuth } from '@/context/AuthContext';
 import {
   subscribeUserCompanies,
   subscribeCompanyMembers,
-  subscribeCompanyInvitations,
+  subscribeCreatedInvitations,
+  subscribeUnassignedUsers,
   deleteMemberFromCompany,
   blockMember,
   deleteInvitation,
   updateMemberRole,
 } from '@/lib/firestore';
 import { Company, CompanyMember, Invitacion, FormType, ActiveForm } from '@/lib/types';
+import { AssignUserModal } from './AssignUserModal';
 import toast from 'react-hot-toast';
 import {
   Shield, Mail, Copy, Check, UserPlus, Clock, Trash2, Pencil, Ban, X,
@@ -40,10 +42,6 @@ interface AggregatedUser {
   }[];
 }
 
-interface AggregatedInvitation extends Invitacion {
-  companyName: string;
-}
-
 interface ConfiguracionProps {
   onAddNew?: (type: FormType, defaults?: Record<string, string>) => void;
   onEditRecord?: (form: ActiveForm) => void;
@@ -54,7 +52,6 @@ interface ConfiguracionProps {
 interface CompanyData {
   company: Company;
   members: CompanyMember[];
-  invitations: Invitacion[];
   isAdmin: boolean;
 }
 
@@ -65,6 +62,13 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
   const [companyDataMap, setCompanyDataMap] = useState<Record<string, CompanyData>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [originUrl, setOriginUrl] = useState('');
+
+  // ── Unassigned users state ──
+  const [unassignedUsers, setUnassignedUsers] = useState<Array<{ id: string; email: string }>>([]);
+  const [assigningUser, setAssigningUser] = useState<{ id: string; email: string } | null>(null);
+
+  // ── Invitations state (all created by this admin) ──
+  const [invitations, setInvitations] = useState<Invitacion[]>([]);
 
   // ── Action loading states ──
   const [deletingMember, setDeletingMember] = useState<string | null>(null);
@@ -79,19 +83,30 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     return subscribeUserCompanies(user.uid, setUserCompanies, () => {});
   }, [user]);
 
-  // For each company, subscribe to members + invitations
+  // Subscribe to unassigned users (pendingAssignment === true)
+  useEffect(() => {
+    if (!user) return;
+    return subscribeUnassignedUsers(setUnassignedUsers, () => {});
+  }, [user]);
+
+  // Subscribe to all invitations created by this admin
+  useEffect(() => {
+    if (!user) return;
+    return subscribeCreatedInvitations(user.uid, setInvitations, () => {});
+  }, [user]);
+
+  // For each company, subscribe to members only (invitations are now top-level)
   useEffect(() => {
     const unsubs: (() => void)[] = [];
 
     for (const c of userCompanies) {
       let mem: CompanyMember[] = [];
-      let inv: Invitacion[] = [];
 
       const updateData = () => {
         const isAdmin = !!mem.find((m) => m.id === user?.uid && m.role === 'admin');
         setCompanyDataMap((prev) => ({
           ...prev,
-          [c.id]: { company: c, members: mem, invitations: inv, isAdmin },
+          [c.id]: { company: c, members: mem, isAdmin },
         }));
       };
 
@@ -100,12 +115,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
         updateData();
       }, () => {});
 
-      const u2 = subscribeCompanyInvitations(c.id, (data) => {
-        inv = data;
-        updateData();
-      }, () => {});
-
-      unsubs.push(u1, u2);
+      unsubs.push(u1);
     }
 
     // Remove companies no longer in the list
@@ -121,6 +131,13 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
 
     return () => unsubs.forEach((fn) => fn());
   }, [userCompanies, user]);
+
+  // ── Companies where current user is admin ──
+  const adminCompanies = useMemo(() => {
+    return Object.values(companyDataMap)
+      .filter(d => d.isAdmin)
+      .map(d => ({ id: d.company.id, name: d.company.name }));
+  }, [companyDataMap]);
 
   // ── Aggregate users across all admin companies ──
   const aggregatedUsers = useMemo<AggregatedUser[]>(() => {
@@ -151,19 +168,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
     return Array.from(userMap.values()).sort((a, b) => a.email.localeCompare(b.email));
   }, [companyDataMap]);
 
-  // ── Aggregate invitations across all admin companies ──
-  const aggregatedInvitations = useMemo<AggregatedInvitation[]>(() => {
-    const result: AggregatedInvitation[] = [];
-    for (const data of Object.values(companyDataMap)) {
-      if (!data.isAdmin) continue;
-      for (const inv of data.invitations) {
-        result.push({ ...inv, companyName: data.company.name });
-      }
-    }
-    return result.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-  }, [companyDataMap]);
-
-  const adminCompanyCount = Object.values(companyDataMap).filter((d) => d.isAdmin).length;
+  const adminCompanyCount = adminCompanies.length;
 
   // ── Formatters ──
   const fmtDate = (val: unknown) => {
@@ -377,13 +382,80 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
         </div>
       )}
 
+      {/* ── Pending Users Section ── */}
+      {adminCompanyCount > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+            <UserPlus size={16} className="text-amber-500" />
+            <h2 className="text-sm font-bold text-slate-700">
+              Usuarios pendientes de asignar
+              {unassignedUsers.length > 0 && (
+                <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
+                  {unassignedUsers.length}
+                </span>
+              )}
+            </h2>
+          </div>
+
+          {unassignedUsers.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400 italic">
+              No hay usuarios pendientes de asignación
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Email</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Registro</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unassignedUsers.map((u) => (
+                    <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center shrink-0 text-[10px] font-bold text-amber-600 uppercase">
+                            {u.email[0]}
+                          </div>
+                          <span className="text-sm font-medium text-slate-700 truncate max-w-[220px]">
+                            {u.email}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          <Clock size={10} />
+                          Pendiente
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setAssigningUser(u)}
+                          disabled={adminCompanies.length === 0}
+                          className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg px-3 py-1.5 text-[10px] font-bold transition-colors"
+                        >
+                          <UserPlus size={12} />
+                          Asignar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── Users Table ── */}
       {adminCompanyCount > 0 && (
         <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center gap-2">
             <Shield size={16} className="text-indigo-500" />
             <h2 className="text-sm font-bold text-slate-700">
-              Usuarios ({aggregatedUsers.length})
+              Miembros ({aggregatedUsers.length})
             </h2>
           </div>
 
@@ -511,7 +583,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
             <div className="flex items-center gap-2">
               <Mail size={16} className="text-indigo-500" />
               <h2 className="text-sm font-bold text-slate-700">
-                Invitaciones ({aggregatedInvitations.length})
+                Invitaciones ({invitations.length})
               </h2>
             </div>
             <button
@@ -523,7 +595,7 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
             </button>
           </div>
 
-          {aggregatedInvitations.length === 0 ? (
+          {invitations.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400 italic">Sin invitaciones</div>
           ) : (
             <div className="overflow-x-auto">
@@ -531,8 +603,6 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
                     <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Email</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Empresa</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Rol</th>
                     <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Creada</th>
                     <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Caduca</th>
                     <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Estado</th>
@@ -540,108 +610,106 @@ export function Configuracion({ onAddNew, onEditRecord }: ConfiguracionProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {aggregatedInvitations.map((inv) => {
-                    const status = getInvitationStatus(inv);
-                    return (
-                      <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        {/* Email */}
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-medium text-slate-700 truncate max-w-[180px] block">
-                            {inv.email}
-                          </span>
-                        </td>
+                  {[...invitations]
+                    .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt))
+                    .map((inv) => {
+                      const status = getInvitationStatus(inv);
+                      return (
+                        <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          {/* Email */}
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-medium text-slate-700 truncate max-w-[180px] block">
+                              {inv.email}
+                            </span>
+                          </td>
 
-                        {/* Empresa */}
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-600">{inv.companyName}</span>
-                        </td>
+                          {/* Creada */}
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-slate-500">{fmtDate(inv.createdAt)}</span>
+                          </td>
 
-                        {/* Rol */}
-                        <td className="px-4 py-3">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            inv.role === 'admin'
-                              ? 'bg-indigo-100 text-indigo-700'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {inv.role === 'admin' ? 'Admin' : 'Colaborador'}
-                          </span>
-                        </td>
-
-                        {/* Creada */}
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-500">{fmtDate(inv.createdAt)}</span>
-                        </td>
-
-                        {/* Caduca */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-slate-500">{fmtDate(inv.expiresAt ?? '')}</span>
-                            {status === 'pendiente' && inv.expiresAt && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
-                                <Clock size={10} />
-                                {Math.ceil((toMillis(inv.expiresAt) - Date.now()) / (24 * 60 * 60 * 1000))}d
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Estado */}
-                        <td className="px-4 py-3">
-                          <StatusBadge status={status} />
-                        </td>
-
-                        {/* Acciones */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Edit */}
-                            <button
-                              onClick={() => onEditRecord?.({
-                                mode: 'edit',
-                                type: 'invite-user',
-                                record: inv,
-                              })}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                              title="Editar"
-                            >
-                              <Pencil size={14} />
-                            </button>
-
-                            {/* Copy link */}
-                            <button
-                              onClick={() => handleCopyLink(inv.id!)}
-                              className={`p-1.5 rounded-lg transition-colors ${
-                                copiedId === inv.id
-                                  ? 'text-emerald-600 bg-emerald-50'
-                                  : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                              }`}
-                              title="Copiar link"
-                            >
-                              {copiedId === inv.id ? <Check size={14} /> : <Copy size={14} />}
-                            </button>
-
-                            {/* Delete */}
-                            <button
-                              onClick={() => handleDeleteInvitation(inv.id!, inv.email)}
-                              disabled={deletingInvitation === inv.id}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Eliminar"
-                            >
-                              {deletingInvitation === inv.id ? (
-                                <div className="animate-spin h-3.5 w-3.5 border-2 border-red-400 border-t-transparent rounded-full" />
-                              ) : (
-                                <Trash2 size={14} />
+                          {/* Caduca */}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-slate-500">{fmtDate(inv.expiresAt ?? '')}</span>
+                              {status === 'pendiente' && inv.expiresAt && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
+                                  <Clock size={10} />
+                                  {Math.ceil((toMillis(inv.expiresAt) - Date.now()) / (24 * 60 * 60 * 1000))}d
+                                </span>
                               )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            </div>
+                          </td>
+
+                          {/* Estado */}
+                          <td className="px-4 py-3">
+                            <StatusBadge status={status} />
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Edit */}
+                              <button
+                                onClick={() => onEditRecord?.({
+                                  mode: 'edit',
+                                  type: 'invite-user',
+                                  record: inv,
+                                })}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil size={14} />
+                              </button>
+
+                              {/* Copy link */}
+                              <button
+                                onClick={() => handleCopyLink(inv.id!)}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  copiedId === inv.id
+                                    ? 'text-emerald-600 bg-emerald-50'
+                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                                }`}
+                                title="Copiar link"
+                              >
+                                {copiedId === inv.id ? <Check size={14} /> : <Copy size={14} />}
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                onClick={() => handleDeleteInvitation(inv.id!, inv.email)}
+                                disabled={deletingInvitation === inv.id}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                title="Eliminar"
+                              >
+                                {deletingInvitation === inv.id ? (
+                                  <div className="animate-spin h-3.5 w-3.5 border-2 border-red-400 border-t-transparent rounded-full" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           )}
         </section>
+      )}
+
+      {/* ── AssignUserModal ── */}
+      {assigningUser && (
+        <AssignUserModal
+          user={assigningUser}
+          companies={adminCompanies}
+          onClose={() => setAssigningUser(null)}
+          onAssigned={() => {
+            setAssigningUser(null);
+          }}
+        />
       )}
     </div>
   );

@@ -105,13 +105,23 @@ export function ColaboradorEditForm({
                 <p className="text-sm font-medium text-slate-800">{m.companyName}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {m.isNew && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">Nueva</span>}
-                  <span className={clsx(
-                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold',
-                    m.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700',
-                  )}>
+                  <button type="button" onClick={() => {
+                    setMemberships((prev) =>
+                      prev.map((item) =>
+                        item.companyId === m.companyId
+                          ? { ...item, role: item.role === 'admin' ? 'colaborador' : 'admin' }
+                          : item,
+                      ),
+                    );
+                  }}
+                    className={clsx(
+                      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer hover:opacity-80',
+                      m.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700',
+                    )}
+                    title="Cambiar rol">
                     {m.role === 'admin' ? <Shield size={10} /> : <User size={10} />}
                     {m.role === 'admin' ? 'Admin' : 'Colaborador'}
-                  </span>
+                  </button>
                 </div>
               </div>
               <button type="button" onClick={() => toggleMembership(m.companyId)}
@@ -138,10 +148,27 @@ export function ColaboradorEditForm({
             {availableCompanies.map((c: any) => (
               <div key={c.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors">
                 <span className="text-sm text-slate-700">{c.name}</span>
-                <button onClick={() => addCompany(c.id, c.name)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors">
-                  + Agregar
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => addCompany(c.id, c.name)}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md transition-colors"
+                    title="Agregar como Colaborador"
+                  >
+                    + Colab
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMemberships((prev) => [
+                        ...prev,
+                        { companyId: c.id, companyName: c.name, role: 'admin', active: true, isNew: true },
+                      ]);
+                    }}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md transition-colors"
+                    title="Agregar como Admin"
+                  >
+                    + Admin
+                  </button>
+                </div>
               </div>
             ))}
           </div>
