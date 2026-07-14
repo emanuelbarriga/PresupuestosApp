@@ -3,9 +3,13 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { EntityProps, DocumentoMedio } from '@/lib/types';
+import type { EntityProps, DocumentoMedio, TipoDocumentoMedio } from '@/lib/types';
 import { DocumentoSidepanel } from './DocumentoSidepanel';
 import { linkDocumentoToEntities } from '@/lib/mediaLinking';
+
+interface DocumentoEntityProps extends EntityProps {
+  onDocumentoUpdated?: (docId: string, periodo: string, tipoDocumento: TipoDocumentoMedio) => void;
+}
 
 export function DocumentoEntity({
   mode,
@@ -14,7 +18,8 @@ export function DocumentoEntity({
   onClose,
   onBack,
   canGoBack,
-}: EntityProps) {
+  onDocumentoUpdated,
+}: DocumentoEntityProps) {
   const doc = record as DocumentoMedio | undefined;
 
   const [terceros, setTerceros] = useState<{ value: string; label: string }[]>([]);
@@ -121,6 +126,7 @@ export function DocumentoEntity({
       onBack={onBack}
       canGoBack={canGoBack}
       saving={saving}
+      onDocumentoUpdated={onDocumentoUpdated}
     />
   );
 }
