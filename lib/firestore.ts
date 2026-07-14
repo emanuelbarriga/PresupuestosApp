@@ -593,6 +593,94 @@ export async function updateTercero(
   await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { ...data, updatedAt: serverTimestamp() });
 }
 
+/**
+ * Batch-update multiple terceros in parallel using Promise.allSettled.
+ * Only fields explicitly provided in `data` are written — partial update.
+ * Returns a summary with success count and array of failed IDs.
+ */
+export async function batchUpdateTerceros(
+  ids: string[],
+  data: Record<string, any>,
+): Promise<{ successCount: number; failedIds: string[] }> {
+  if (ids.length === 0) return { successCount: 0, failedIds: [] };
+
+  const results = await Promise.allSettled(
+    ids.map((id) => updateTercero(id, data)),
+  );
+
+  const failedIds: string[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      failedIds.push(ids[i]);
+    }
+  });
+
+  return {
+    successCount: ids.length - failedIds.length,
+    failedIds,
+  };
+}
+
+/**
+ * Batch-update multiple presupuestos in parallel using Promise.allSettled.
+ * Validates data via partialBudgetSchema before processing.
+ */
+export async function batchUpdatePresupuestos(
+  companyId: string,
+  ids: string[],
+  data: Record<string, any>,
+): Promise<{ successCount: number; failedIds: string[] }> {
+  if (ids.length === 0) return { successCount: 0, failedIds: [] };
+
+  partialBudgetSchema.parse(data);
+
+  const results = await Promise.allSettled(
+    ids.map((id) => updateBudget(companyId, id, data)),
+  );
+
+  const failedIds: string[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      failedIds.push(ids[i]);
+    }
+  });
+
+  return {
+    successCount: ids.length - failedIds.length,
+    failedIds,
+  };
+}
+
+/**
+ * Batch-update multiple ejecuciones in parallel using Promise.allSettled.
+ * Validates data via partialEjecucionSchema before processing.
+ */
+export async function batchUpdateEjecuciones(
+  companyId: string,
+  ids: string[],
+  data: Record<string, any>,
+): Promise<{ successCount: number; failedIds: string[] }> {
+  if (ids.length === 0) return { successCount: 0, failedIds: [] };
+
+  partialEjecucionSchema.parse(data);
+
+  const results = await Promise.allSettled(
+    ids.map((id) => updateEjecucion(companyId, id, data)),
+  );
+
+  const failedIds: string[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      failedIds.push(ids[i]);
+    }
+  });
+
+  return {
+    successCount: ids.length - failedIds.length,
+    failedIds,
+  };
+}
+
 export async function deleteTercero(terceroId: string): Promise<void> {
   await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { archivado: true, updatedAt: serverTimestamp() });
 }

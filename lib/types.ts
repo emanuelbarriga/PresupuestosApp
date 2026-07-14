@@ -308,7 +308,10 @@ export type NavScreen =
   | { type: 'entity'; entity: EntityType; mode: 'create' | 'edit' | 'view'; record?: any; defaults?: Record<string, string>; year?: number; filterTipo?: TransactionType; filterMode?: 'Presupuestado' | 'Ejecutado' }
   | { type: 'entity-list'; data: SidepanelData }
   | { type: 'customize'; id?: string }
-  | { id: string; type: 'view'; detail: { type: 'detalle-tercero'; projects: Array<{ projectId: string; projectName: string; groups: DetalleTerceroGroup[]; totalPresupuestado: number; totalEjecutado: number; diferencia: number }>; totalPresupuestado: number; totalEjecutado: number; diferencia: number } };
+  | { id: string; type: 'view'; detail: { type: 'detalle-tercero'; projects: Array<{ projectId: string; projectName: string; groups: DetalleTerceroGroup[]; totalPresupuestado: number; totalEjecutado: number; diferencia: number }>; totalPresupuestado: number; totalEjecutado: number; diferencia: number } }
+  | { type: 'bulk-edit-tercero'; selectedIds: string[] }
+  | { type: 'bulk-edit-presupuesto'; selectedIds: string[] }
+  | { type: 'bulk-edit-ejecucion'; selectedIds: string[] };
 
 // Entity component props contract
 export interface EntityProps {
