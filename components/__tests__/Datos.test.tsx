@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFirestore, mockUnsub } = vi.hoisted(
+const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFirestore, mockUnsub, mockTerceros } = vi.hoisted(
   () => {
     const mockUnsub = vi.fn();
+    const mockTerceros: any[] = [];
     return {
       collection: vi.fn(() => ({ type: 'collection' as const })),
       doc: vi.fn(() => ({ type: 'doc' as const })),
@@ -14,6 +15,7 @@ const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFire
       serverTimestamp: vi.fn().mockReturnValue({ toDate: () => new Date() }),
       getFirestore: vi.fn(),
       mockUnsub,
+      mockTerceros,
     };
   },
 );
@@ -34,7 +36,13 @@ vi.mock('@/lib/firebase', () => ({ db: {} }));
 
 vi.mock('@/lib/firestore', () => ({
   subscribeProjects: vi.fn(() => mockUnsub),
-  subscribeTerceros: vi.fn(() => mockUnsub),
+  subscribeTerceros: vi.fn((onData: any) => {
+    // Call synchronously so React batches the state update during render
+    if (mockTerceros.length > 0) {
+      onData([...mockTerceros]);
+    }
+    return mockUnsub;
+  }),
   subscribeSettings: vi.fn(() => mockUnsub),
   subscribeCompanySettings: vi.fn(() => mockUnsub),
   subscribeCuentasBancarias: vi.fn(() => mockUnsub),
@@ -43,7 +51,7 @@ vi.mock('@/lib/firestore', () => ({
 }));
 
 import { Datos } from '@/components/Datos';
-import type { Ejecucion, Comprobante } from '@/lib/types';
+import type { Ejecucion, Comprobante, Tercero, NavScreen } from '@/lib/types';
 
 function makeEjecucion(overrides: Partial<Ejecucion> = {}): Ejecucion {
   return {
@@ -238,5 +246,203 @@ describe('Datos — PR2 Comprobantes state badge', () => {
     // Only the completada row should be visible
     expect(screen.getByText('ConComprobantesSI')).toBeInTheDocument();
     expect(screen.queryByText('SinComprobantesNO')).not.toBeInTheDocument();
+  });
+});
+
+function makeTercero(overrides: Partial<Tercero> = {}): Tercero {
+  return {
+    id: 't1',
+    name: 'Tercero Test',
+    apodo: 'Test',
+    naturaleza: 'Persona Natural',
+    documento: 'CC',
+    numeroDocumento: '12345',
+    lugar: 'Bogotá',
+    tipo: 'cliente',
+    ...overrides,
+  };
+}
+
+describe('Datos — Terceros bulk edit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTerceros.length = 0;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  /** Get row-level checkboxes (skip the disabled header checkbox) */
+  function getRowCheckboxes() {
+    return screen.getAllByTestId('select-tercero');
+  }
+
+  it('renderiza checkbox column en tabla de terceros', async () => {
+    mockTerceros.push(makeTercero({ id: 't1', name: 'Alpha' }));
+
+    const onNavigate = vi.fn();
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    // Should render 1 row checkbox
+    await waitFor(() => {
+      expect(getRowCheckboxes().length).toBe(1);
+    });
+  });
+
+  it('seleccionar checkbox agrega a selectedTerceros y muestra action bar', async () => {
+    mockTerceros.push(makeTercero({ id: 't1', name: 'Alpha' }));
+    const onNavigate = vi.fn();
+
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    // Wait for data to render
+    await waitFor(() => {
+      expect(getRowCheckboxes().length).toBe(1);
+    });
+    const rowCheckbox = getRowCheckboxes()[0]!;
+    fireEvent.click(rowCheckbox);
+
+    // Action bar should appear with count and button
+    expect(screen.getByText('1 seleccionado')).toBeInTheDocument();
+    expect(screen.getByText('Editar en lote')).toBeInTheDocument();
+  });
+
+  it('action bar desaparece cuando se deselecciona el último item', async () => {
+    mockTerceros.push(
+      makeTercero({ id: 't1', name: 'Alpha' }),
+      makeTercero({ id: 't2', name: 'Beta' }),
+    );
+    const onNavigate = vi.fn();
+
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getRowCheckboxes().length).toBe(2);
+    });
+    const [cb1, cb2] = getRowCheckboxes();
+    // Select two
+    fireEvent.click(cb1);
+    fireEvent.click(cb2);
+    expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+
+    // Deselect one
+    fireEvent.click(cb1);
+    expect(screen.getByText('1 seleccionado')).toBeInTheDocument();
+
+    // Deselect the last
+    fireEvent.click(cb2);
+    expect(screen.queryByText('1 seleccionado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Editar en lote')).not.toBeInTheDocument();
+  });
+
+  it('"Editar en lote" llama onNavigate con NavScreen correcto', async () => {
+    mockTerceros.push(makeTercero({ id: 't1', name: 'Alpha' }));
+    const onNavigate = vi.fn();
+
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    // Wait for data to render
+    await waitFor(() => {
+      expect(getRowCheckboxes().length).toBe(1);
+    });
+    const rowCheckbox = getRowCheckboxes()[0]!;
+    fireEvent.click(rowCheckbox);
+
+    // Click "Editar en lote"
+    fireEvent.click(screen.getByText('Editar en lote'));
+
+    // Check that onNavigate was called with the correct screen
+    expect(onNavigate).toHaveBeenCalledWith({
+      type: 'bulk-edit-tercero',
+      selectedIds: ['t1'],
+    });
+  });
+
+  it('"Limpiar" deselecciona todos los terceros', async () => {
+    mockTerceros.push(
+      makeTercero({ id: 't1', name: 'Alpha' }),
+      makeTercero({ id: 't2', name: 'Beta' }),
+    );
+    const onNavigate = vi.fn();
+
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    // Wait for data to render
+    await waitFor(() => {
+      expect(getRowCheckboxes().length).toBe(2);
+    });
+    const [cb1, cb2] = getRowCheckboxes();
+    fireEvent.click(cb1);
+    fireEvent.click(cb2);
+    await waitFor(() => {
+      expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+    });
+
+    // Click the action bar "Limpiar" (last one — filter bar is above, action bar is below)
+    const limpiarBtns = screen.getAllByText('Limpiar');
+    fireEvent.click(limpiarBtns[limpiarBtns.length - 1]);
+
+    // Action bar should disappear
+    await waitFor(() => {
+      expect(screen.queryByText('2 seleccionados')).not.toBeInTheDocument();
+      expect(screen.queryByText('Editar en lote')).not.toBeInTheDocument();
+    });
+  });
+
+  it('onNavigate no se llama cuando no hay selección', () => {
+    const onNavigate = vi.fn();
+    render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+        onNavigate={onNavigate}
+      />,
+    );
+
+    // Action bar not present
+    expect(screen.queryByText('Editar en lote')).not.toBeInTheDocument();
   });
 });

@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput } from '@/lib/types';
+import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput, NavScreen } from '@/lib/types';
 import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, deleteTercero } from '@/lib/firestore';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star, CheckSquare, Square, Users, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
 import { ExtractoParseModal, type ExtractoParseHeader } from '@/components/bancos/ExtractoParseModal';
@@ -93,7 +93,7 @@ const RangeSlider = ({ min, max, values, onChange, formatLabel }: {
 };
 
 export function Datos({
-  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteEjecucion, onDeleteTercero: parentOnDeleteTercero,
+  budgets, ejecuciones, activeTab: initialTab, onTabChange, companyId, companyName, onViewRecord, onAddNew, onEditRecord, onDeleteEjecucion, onDeleteTercero: parentOnDeleteTercero, onNavigate,
 }: {
   budgets: Budget[];
   ejecuciones: Ejecucion[];
@@ -106,6 +106,7 @@ export function Datos({
   onEditRecord?: (form: any) => void;
   onDeleteEjecucion?: (ejecucionId: string) => void;
   onDeleteTercero?: (terceroId: string) => void;
+  onNavigate?: (screen: NavScreen) => void;
 }) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const tabs: TabType[] = ['Presupuestos', 'Ejecuciones', 'Proyectos', 'Terceros', 'Settings', 'Bancos'];
@@ -118,6 +119,14 @@ export function Datos({
   });
   const [projects, setProjects] = useState<Project[]>([]);
   const [terceros, setTerceros] = useState<Tercero[]>([]);
+  const [selectedTerceros, setSelectedTerceros] = useState<Set<string>>(new Set());
+  const [selectedPresupuestos, setSelectedPresupuestos] = useState<Set<string>>(new Set());
+  const [selectedEjecuciones, setSelectedEjecuciones] = useState<Set<string>>(new Set());
+  const [terceroSortKey, setTerceroSortKey] = useState<'name' | 'apodo' | 'ingresos' | 'egresos'>('name');
+  const [terceroSortDir, setTerceroSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filterTipoTercero, setFilterTipoTercero] = useState(''); // '' | 'ingresos' | 'egresos'
+  const [filterTipoCliente, setFilterTipoCliente] = useState(''); // '' | 'cliente' | 'proveedor' | 'ambos'
+  const [filterNaturaleza, setFilterNaturaleza] = useState('');
   const [settingsData, setSettingsData] = useState<SettingsCategorias | null>(null);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [extractos, setExtractos] = useState<ExtractoBancario[]>([]);
@@ -249,6 +258,8 @@ export function Datos({
       try { sessionStorage.removeItem(FILTER_KEY); } catch {}
     }
     setActiveTab(tab);
+    setSelectedPresupuestos(new Set());
+    setSelectedEjecuciones(new Set());
     onTabChange?.(tab.toLowerCase());
   };
 
@@ -503,6 +514,21 @@ export function Datos({
     return <span className="ml-1 text-indigo-500">{ejecucionSortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
+  type TerceroSortKey = 'name' | 'apodo' | 'ingresos' | 'egresos';
+  const handleTerceroSort = (key: TerceroSortKey) => {
+    if (terceroSortKey === key) {
+      setTerceroSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTerceroSortKey(key);
+      setTerceroSortDir('asc');
+    }
+  };
+
+  const TerceroSortIcon = ({ columnKey }: { columnKey: TerceroSortKey }) => {
+    if (terceroSortKey !== columnKey) return <span className="ml-1 text-slate-300">↕</span>;
+    return <span className="ml-1 text-indigo-500">{terceroSortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   const budgetMontoExtent = useMemo(() => {
     let min = Infinity;
     let max = -Infinity;
@@ -649,12 +675,112 @@ export function Datos({
   }, [proyectosConData, searchQuery, filterEstado, filterMontoMin, filterMontoMax]);
 
   const filteredTerceros = useMemo(() => {
-    if (!searchQuery) return terceros;
-    const q = searchQuery.toLowerCase();
-    return terceros.filter(t =>
-      [t.name, t.apodo, t.lugar, t.tipo, t.documento].some(f => f?.toLowerCase().includes(q))
-    );
-  }, [terceros, searchQuery]);
+    // Build totals lookup
+    const totalsMap = new Map<string, { ingresos: number; egresos: number }>();
+    for (const b of budgets) {
+      if (!b.entityId) continue;
+      const entry = totalsMap.get(b.entityId) ?? { ingresos: 0, egresos: 0 };
+      if (b.tipo === 'ingreso') entry.ingresos += b.montoPresupuestado;
+      else entry.egresos += b.montoPresupuestado;
+      totalsMap.set(b.entityId, entry);
+    }
+    for (const e of ejecuciones) {
+      if (!e.entityId) continue;
+      const entry = totalsMap.get(e.entityId) ?? { ingresos: 0, egresos: 0 };
+      if (e.tipo === 'ingreso') entry.ingresos += e.montoEjecutado;
+      else entry.egresos += e.montoEjecutado;
+      totalsMap.set(e.entityId, entry);
+    }
+
+    // Enrich with totals, filter, sort
+    let data = terceros.map(t => ({
+      ...t,
+      _ingresos: totalsMap.get(t.id)?.ingresos ?? 0,
+      _egresos: totalsMap.get(t.id)?.egresos ?? 0,
+    }));
+
+    // Search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      data = data.filter(t =>
+        [t.name, t.apodo, t.lugar, t.tipo, t.documento, t.numeroDocumento].some(f => f?.toLowerCase().includes(q))
+      );
+    }
+
+    // Filter by ingresos/egresos
+    console.log('[Terceros] filterTipoTercero:', filterTipoTercero, 'total before:', data.length, 'sample:', data.slice(0, 2).map(t => ({ n: t.name, _i: t._ingresos, _e: t._egresos })));
+    if (filterTipoTercero === 'ingresos') {
+      data = data.filter(t => t._ingresos > 0);
+      console.log('[Terceros] after ingresos filter:', data.length);
+    } else if (filterTipoTercero === 'egresos') {
+      data = data.filter(t => t._egresos > 0);
+      console.log('[Terceros] after egresos filter:', data.length);
+    }
+
+    // Filter by tipo (cliente/proveedor/ambos)
+    if (filterTipoCliente) {
+      data = data.filter(t => t.tipo === filterTipoCliente);
+    }
+
+    // Filter by naturaleza
+    if (filterNaturaleza) {
+      data = data.filter(t => t.naturaleza === filterNaturaleza);
+    }
+
+    // Sort
+    data.sort((a, b) => {
+      const isNumeric = terceroSortKey === 'ingresos' || terceroSortKey === 'egresos';
+      if (isNumeric) {
+        const aVal = a[`_${terceroSortKey}` as '_ingresos' | '_egresos'];
+        const bVal = b[`_${terceroSortKey}` as '_ingresos' | '_egresos'];
+        return terceroSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      const aVal = String(a[terceroSortKey as 'name' | 'apodo'] ?? '').toLowerCase();
+      const bVal = String(b[terceroSortKey as 'name' | 'apodo'] ?? '').toLowerCase();
+      return terceroSortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+
+    return data;
+  }, [terceros, searchQuery, filterTipoTercero, filterTipoCliente, filterNaturaleza, terceroSortKey, terceroSortDir, budgets, ejecuciones]);
+
+  const handleSelectAllTerceros = useCallback(() => {
+    const start = (currentPage - 1) * pageSize;
+    const pageIds = filteredTerceros.slice(start, start + pageSize).map(t => t.id);
+    setSelectedTerceros(prev => {
+      const allSelected = pageIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        pageIds.forEach(id => next.delete(id));
+      } else {
+        pageIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [filteredTerceros, currentPage, pageSize]);
+
+  const handleSelectAllPresupuestos = useCallback(() => {
+    const start = (currentPage - 1) * pageSize;
+    const pageIds = filteredBudgets.slice(start, start + pageSize).map(b => b.id);
+    setSelectedPresupuestos(prev => {
+      const allSelected = pageIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [filteredBudgets, currentPage, pageSize]);
+
+  const handleSelectAllEjecuciones = useCallback(() => {
+    const start = (currentPage - 1) * pageSize;
+    const pageIds = filteredEjecuciones.slice(start, start + pageSize).map(e => e.id);
+    setSelectedEjecuciones(prev => {
+      const allSelected = pageIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [filteredEjecuciones, currentPage, pageSize]);
 
   const filteredCuentas = useMemo(() => {
     let data = cuentas;
@@ -752,7 +878,7 @@ export function Datos({
     return map;
   }, [settingsData]);
 
-  const hasActiveFilters = searchQuery || filterTipo || filterMonth || filterMontoMin || filterMontoMax || filterEstado || filterComprobante || filterEjecucion || filterAdjuntos || filterBanco;
+  const hasActiveFilters = searchQuery || filterTipo || filterMonth || filterMontoMin || filterMontoMax || filterEstado || filterComprobante || filterEjecucion || filterAdjuntos || filterBanco || filterTipoTercero || filterTipoCliente || filterNaturaleza;
 
   const clearFilters = () => {
     setFilterTipo('');
@@ -765,9 +891,57 @@ export function Datos({
     setFilterEjecucion('');
     setFilterAdjuntos('');
     setFilterBanco('');
+    setFilterTipoTercero('');
+    setFilterTipoCliente('');
+    setFilterNaturaleza('');
     setSearchQuery('');
     setCurrentPage(1);
+    setSelectedPresupuestos(new Set());
+    setSelectedEjecuciones(new Set());
   };
+
+  const toggleTerceroSelection = useCallback((id: string) => {
+    setSelectedTerceros(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const togglePresupuestoSelection = useCallback((id: string) => {
+    setSelectedPresupuestos(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleEjecucionSelection = useCallback((id: string) => {
+    setSelectedEjecuciones(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBulkEditClick = useCallback(() => {
+    if (selectedTerceros.size === 0) return;
+    onNavigate?.({ type: 'bulk-edit-tercero', selectedIds: [...selectedTerceros] });
+  }, [selectedTerceros, onNavigate]);
+
+  const handleBulkEditPresupuestos = useCallback(() => {
+    if (selectedPresupuestos.size === 0) return;
+    onNavigate?.({ type: 'bulk-edit-presupuesto', selectedIds: [...selectedPresupuestos] });
+  }, [selectedPresupuestos, onNavigate]);
+
+  const handleBulkEditEjecuciones = useCallback(() => {
+    if (selectedEjecuciones.size === 0) return;
+    onNavigate?.({ type: 'bulk-edit-ejecucion', selectedIds: [...selectedEjecuciones] });
+  }, [selectedEjecuciones, onNavigate]);
 
   const handleDeleteTercero = useCallback(async (terceroId: string, terceroName: string) => {
     // Check for asociada ejecuciones
@@ -898,7 +1072,7 @@ export function Datos({
                 {activeTab === 'Bancos' && `${filteredCuentas.length} resultados`}
               </span>
             )}
-            {(activeTab === 'Presupuestos' || activeTab === 'Ejecuciones' || activeTab === 'Proyectos') && (
+            {(activeTab === 'Presupuestos' || activeTab === 'Ejecuciones' || activeTab === 'Proyectos' || activeTab === 'Terceros') && (
               <>
                 <div className="w-px h-6 bg-slate-200 shrink-0" />
                 <div className="flex items-center gap-3 shrink-0">
@@ -923,7 +1097,7 @@ export function Datos({
                       </div>
                     </>
                   )}
-                  {activeTab !== 'Proyectos' && (
+                  {activeTab !== 'Proyectos' && activeTab !== 'Terceros' && (
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-medium text-slate-400 uppercase">Tipo</span>
                       <TriStateSwitch
@@ -1058,6 +1232,54 @@ export function Datos({
                         className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-300" />
                     </div>
                   )}
+
+                  {activeTab === 'Terceros' && (
+                    <>
+                      <div className="w-px h-5 bg-slate-200 shrink-0" />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[9px] font-medium text-slate-400 uppercase">Mov.</span>
+                        <TriStateSwitch
+                          options={[
+                            { value: '' as const, icon: <List size={12} /> },
+                            { value: 'ingresos' as const, icon: <TrendingUp size={12} /> },
+                            { value: 'egresos' as const, icon: <TrendingDown size={12} /> },
+                          ]}
+                          value={filterTipoTercero}
+                          onChange={v => { setFilterTipoTercero(v); setCurrentPage(1); }}
+                          getActiveClass={v => v === 'ingresos' ? 'bg-emerald-500' : v === 'egresos' ? 'bg-rose-500' : 'bg-indigo-500'}
+                        />
+                      </div>
+                      <div className="w-px h-5 bg-slate-200 shrink-0" />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[9px] font-medium text-slate-400 uppercase">Tipo</span>
+                        <TriStateSwitch
+                          options={[
+                            { value: '' as const, icon: <List size={12} /> },
+                            { value: 'cliente' as const, icon: <Users size={12} /> },
+                            { value: 'proveedor' as const, icon: <Building2 size={12} /> },
+                          ]}
+                          value={filterTipoCliente}
+                          onChange={v => { setFilterTipoCliente(v); setCurrentPage(1); }}
+                          getActiveClass={v => v === 'cliente' ? 'bg-blue-500' : v === 'proveedor' ? 'bg-amber-500' : 'bg-indigo-500'}
+                        />
+                      </div>
+                      <div className="w-px h-5 bg-slate-200 shrink-0" />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[9px] font-medium text-slate-400 uppercase">Naturaleza</span>
+                        <TriStateSwitch
+                          options={[
+                            { value: '' as const, icon: <List size={12} /> },
+                            { value: 'Persona Natural' as const, icon: <Users size={12} /> },
+                            { value: 'Persona Jurídica' as const, icon: <Building2 size={12} /> },
+                          ]}
+                          value={filterNaturaleza}
+                          onChange={v => { setFilterNaturaleza(v); setCurrentPage(1); }}
+                          getActiveClass={v => v === 'Persona Natural' ? 'bg-emerald-500' : v === 'Persona Jurídica' ? 'bg-purple-500' : 'bg-indigo-500'}
+                        />
+                      </div>
+                    </>
+                  )}
+
                   {hasActiveFilters && (
                     <button onClick={clearFilters}
                       className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors shrink-0">
@@ -1076,10 +1298,30 @@ export function Datos({
 
           {activeTab === 'Presupuestos' && (
             <>
+              {selectedPresupuestos.size > 0 && (
+                <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+                  <span className="text-xs font-medium text-indigo-700">
+                    {selectedPresupuestos.size} seleccionado{selectedPresupuestos.size !== 1 ? 's' : ''}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedPresupuestos(new Set())}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Limpiar</button>
+                    <button onClick={handleBulkEditPresupuestos}
+                      className="text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">Editar en lote</button>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
+                      <th className="p-3 text-center w-10">
+                        <button onClick={handleSelectAllPresupuestos} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                          {paginate(filteredBudgets).length > 0 && paginate(filteredBudgets).every(b => selectedPresupuestos.has(b.id))
+                            ? <CheckSquare size={14} className="text-indigo-500" />
+                            : <Square size={14} />}
+                        </button>
+                      </th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600 transition-colors whitespace-nowrap" onClick={() => handleBudgetSort('fechaPresupuestado')}>
                         Fecha<SortIcon columnKey="fechaPresupuestado" />
                       </th>
@@ -1105,7 +1347,15 @@ export function Datos({
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredBudgets).map((b) => {
                       const ejecutado = b.totalEjecutado ?? 0;
-                      return (<tr key={b.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: [] })}>
+                      return (<tr key={b.id} className={clsx("cursor-pointer transition-colors hover:bg-slate-50", selectedPresupuestos.has(b.id) && 'bg-indigo-50/50')} onClick={() => onViewRecord?.({ type: 'budget', budget: b, ejecuciones: [] })}>
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button data-testid="select-presupuesto" onClick={() => togglePresupuestoSelection(b.id)}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors">
+                            {selectedPresupuestos.has(b.id)
+                              ? <CheckSquare size={14} className="text-indigo-500" />
+                              : <Square size={14} />}
+                          </button>
+                        </td>
                         <td className="p-3 text-slate-600 font-medium whitespace-nowrap">{b.fechaPresupuestado}</td>
                         <td className="p-3 text-slate-500 max-w-[160px] truncate">{b.entityName}</td>
                         <td className="p-3 text-slate-600 max-w-[160px] truncate">{b.projectName}</td>
@@ -1132,10 +1382,30 @@ export function Datos({
 
           {activeTab === 'Ejecuciones' && (
             <>
+              {selectedEjecuciones.size > 0 && (
+                <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+                  <span className="text-xs font-medium text-indigo-700">
+                    {selectedEjecuciones.size} seleccionado{selectedEjecuciones.size !== 1 ? 's' : ''}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedEjecuciones(new Set())}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Limpiar</button>
+                    <button onClick={handleBulkEditEjecuciones}
+                      className="text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">Editar en lote</button>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
+                      <th className="p-3 text-center w-10">
+                        <button onClick={handleSelectAllEjecuciones} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                          {paginate(filteredEjecuciones).length > 0 && paginate(filteredEjecuciones).every(e => selectedEjecuciones.has(e.id))
+                            ? <CheckSquare size={14} className="text-indigo-500" />
+                            : <Square size={14} />}
+                        </button>
+                      </th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600 transition-colors whitespace-nowrap" onClick={() => handleEjecucionSort('fechaEjecutado')}>
                         Fecha<EjecucionSortIcon columnKey="fechaEjecutado" />
                       </th>
@@ -1160,7 +1430,15 @@ export function Datos({
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredEjecuciones).map((e) => {
                       const comprobanteCount = e.comprobantes?.length ?? 0;
-                      return (<tr key={e.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}>
+                      return (<tr key={e.id} className={clsx("cursor-pointer transition-colors hover:bg-slate-50", selectedEjecuciones.has(e.id) && 'bg-indigo-50/50')} onClick={() => onViewRecord?.({ type: 'ejecucion', ejecucion: e })}>
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button data-testid="select-ejecucion" onClick={() => toggleEjecucionSelection(e.id)}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors">
+                            {selectedEjecuciones.has(e.id)
+                              ? <CheckSquare size={14} className="text-indigo-500" />
+                              : <Square size={14} />}
+                          </button>
+                        </td>
                         <td className="p-3 text-slate-600 whitespace-nowrap">{e.fechaEjecutado}</td>
                         <td className="p-3 text-slate-500">{e.entityName}</td>
                         <td className="p-3 text-slate-600">{e.projectName}</td>
@@ -1253,30 +1531,79 @@ export function Datos({
 
           {activeTab === 'Terceros' && (
             <>
+              {selectedTerceros.size > 0 && (
+                <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+                  <span className="text-xs font-medium text-indigo-700">
+                    {selectedTerceros.size} seleccionado{selectedTerceros.size !== 1 ? 's' : ''}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedTerceros(new Set())}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      Limpiar
+                    </button>
+                    <button
+                      onClick={handleBulkEditClick}
+                      className="text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      Editar en lote
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Nombre</th>
-                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Apodo</th>
+                      <th className="p-3 text-center w-10">
+                        <button onClick={handleSelectAllTerceros} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                          {paginate(filteredTerceros).length > 0 && paginate(filteredTerceros).every(t => selectedTerceros.has(t.id))
+                            ? <CheckSquare size={14} className="text-indigo-500" />
+                            : <Square size={14} />}
+                        </button>
+                      </th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleTerceroSort('name')}>
+                        Nombre<TerceroSortIcon columnKey="name" />
+                      </th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleTerceroSort('apodo')}>
+                        Apodo<TerceroSortIcon columnKey="apodo" />
+                      </th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Naturaleza</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Documento</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">N° Documento</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Lugar</th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleTerceroSort('ingresos')}>
+                        Total Ingresos<TerceroSortIcon columnKey="ingresos" />
+                      </th>
+                      <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-right whitespace-nowrap cursor-pointer select-none hover:text-slate-600 transition-colors" onClick={() => handleTerceroSort('egresos')}>
+                        Total Egresos<TerceroSortIcon columnKey="egresos" />
+                      </th>
                       <th className="p-3 text-[10px] font-bold text-slate-400 uppercase text-center w-12">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] divide-y divide-slate-100">
                     {paginate(filteredTerceros).map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>
-                        <td className="p-3 font-semibold text-slate-700">{t.name}</td>
-                        <td className="p-3 text-slate-500">{t.apodo ?? '—'}</td>
-                        <td className="p-3 text-slate-600">{t.naturaleza ?? '—'}</td>
-                        <td className="p-3 text-slate-600">{t.documento ?? '—'}</td>
-                        <td className="p-3 text-slate-600">{t.numeroDocumento ?? '—'}</td>
-                        <td className="p-3 text-slate-600">{t.lugar ?? '—'}</td>
-                        <td className="p-3">
+                      <tr key={t.id} className={clsx(
+                        "transition-colors",
+                        selectedTerceros.has(t.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50',
+                      )}>
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button data-testid="select-tercero" onClick={() => toggleTerceroSelection(t.id)} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                            {selectedTerceros.has(t.id)
+                              ? <CheckSquare size={14} className="text-indigo-500" />
+                              : <Square size={14} />}
+                          </button>
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.name}</td>
+                        <td className="p-3 text-slate-500 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.apodo ?? '—'}</td>
+                        <td className="p-3 text-slate-600 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.naturaleza ?? '—'}</td>
+                        <td className="p-3 text-slate-600 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.documento ?? '—'}</td>
+                        <td className="p-3 text-slate-600 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.numeroDocumento ?? '—'}</td>
+                        <td className="p-3 text-slate-600 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>{t.lugar ?? '—'}</td>
+                        <td className="p-3 cursor-pointer" onClick={() => onViewRecord?.({ type: 'tercero', tercero: t })}>
                           <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
                             t.tipo === 'cliente' ? 'bg-blue-100 text-blue-700' :
                             t.tipo === 'proveedor' ? 'bg-amber-100 text-amber-700' :
@@ -1285,10 +1612,14 @@ export function Datos({
                             {t.tipo === 'cliente' ? 'Cliente' : t.tipo === 'proveedor' ? 'Proveedor' : 'Ambos'}
                           </span>
                         </td>
-                        <ActionCell>
-                          <EditBtn onClick={() => edit('tercero', t)} />
-                          <DeleteBtn onDelete={() => handleDeleteTercero(t.id, t.name)} />
-                        </ActionCell>
+                        <td className="p-3 text-right font-bold text-emerald-700 tabular-nums">{formatCurrency(t._ingresos)}</td>
+                        <td className="p-3 text-right font-bold text-rose-600 tabular-nums">{formatCurrency(t._egresos)}</td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <EditBtn onClick={() => edit('tercero', t)} />
+                            <DeleteBtn onDelete={() => handleDeleteTercero(t.id, t.name)} />
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

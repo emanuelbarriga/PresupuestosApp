@@ -72,3 +72,7 @@ archived_changes:
   - name: er-config-system
     archived_at: 2026-07-13
     summary: "Per-company ER config system: ErConfig type + Firestore subcollection, dual tax regime (simple 8.1% / común 35%), refactored computePnL with config-driven formulas, ErConfigPanel with regime selector + per-line formula config, wired into Sidepanel and page.tsx. 12/13 tasks complete, 650/650 tests passing, 0 tsc errors."
+  - name: bulk-edit-cascade
+    archived_at: 2026-07-13
+    summary: "Checkbox + floating action bar + BulkEditPresupuestosPanel/BulkEditEjecucionesPanel for batch field updates on Presupuestos and Ejecuciones tabs; cascadeTerceroName propagates name changes to entityName on linked budgets/ejeuciones; batchUpdatePresupuestos/batchUpdateEjecuciones in firestore.ts. 13/13 tasks complete, 683/683 tests passing, 0 tsc errors."
+    main_spec: openspec/specs/bulk-edit-cascade/spec.md

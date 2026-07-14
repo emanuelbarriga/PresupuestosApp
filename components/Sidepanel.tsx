@@ -21,6 +21,9 @@ import { InvitacionEntity } from '@/components/entities/invitacion/InvitacionEnt
 import { ColaboradorEntity } from '@/components/entities/colaborador/ColaboradorEntity';
 import { CompaniaEntity } from '@/components/entities/compania/CompaniaEntity';
 import { ErConfigPanel } from '@/components/panels/ErConfigPanel';
+import { BulkEditTerceroPanel } from '@/components/entities/tercero/BulkEditTerceroPanel';
+import { BulkEditPresupuestosPanel } from '@/components/entities/presupuesto/BulkEditPresupuestosPanel';
+import { BulkEditEjecucionesPanel } from '@/components/entities/ejecucion/BulkEditEjecucionesPanel';
 
 interface SidepanelProps {
   screen: NavScreen | undefined;
@@ -191,6 +194,39 @@ export function Sidepanel({
           canGoBack={canGoBack}
           onBack={onBack}
           onClose={onClose}
+        />
+      );
+    }
+
+    // Bulk-edit tercero panel
+    if (screen.type === 'bulk-edit-tercero') {
+      return (
+        <BulkEditTerceroPanel
+          selectedIds={screen.selectedIds}
+          companyId={companyId}
+          onClose={() => onClose()}
+        />
+      );
+    }
+
+    // Bulk-edit presupuesto panel
+    if (screen.type === 'bulk-edit-presupuesto') {
+      return (
+        <BulkEditPresupuestosPanel
+          selectedIds={screen.selectedIds}
+          companyId={companyId}
+          onClose={() => onClose()}
+        />
+      );
+    }
+
+    // Bulk-edit ejecucion panel
+    if (screen.type === 'bulk-edit-ejecucion') {
+      return (
+        <BulkEditEjecucionesPanel
+          selectedIds={screen.selectedIds}
+          companyId={companyId}
+          onClose={() => onClose()}
         />
       );
     }

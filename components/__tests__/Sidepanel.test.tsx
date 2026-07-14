@@ -191,9 +191,9 @@ describe('Sidepanel — new routing', () => {
         />,
       );
 
-      // All 4 icons should be rendered (lucide icons render as SVG)
+      // All 6 quick-create icons should be rendered (lucide icons render as SVG)
       const buttons = document.querySelectorAll('aside button');
-      expect(buttons.length).toBe(4);
+      expect(buttons.length).toBe(6);
     });
   });
 

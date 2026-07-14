@@ -111,6 +111,16 @@ export function subscribeTerceros(
   );
 }
 
+/**
+ * One-time fetch of all non-archived terceros (for bulk edit panels, etc.)
+ */
+export async function getTerceros(): Promise<Tercero[]> {
+  const snap = await getDocs(collection(db, TERCEROS_COLLECTION));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as Tercero)
+    .filter((t) => t.archivado !== true);
+}
+
 export function subscribeSettings(
   onData: (data: SettingsCategorias) => void,
   onError?: (err: Error) => void,
@@ -592,7 +602,7 @@ export async function updateProvider(
  * via a single WriteBatch (max 500 ops). If >500 linked docs, logs a
  * warning and truncates to the first 500.
  */
-async function cascadeTerceroName(companyId: string, terceroId: string, newName: string): Promise<void> {
+export async function cascadeTerceroName(companyId: string, terceroId: string, newName: string): Promise<void> {
   // 1. Query linked budgets
   const budgetsQuery = query(
     collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),

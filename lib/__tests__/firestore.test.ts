@@ -87,7 +87,7 @@ function makeMockSnapshot(
 
 // ─── Imports (resolved after mocks) ──────────────────────────────────────────
 
-import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros } from '@/lib/firestore';
+import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros, batchUpdatePresupuestos, batchUpdateEjecuciones, cascadeTerceroName, updateTercero, batchUpdateTerceros } from '@/lib/firestore';
 import type { Budget, Ejecucion, EjecucionBudgetLink, Tercero } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -974,5 +974,245 @@ describe('tercero-archiving (PR3): subscribeTerceros with includeArchivados', ()
     const result = onData.mock.calls[0][0] as Tercero[];
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('t1');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T-10 — batchUpdatePresupuestos / batchUpdateEjecuciones
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('T-10: batchUpdatePresupuestos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns successCount=3 with all IDs resolved', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    const result = await batchUpdatePresupuestos(
+      'c1',
+      ['b1', 'b2', 'b3'],
+      { descripcion: 'Updated' },
+    );
+
+    expect(result).toEqual({ successCount: 3, failedIds: [] });
+    expect(updateDoc).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns partial failure with one rejected ID', async () => {
+    (updateDoc as Mock)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockResolvedValueOnce(undefined);
+
+    const result = await batchUpdatePresupuestos(
+      'c1',
+      ['b1', 'b2', 'b3'],
+      { descripcion: 'Updated' },
+    );
+
+    expect(result).toEqual({ successCount: 2, failedIds: ['b2'] });
+  });
+
+  it('returns zero counts for empty ids array', async () => {
+    const result = await batchUpdatePresupuestos('c1', [], { descripcion: 'Updated' });
+    expect(result).toEqual({ successCount: 0, failedIds: [] });
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('rejects on invalid data without calling updateDoc', async () => {
+    await expect(
+      batchUpdatePresupuestos('c1', ['b1'], { tipo: 'invalido' }),
+    ).rejects.toThrow();
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-10: batchUpdateEjecuciones', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns successCount=3 with all IDs resolved', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    const result = await batchUpdateEjecuciones(
+      'c1',
+      ['e1', 'e2', 'e3'],
+      { descripcion: 'Updated' },
+    );
+
+    expect(result).toEqual({ successCount: 3, failedIds: [] });
+    expect(updateDoc).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns partial failure with one rejected ID', async () => {
+    (updateDoc as Mock)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockResolvedValueOnce(undefined);
+
+    const result = await batchUpdateEjecuciones(
+      'c1',
+      ['e1', 'e2', 'e3'],
+      { descripcion: 'Updated' },
+    );
+
+    expect(result).toEqual({ successCount: 2, failedIds: ['e2'] });
+  });
+
+  it('returns zero counts for empty ids array', async () => {
+    const result = await batchUpdateEjecuciones('c1', [], { descripcion: 'Updated' });
+    expect(result).toEqual({ successCount: 0, failedIds: [] });
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('rejects on invalid data without calling updateDoc', async () => {
+    await expect(
+      batchUpdateEjecuciones('c1', ['e1'], { tipo: 'invalido' }),
+    ).rejects.toThrow();
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T-11 — cascadeTerceroName
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('T-11: cascadeTerceroName', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does nothing when no linked docs exist', async () => {
+    (getDocs as Mock).mockResolvedValue({ size: 0, docs: [] });
+
+    await cascadeTerceroName('c1', 't1', 'New Name');
+
+    expect(writeBatch).not.toHaveBeenCalled();
+  });
+
+  it('updates 5 docs (2 budgets + 3 ejecuciones) in a single batch', async () => {
+    const budgetDocs = [
+      { id: 'b1', ref: { path: 'companies/c1/budgets/b1' } },
+      { id: 'b2', ref: { path: 'companies/c1/budgets/b2' } },
+    ];
+    const ejecucionDocs = [
+      { id: 'e1', ref: { path: 'companies/c1/ejecuciones/e1' } },
+      { id: 'e2', ref: { path: 'companies/c1/ejecuciones/e2' } },
+      { id: 'e3', ref: { path: 'companies/c1/ejecuciones/e3' } },
+    ];
+
+    (getDocs as Mock)
+      .mockResolvedValueOnce({ size: 2, docs: budgetDocs })
+      .mockResolvedValueOnce({ size: 3, docs: ejecucionDocs });
+
+    await cascadeTerceroName('c1', 't1', 'New Name');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).toHaveBeenCalledTimes(5);
+    expect(batch.update).toHaveBeenCalledWith(budgetDocs[0].ref, { entityName: 'New Name' });
+    expect(batch.update).toHaveBeenCalledWith(budgetDocs[1].ref, { entityName: 'New Name' });
+    expect(batch.update).toHaveBeenCalledWith(ejecucionDocs[0].ref, { entityName: 'New Name' });
+    expect(batch.update).toHaveBeenCalledWith(ejecucionDocs[1].ref, { entityName: 'New Name' });
+    expect(batch.update).toHaveBeenCalledWith(ejecucionDocs[2].ref, { entityName: 'New Name' });
+    expect(batch.commit).toHaveBeenCalled();
+  });
+
+  it('warns and truncates when >500 linked docs', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const manyDocs = Array.from({ length: 600 }, (_, i) => ({
+      id: `d${i}`,
+      ref: { path: `companies/c1/budgets/d${i}` },
+    }));
+
+    (getDocs as Mock)
+      .mockResolvedValueOnce({ size: 300, docs: manyDocs.slice(0, 300) })
+      .mockResolvedValueOnce({ size: 300, docs: manyDocs.slice(300) });
+
+    await cascadeTerceroName('c1', 't1', 'New Name');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('cascadeTerceroName: 600 docs > 500'),
+    );
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.update).toHaveBeenCalledTimes(500);
+    warnSpy.mockRestore();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T-12 — updateTercero / batchUpdateTerceros cascade
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('T-12: updateTercero cascade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls cascadeTerceroName when name and companyId are provided', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+    (getDocs as Mock).mockResolvedValue({ size: 0, docs: [] });
+
+    await updateTercero('t1', { name: 'New Name' }, 'c1');
+
+    expect(updateDoc).toHaveBeenCalled();
+    // cascadeTerceroName is the only consumer of getDocs inside updateTercero
+    expect(getDocs).toHaveBeenCalled();
+  });
+
+  it('does NOT cascade when name is not in data', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    await updateTercero('t1', { tipo: 'cliente' }, 'c1');
+
+    expect(updateDoc).toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
+
+  it('does NOT cascade when companyId is not provided', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    await updateTercero('t1', { name: 'New Name' });
+
+    expect(updateDoc).toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-12: batchUpdateTerceros cascade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('cascades only for successful IDs', async () => {
+    (updateDoc as Mock)
+      .mockResolvedValueOnce(undefined) // t1 succeeds
+      .mockResolvedValueOnce(undefined) // t2 succeeds
+      .mockRejectedValueOnce(new Error('fail')); // t3 fails
+    (getDocs as Mock).mockResolvedValue({ size: 0, docs: [] });
+
+    const result = await batchUpdateTerceros(
+      ['t1', 't2', 't3'],
+      { name: 'New Name' },
+      'c1',
+    );
+
+    expect(result).toEqual({ successCount: 2, failedIds: ['t3'] });
+    // cascadeTerceroName was triggered for t1 and t2 (not t3)
+    expect(getDocs).toHaveBeenCalled();
+  });
+
+  it('does NOT cascade when name is not in payload', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    const result = await batchUpdateTerceros(
+      ['t1', 't2'],
+      { tipo: 'cliente' },
+      'c1',
+    );
+
+    expect(result).toEqual({ successCount: 2, failedIds: [] });
+    expect(getDocs).not.toHaveBeenCalled();
   });
 });
