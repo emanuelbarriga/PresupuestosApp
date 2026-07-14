@@ -331,6 +331,27 @@ describe('Sidepanel — new routing', () => {
       expect(screen.getByText('Extracto')).toBeInTheDocument();
     });
 
+    it('entity=documento mode=view muestra el panel con clasificación', () => {
+      render(
+        <Sidepanel
+          screen={makeEntityScreen('documento', 'view', { record: { id: 'doc-1', fileName: 'factura.pdf', mimeType: 'application/pdf', status: 'por_clasificar', ejecucionIds: [], _source: 'inbox-upload', uploadedAt: '2026-07-14T00:00:00Z', createdBy: 'user-1' } })}
+          companyId="c1"
+          onClose={vi.fn()}
+          onSubmit={vi.fn()}
+          onNavigate={vi.fn()}
+          onBack={vi.fn()}
+          canGoBack={false}
+        />,
+      );
+
+      // PanelHeader title
+      expect(screen.getByText('Clasificar Documento')).toBeInTheDocument();
+      // File name should be visible in preview section
+      expect(screen.getByText('factura.pdf')).toBeInTheDocument();
+      // Should show classification form with tipo chips
+      expect(screen.getByText('Factura Venta')).toBeInTheDocument();
+    });
+
     it('entity=settings mode=view renderiza SettingsEntity sin PanelHeader', () => {
       const settingsScreen: NavScreen = {
         type: 'entity',

@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    exclude: ['e2e/**', 'node_modules/**', 'functions/node_modules/**', 'dist/**'],
+    exclude: ['e2e/**', 'node_modules/**', 'functions/node_modules/**', 'dist/**', 'lib/__tests__/firestore-rules-*.test.ts', 'lib/__tests__/storage-rules-*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

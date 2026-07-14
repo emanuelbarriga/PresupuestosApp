@@ -64,13 +64,25 @@ export async function uploadFile(
   path: string,
   onProgress?: (progress: number) => void,
 ): Promise<UploadResult> {
+  const { promise } = uploadFileWithTask(file, path, onProgress);
+  return promise;
+}
+
+/**
+ * Start an upload and return both the UploadTask (for cancellation)
+ * and a promise that resolves with the result.
+ * The task is available synchronously — no need to await it.
+ */
+export function uploadFileWithTask(
+  file: Blob | ArrayBuffer | Uint8Array,
+  path: string,
+  onProgress?: (progress: number) => void,
+): { promise: Promise<UploadResult>; task: import('firebase/storage').UploadTask } {
   const storageRef = ref(storage, path);
-  // Si no es Blob (File), agregar contentType explícito para que pase
-  // la regla de Storage que requiere application/pdf
   const metadata = file instanceof Blob ? undefined : { contentType: 'application/pdf' };
   const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
-  return new Promise((resolve, reject) => {
+  const promise = new Promise<UploadResult>((resolve, reject) => {
     uploadTask.on(
       'state_changed',
       (snapshot) => {
@@ -84,6 +96,8 @@ export async function uploadFile(
       },
     );
   });
+
+  return { promise, task: uploadTask };
 }
 
 /**

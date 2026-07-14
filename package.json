@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "clean": "next clean",
     "test": "vitest",
+    "test:rules": "firebase emulators:exec --project planningsaman-3cf7e --only firestore,storage 'npx vitest run lib/__tests__/firestore-rules-documentos.test.ts lib/__tests__/storage-rules-documentos.test.ts'",
     "test:coverage": "vitest run --coverage",
     "emulators": "firebase emulators:start --project planningsaman-3cf7e --only auth,firestore",
     "seed": "FIRESTORE_EMULATOR_HOST=localhost:8081 npx tsx e2e/seed/seed-emulator.ts",

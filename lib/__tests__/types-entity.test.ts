@@ -170,3 +170,32 @@ describe('EntityProps', () => {
     expect(captured.data.archivado).toBe(true);
   });
 });
+
+describe('_linkedDocumentos expanded interface', () => {
+  it('accepts all optional fields', () => {
+    const entry: NonNullable<import('@/lib/types').Ejecucion['_linkedDocumentos']>[number] = {
+      documentoId: 'doc-1',
+      tipoDocumento: 'factura_venta',
+      periodo: '2026-07',
+      montoTotal: 1500000,
+      proveedorTexto: 'Proveedor SA',
+    };
+    expect(entry.documentoId).toBe('doc-1');
+    expect(entry.tipoDocumento).toBe('factura_venta');
+    expect(entry.periodo).toBe('2026-07');
+    expect(entry.montoTotal).toBe(1500000);
+    expect(entry.proveedorTexto).toBe('Proveedor SA');
+  });
+
+  it('accepts minimal object with only required fields', () => {
+    const entry: NonNullable<import('@/lib/types').Ejecucion['_linkedDocumentos']>[number] = {
+      documentoId: 'doc-2',
+      tipoDocumento: 'contrato',
+    };
+    expect(entry.documentoId).toBe('doc-2');
+    expect(entry.tipoDocumento).toBe('contrato');
+    expect(entry.periodo).toBeUndefined();
+    expect(entry.montoTotal).toBeUndefined();
+    expect(entry.proveedorTexto).toBeUndefined();
+  });
+});

@@ -42,6 +42,7 @@ import { EstadoResultados } from '@/components/EstadoResultados';
 import { Extractos } from '@/components/Extractos';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Sidepanel } from '@/components/Sidepanel';
+import { MediaPage } from '@/components/media/MediaPage';
 import { Company } from '@/lib/types';
 import { DEFAULT_ER_CONFIG } from '@/lib/er-config-defaults';
 
@@ -637,7 +638,10 @@ export default function CompanyPage({ params }: Props) {
             {activeView === 'Extractos' && (
               <Extractos companyId={companyId} onNavigate={(screen) => pushScreen(screen)} />
             )}
-            {['Proyectos', 'Proveedores', 'Clientes', 'Media'].includes(activeView) && (
+            {activeView === 'Media' && (
+              <MediaPage companyId={companyId} onNavigate={pushScreen} />
+            )}
+            {['Proyectos', 'Proveedores', 'Clientes'].includes(activeView) && (
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (

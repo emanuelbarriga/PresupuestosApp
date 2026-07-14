@@ -754,7 +754,10 @@ describe('budget-links: deleteEjecucion', () => {
       { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
       { id: 'link-2', data: () => ({ budgetId: 'b-2', monto: 25000 }) },
     ];
-    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+    const emptyDocs = { docs: [], forEach: ([] as any[]).forEach.bind([]) };
+    (getDocs as Mock)
+      .mockResolvedValueOnce(emptyDocs)  // documentos query (empty)
+      .mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) }); // budgetLinks
 
     await deleteEjecucion('c1', 'ej-1');
 
@@ -767,7 +770,10 @@ describe('budget-links: deleteEjecucion', () => {
   });
 
   it('does not update budgets when ejecucion has no budget links', async () => {
-    (getDocs as Mock).mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+    const emptyDocs = { docs: [], forEach: ([] as any[]).forEach.bind([]) };
+    (getDocs as Mock)
+      .mockResolvedValueOnce(emptyDocs)  // documentos query
+      .mockResolvedValue(emptyDocs);     // budgetLinks
 
     await deleteEjecucion('c1', 'ej-1');
 
@@ -781,7 +787,10 @@ describe('budget-links: deleteEjecucion', () => {
     const docs = [
       { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
     ];
-    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+    const emptyDocs = { docs: [], forEach: ([] as any[]).forEach.bind([]) };
+    (getDocs as Mock)
+      .mockResolvedValueOnce(emptyDocs)  // documentos query
+      .mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) }); // budgetLinks
 
     await deleteEjecucion('c1', 'ej-1');
 
@@ -793,6 +802,145 @@ describe('budget-links: deleteEjecucion', () => {
         linkedEjecuciones: { __arrayRemove: { ejecucionId: 'ej-1', monto: 50000 } },
       }),
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// deleteEjecucion — documento unlinking (sistema-medios-desacoplado / PR 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('deleteEjecucion — documento unlinking', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeDocSnapshot(
+    docs: Array<{ id: string } & Record<string, unknown>>,
+  ) {
+    return {
+      docs: docs.map(({ id, ...rest }) => ({
+        id,
+        data: () => rest,
+        ref: { id, path: `companies/c1/documentos/${id}` },
+      })),
+      forEach: function (fn: (d: any) => void) {
+        (this as any).docs.forEach(fn);
+      },
+    };
+  }
+
+  it('unlinks linked documentos via batch update on deleteEjecucion', async () => {
+    const linkedDocs = [
+      { id: 'doc-1', ejecucionIds: ['ej-1', 'ej-2'], status: 'enlazado', fileName: 'a.pdf' },
+      { id: 'doc-2', ejecucionIds: ['ej-1'], status: 'enlazado', fileName: 'b.pdf' },
+    ];
+    const linkDocs = [
+      { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
+    ];
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ descripcion: 'test', _movimientoId: 'mov1', _extractoId: 'ext1', cuentaId: 'c1' }),
+    });
+
+    // First getDocs call = documentos, second = budgetLinks
+    (getDocs as Mock)
+      .mockResolvedValueOnce(makeDocSnapshot(linkedDocs))
+      .mockResolvedValue({ docs: linkDocs, forEach: linkDocs.forEach.bind(linkDocs) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+
+    // Should update doc-1: removes 'ej-1' from ejecucionIds, keeps 'ej-2'
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        ejecucionIds: ['ej-2'],
+        updatedAt: expect.any(Object),
+      }),
+    );
+
+    // Should update doc-2: removes 'ej-1', ejecucionIds empty → status por_clasificar
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        ejecucionIds: [],
+        status: 'por_clasificar',
+        updatedAt: expect.any(Object),
+      }),
+    );
+  });
+
+  it('does not unlink when ejecucion has no linked documentos', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ descripcion: 'test' }),
+    });
+
+    // First getDocs = documentos (empty), second = budgetLinks (empty)
+    (getDocs as Mock)
+      .mockResolvedValueOnce(makeDocSnapshot([]))
+      .mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    // Only the ejecucion delete, no documento updates
+    expect(batch.delete).toHaveBeenCalledTimes(1);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles documento without ejecucionIds field gracefully', async () => {
+    const linkedDocs = [
+      // Documento missing ejecucionIds entirely (empty field)
+      { id: 'doc-1', status: 'enlazado', fileName: 'a.pdf' },
+    ];
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ descripcion: 'test' }),
+    });
+
+    (getDocs as Mock)
+      .mockResolvedValueOnce(makeDocSnapshot(linkedDocs))
+      .mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    // Should handle gracefully: treats missing ejecucionIds as []
+    expect(batch.update).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        ejecucionIds: [],
+        status: 'por_clasificar',
+      }),
+    );
+  });
+
+  it('unlinks documentos AND processes budget links in the same batch', async () => {
+    const linkedDocs = [
+      { id: 'doc-1', ejecucionIds: ['ej-1'], status: 'enlazado', fileName: 'a.pdf' },
+    ];
+    const linkDocs = [
+      { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
+    ];
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ descripcion: 'test' }),
+    });
+
+    (getDocs as Mock)
+      .mockResolvedValueOnce(makeDocSnapshot(linkedDocs))
+      .mockResolvedValue({ docs: linkDocs, forEach: linkDocs.forEach.bind(linkDocs) });
+
+    await deleteEjecucion('c1', 'ej-1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+
+    // Should have: 1 batch.update for budget + 1 batch.update for doc + 1 batch.delete for link + 1 batch.delete for ejecucion
+    expect(batch.update).toHaveBeenCalledTimes(2);
+    expect(batch.delete).toHaveBeenCalledTimes(2);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -848,7 +996,10 @@ describe('deleteEjecucion con movimiento reset (PR1-T1)', () => {
     const docs = [
       { id: 'link-1', data: () => ({ budgetId: 'b-1', monto: 50000 }) },
     ];
-    (getDocs as Mock).mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) });
+    const emptyDocs = { docs: [], forEach: ([] as any[]).forEach.bind([]) };
+    (getDocs as Mock)
+      .mockResolvedValueOnce(emptyDocs)  // documentos query
+      .mockResolvedValue({ docs, forEach: docs.forEach.bind(docs) }); // budgetLinks
 
     await deleteEjecucion('c1', 'ej-1');
 
@@ -881,7 +1032,10 @@ describe('deleteEjecucion con movimiento reset (PR1-T1)', () => {
       data: () => ({ descripcion: 'test' }),
     });
 
-    (getDocs as Mock).mockResolvedValue({ docs: [], forEach: ([] as any[]).forEach.bind([]) });
+    const emptyDocs = { docs: [], forEach: ([] as any[]).forEach.bind([]) };
+    (getDocs as Mock)
+      .mockResolvedValueOnce(emptyDocs)  // documentos query
+      .mockResolvedValue(emptyDocs);     // budgetLinks
 
     await deleteEjecucion('c1', 'ej-1');
 

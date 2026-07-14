@@ -14,3 +14,4 @@ playwright-report/
 test-results/
 tsconfig.tsbuildinfo
 cuentaDeServicio/
+.atl/

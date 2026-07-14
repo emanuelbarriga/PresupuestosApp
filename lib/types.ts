@@ -174,7 +174,13 @@ export interface Ejecucion {
   archivado?: boolean;
   _movimientoId?: string;
   _extractoId?: string;
-  _linkedDocumentos?: Array<{ documentoId: string; tipoDocumento: string }>;
+  _linkedDocumentos?: Array<{
+    documentoId: string;
+    tipoDocumento: string;
+    periodo?: string;
+    montoTotal?: number;
+    proveedorTexto?: string;
+  }>;
   _estadoComprobantes?: 'Completada' | 'Falta un comprobante' | 'Sin comprobantes' | '';
 }
 
@@ -339,7 +345,8 @@ export type EntityType =
   | 'budget' | 'ejecucion' | 'project' | 'tercero'
   | 'cuenta' | 'extracto' | 'movimiento' | 'convertir-movimientos'
   | 'settings' | 'invitacion' | 'colaborador' | 'compania'
-  | 'er-config';
+  | 'er-config'
+  | 'documento';
 
 // NavScreen — entity+mode replaces data/view/form dispatch.
 // Entity-list variant carries dashboard cell click data for EntityList rendering.

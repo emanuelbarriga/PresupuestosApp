@@ -5,7 +5,16 @@ import type { Comprobante, SettingsItem } from '@/lib/types';
 
 vi.mock('@/lib/fileUpload', () => ({
   deleteFile: vi.fn().mockResolvedValue(undefined),
-  validateFile: vi.fn().mockReturnValue(null),
+  validateFile: vi.fn().mockReturnValue({ valid: true }),
+  generateMediaFilePath: vi.fn().mockReturnValue('c1/documentos/uuid-test.pdf'),
+  uploadFileWithTask: vi.fn().mockReturnValue({
+    promise: Promise.resolve({ url: 'https://example.com/test.pdf', path: 'c1/documentos/uuid-test.pdf' }),
+    task: { cancel: vi.fn(), on: vi.fn() },
+  }),
+}));
+
+vi.mock('@/lib/mediaService', () => ({
+  createDocumento: vi.fn().mockResolvedValue('doc-1'),
 }));
 
 const mockTipos: SettingsItem[] = [
@@ -32,8 +41,6 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -47,8 +54,6 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -63,8 +68,6 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[]}
         onComprobantesChange={vi.fn()}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -78,8 +81,6 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[createComprobante()]}
         onComprobantesChange={vi.fn()}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -96,8 +97,6 @@ describe('ComprobanteUploader', () => {
         comprobantes={[createComprobante()]}
         onComprobantesChange={onChange}
         onSaveComprobantes={onSave}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -117,8 +116,6 @@ describe('ComprobanteUploader', () => {
         ejecucionId="ej-1"
         comprobantes={[createComprobante()]}
         onComprobantesChange={onChange}
-        pendingComprobantes={[]}
-        onPendingChange={vi.fn()}
         tiposComprobante={mockTipos}
       />
     );
@@ -127,27 +124,5 @@ describe('ComprobanteUploader', () => {
     await vi.waitFor(() => {
       expect(onChange).toHaveBeenCalledWith([]);
     });
-  });
-
-  it('muestra archivos pendientes y su indicador', () => {
-    render(
-      <ComprobanteUploader
-        companyId="company-1"
-        ejecucionId="ej-1"
-        comprobantes={[]}
-        onComprobantesChange={vi.fn()}
-        pendingComprobantes={[{
-          id: 'pending-1',
-          file: new File([''], 'factura.pdf', { type: 'application/pdf' }),
-          name: 'factura.pdf',
-          type: 'application/pdf',
-          size: 1000,
-        }]}
-        onPendingChange={vi.fn()}
-        tiposComprobante={mockTipos}
-      />
-    );
-    expect(screen.getByText(/1 pendiente/)).toBeInTheDocument();
-    expect(screen.getByText('Se subirán al guardar la ejecución')).toBeInTheDocument();
   });
 });

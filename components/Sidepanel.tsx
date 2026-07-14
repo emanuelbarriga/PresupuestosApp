@@ -24,6 +24,7 @@ import { ErConfigPanel } from '@/components/panels/ErConfigPanel';
 import { BulkEditTerceroPanel } from '@/components/entities/tercero/BulkEditTerceroPanel';
 import { BulkEditPresupuestosPanel } from '@/components/entities/presupuesto/BulkEditPresupuestosPanel';
 import { BulkEditEjecucionesPanel } from '@/components/entities/ejecucion/BulkEditEjecucionesPanel';
+import { DocumentoEntity } from '@/components/entities/documento/DocumentoEntity';
 
 interface SidepanelProps {
   screen: NavScreen | undefined;
@@ -120,6 +121,8 @@ function renderEntityScreen(
         />
       );
     }
+    case 'documento':
+      return <DocumentoEntity key={key} {...entityProps} />;
     default:
       return null;
   }
