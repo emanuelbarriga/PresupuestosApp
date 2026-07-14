@@ -3,6 +3,9 @@ import { z } from 'zod';
 const yyyymmRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
 const yyyymmddRegex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+export const PERIODO_SIN_ASIGNAR = 'sin_periodo';
+export const TIPO_DOCUMENTO_DEFAULT = 'otro';
+
 const documentoStatusValues = ['por_clasificar', 'enlazado'] as const;
 const tipoDocumentoMedioValues = [
   'factura_venta', 'factura_compra', 'extracto_bancario',
@@ -12,6 +15,10 @@ const tipoDocumentoMedioValues = [
 const documentSourceValues = ['inbox-upload', 'ejecucion-form', 'migration'] as const;
 
 export const yearMonthSchema = z.string().regex(yyyymmRegex, 'fechaPresupuestado debe tener formato YYYY-MM con mes válido');
+export const yearMonthOrSinSchema = z.string().refine(
+  (val) => val === PERIODO_SIN_ASIGNAR || yyyymmRegex.test(val),
+  { message: 'debe ser YYYY-MM o "sin_periodo"' },
+);
 export const dateStringSchema = z.string().regex(yyyymmddRegex, 'fechaEjecutado debe tener formato YYYY-MM-DD con fecha válida');
 
 const monthValues = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'] as const;
@@ -61,7 +68,7 @@ export const documentoMedioSchema = z.object({
   mimeType: z.string().min(1),
   status: z.enum(documentoStatusValues),
   tipoDocumento: z.enum(tipoDocumentoMedioValues).optional(),
-  periodo: yearMonthSchema.optional(),
+  periodo: yearMonthOrSinSchema.optional(),
   terceroId: z.string().optional(),
   projectId: z.string().optional(),
   ejecucionIds: z.array(z.string()),
