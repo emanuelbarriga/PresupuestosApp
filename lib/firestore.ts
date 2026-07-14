@@ -586,11 +586,55 @@ export async function updateProvider(
   await updateDoc(doc(db, TERCEROS_COLLECTION, providerId), { ...data, updatedAt: serverTimestamp() });
 }
 
+/**
+ * Cascade a tercero's name change to all linked budgets and ejecuciones.
+ * Queries per-company subcollections by entityId and updates entityName
+ * via a single WriteBatch (max 500 ops). If >500 linked docs, logs a
+ * warning and truncates to the first 500.
+ */
+async function cascadeTerceroName(companyId: string, terceroId: string, newName: string): Promise<void> {
+  // 1. Query linked budgets
+  const budgetsQuery = query(
+    collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),
+    where('entityId', '==', terceroId),
+  );
+  const budgetSnapshots = await getDocs(budgetsQuery);
+
+  // 2. Query linked ejecuciones
+  const ejecucionesQuery = query(
+    collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
+    where('entityId', '==', terceroId),
+  );
+  const ejecucionSnapshots = await getDocs(ejecucionesQuery);
+
+  const totalOps = budgetSnapshots.size + ejecucionSnapshots.size;
+  if (totalOps === 0) return;
+
+  if (totalOps > 500) {
+    console.warn(`cascadeTerceroName: ${totalOps} docs > 500, truncating to first 500`);
+  }
+
+  // 3. Build WriteBatch (max 500)
+  const batch = writeBatch(db);
+  const batchSize = Math.min(totalOps, 500);
+  const allDocs = [...budgetSnapshots.docs, ...ejecucionSnapshots.docs].slice(0, batchSize);
+
+  for (const docSnapshot of allDocs) {
+    batch.update(docSnapshot.ref, { entityName: newName });
+  }
+
+  await batch.commit();
+}
+
 export async function updateTercero(
   terceroId: string,
   data: Record<string, any>,
+  companyId?: string,
 ): Promise<void> {
   await updateDoc(doc(db, TERCEROS_COLLECTION, terceroId), { ...data, updatedAt: serverTimestamp() });
+  if (data.name && companyId) {
+    await cascadeTerceroName(companyId, terceroId, data.name);
+  }
 }
 
 /**
@@ -601,11 +645,12 @@ export async function updateTercero(
 export async function batchUpdateTerceros(
   ids: string[],
   data: Record<string, any>,
+  companyId?: string,
 ): Promise<{ successCount: number; failedIds: string[] }> {
   if (ids.length === 0) return { successCount: 0, failedIds: [] };
 
   const results = await Promise.allSettled(
-    ids.map((id) => updateTercero(id, data)),
+    ids.map((id) => updateTercero(id, data, companyId)),
   );
 
   const failedIds: string[] = [];
@@ -614,6 +659,16 @@ export async function batchUpdateTerceros(
       failedIds.push(ids[i]);
     }
   });
+
+  // Cascade name changes for successful IDs
+  if (data.name && companyId) {
+    const successfulIds = ids.filter((_, i) => results[i].status === 'fulfilled');
+    if (successfulIds.length > 0) {
+      await Promise.allSettled(
+        successfulIds.map((id) => cascadeTerceroName(companyId, id, data.name)),
+      );
+    }
+  }
 
   return {
     successCount: ids.length - failedIds.length,
