@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, ExternalLink, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { DocumentoMedio, TipoDocumentoMedio } from '@/lib/types';
 import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { MultiSearchableSelect } from '@/components/forms/SearchableSelect';
 import { PanelHeader } from '@/components/shared/PanelHeader';
+import { PERIODO_SIN_ASIGNAR, TIPO_DOCUMENTO_DEFAULT } from '@/lib/schemas';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export interface DocumentoSidepanelProps {
   onBack: () => void;
   canGoBack: boolean;
   saving?: boolean;
+  onDocumentoUpdated?: (docId: string, periodo: string, tipoDocumento: TipoDocumentoMedio) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────
@@ -59,18 +61,51 @@ export function DocumentoSidepanel({
   onBack,
   canGoBack,
   saving: externalSaving = false,
+  onDocumentoUpdated,
 }: DocumentoSidepanelProps) {
-  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoMedio | ''>('');
-  const [periodo, setPeriodo] = useState('');
-  const [terceroId, setTerceroId] = useState('');
-  const [projectId, setProjectId] = useState('');
-  const [ejecucionIds, setEjecucionIds] = useState<string[]>([]);
-  const [nit, setNit] = useState('');
-  const [proveedorTexto, setProveedorTexto] = useState('');
-  const [montoTotal, setMontoTotal] = useState('');
-  const [fechaDocumento, setFechaDocumento] = useState('');
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoMedio | ''>(
+    documento.tipoDocumento ?? '',
+  );
+  const [periodo, setPeriodo] = useState(
+    documento.periodo ?? '',
+  );
+  const [terceroId, setTerceroId] = useState(
+    documento.terceroId ?? '',
+  );
+  const [projectId, setProjectId] = useState(
+    documento.projectId ?? '',
+  );
+  const [ejecucionIds, setEjecucionIds] = useState<string[]>(
+    documento.ejecucionIds ?? [],
+  );
+  const [nit, setNit] = useState(
+    documento.metadata?.nit ?? '',
+  );
+  const [proveedorTexto, setProveedorTexto] = useState(
+    documento.metadata?.proveedorTexto ?? '',
+  );
+  const [montoTotal, setMontoTotal] = useState(
+    documento.metadata?.montoTotal?.toString() ?? '',
+  );
+  const [fechaDocumento, setFechaDocumento] = useState(
+    documento.metadata?.fechaDocumento ?? '',
+  );
   const [error, setError] = useState('');
   const [internalSaving, setInternalSaving] = useState(false);
+
+  // Re-initialize fields when documento.id changes (e.g., another document clicked)
+  useEffect(() => {
+    setTipoDocumento(documento.tipoDocumento ?? '');
+    setPeriodo(documento.periodo ?? '');
+    setTerceroId(documento.terceroId ?? '');
+    setProjectId(documento.projectId ?? '');
+    setEjecucionIds(documento.ejecucionIds ?? []);
+    setNit(documento.metadata?.nit ?? '');
+    setProveedorTexto(documento.metadata?.proveedorTexto ?? '');
+    setMontoTotal(documento.metadata?.montoTotal?.toString() ?? '');
+    setFechaDocumento(documento.metadata?.fechaDocumento ?? '');
+    setError('');
+  }, [documento.id]);
 
   const saving = internalSaving || externalSaving;
 
@@ -82,13 +117,17 @@ export function DocumentoSidepanel({
       setError('Debe seleccionar un tipo de documento');
       return;
     }
-    if (!periodo || !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) {
+    if (!periodo || (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo) && periodo !== PERIODO_SIN_ASIGNAR)) {
       setError('Debe ingresar un período (YYYY-MM)');
       return;
     }
 
     setInternalSaving(true);
     try {
+      // Apply defaults before save
+      const effectivePeriodo = periodo || PERIODO_SIN_ASIGNAR;
+      const effectiveTipoDocumento = tipoDocumento || TIPO_DOCUMENTO_DEFAULT;
+
       const metadata: Record<string, unknown> = {};
       if (nit) metadata.nit = nit;
       if (proveedorTexto) metadata.proveedorTexto = proveedorTexto;
@@ -96,13 +135,16 @@ export function DocumentoSidepanel({
       if (fechaDocumento) metadata.fechaDocumento = fechaDocumento;
 
       await onSave({
-        tipoDocumento: tipoDocumento as TipoDocumentoMedio,
-        periodo,
+        tipoDocumento: effectiveTipoDocumento,
+        periodo: effectivePeriodo,
         terceroId,
         projectId: projectId || undefined,
         ejecucionIds,
         metadata: Object.keys(metadata).length > 0 ? metadata as any : undefined,
       });
+
+      // Callback after successful save
+      onDocumentoUpdated?.(documento.id, effectivePeriodo, effectiveTipoDocumento);
     } catch {
       setError('Error al guardar. Intentá de nuevo.');
     } finally {
