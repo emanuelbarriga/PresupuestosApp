@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { DocumentoMedio, NavScreen, TipoDocumentoMedio } from '@/lib/types';
 import { subscribeDocumentos, createDocumento } from '@/lib/mediaService';
 import { uploadFileWithTask, validateFile, generateMediaFilePath } from '@/lib/fileUpload';
+import { Inbox, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -21,6 +22,13 @@ interface UploadTask {
 interface MediaPageProps {
   companyId: string;
   onNavigate?: (screen: NavScreen) => void;
+}
+
+function formatCurrentMonth(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -53,6 +61,11 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
     );
     return () => unsub();
   }, [companyId]);
+
+  // Hydration fix: set current month only on client (avoids SSR/CSR mismatch)
+  useEffect(() => {
+    setSelectedPeriod(formatCurrentMonth());
+  }, []);
 
   // Elegant disappearance callback — called after saving a document from Archivador
   // Checks if the updated values still match the current filter; if not, shows toast
@@ -240,146 +253,178 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
     // For MVP, error tasks allow manual re-selection
   }, []);
 
-  const activeUploads = uploadTasks.filter((t) => t.status === 'subiendo');
-
   return (
     <>
       <header className="h-14 bg-white border-b border-slate-200 px-6 flex items-center shrink-0">
         <h1 className="text-lg font-semibold text-slate-800">Medios / Archivos</h1>
       </header>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Dropzone */}
-        <div
-          data-testid="dropzone"
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
-            dropActive
-              ? 'border-emerald-400 bg-emerald-50'
-              : 'border-slate-300 hover:border-slate-400 bg-white'
+      <div className="border-b border-slate-200 px-6 flex gap-0 bg-white shrink-0">
+        <button
+          className={`px-4 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 ${
+            activeTab === 'inbox' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
           }`}
-          onDragOver={(e) => { e.preventDefault(); setDropActive(true); }}
-          onDragLeave={() => setDropActive(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => setActiveTab('inbox')}
         >
-          <p className="text-sm text-slate-600 font-medium">
-            Arrastrá archivos aquí
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            o hacé clic para seleccionar
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            PDF, JPG, PNG — máximo 5MB por archivo
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.jpg,.jpeg,.png,.webp"
-            className="hidden"
-            onChange={handleFileInput}
-          />
-        </div>
+          <Inbox size={16} />
+          Inbox
+          {activeTab === 'inbox' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+        <button
+          className={`px-4 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 ${
+            activeTab === 'archivador' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('archivador')}
+        >
+          <Archive size={16} />
+          Archivador
+          {activeTab === 'archivador' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {activeTab === 'inbox' ? (
+          <>
+            {/* Dropzone */}
+            <div
+              data-testid="dropzone"
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                dropActive
+                  ? 'border-emerald-400 bg-emerald-50'
+                  : 'border-slate-300 hover:border-slate-400 bg-white'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDropActive(true); }}
+              onDragLeave={() => setDropActive(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <p className="text-sm text-slate-600 font-medium">
+                Arrastrá archivos aquí
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                o hacé clic para seleccionar
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                PDF, JPG, PNG — máximo 5MB por archivo
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={handleFileInput}
+              />
+            </div>
 
-        {/* Upload progress cards */}
-        {uploadTasks.filter(t => t.status !== 'cancelado').length > 0 && (
-          <div className="space-y-2" data-testid="upload-progress">
-            {uploadTasks
-              .filter(t => t.status !== 'cancelado')
-              .map((task) => (
-              <div
-                key={task.id}
-                className={`bg-white border rounded-lg p-3 flex items-center gap-3 ${
-                  task.status === 'error' ? 'border-red-200' : 'border-slate-200'
-                }`}
-              >
-                <span className="text-xs font-medium text-slate-700 truncate flex-1">
-                  {task.fileName}
-                </span>
-                {task.status === 'subiendo' && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all"
-                        style={{ width: `${task.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-slate-500 w-8 text-right">
-                      {Math.round(task.progress)}%
+            {/* Upload progress cards */}
+            {uploadTasks.filter(t => t.status !== 'cancelado').length > 0 && (
+              <div className="space-y-2" data-testid="upload-progress">
+                {uploadTasks
+                  .filter(t => t.status !== 'cancelado')
+                  .map((task) => (
+                  <div
+                    key={task.id}
+                    className={`bg-white border rounded-lg p-3 flex items-center gap-3 ${
+                      task.status === 'error' ? 'border-red-200' : 'border-slate-200'
+                    }`}
+                  >
+                    <span className="text-xs font-medium text-slate-700 truncate flex-1">
+                      {task.fileName}
                     </span>
-                    <button
-                      onClick={() => cancelUpload(task.id)}
-                      className="text-slate-400 hover:text-red-500 text-xs"
-                      title="Cancelar"
-                    >
-                      ✕
-                    </button>
+                    {task.status === 'subiendo' && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all"
+                            style={{ width: `${task.progress}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500 w-8 text-right">
+                          {Math.round(task.progress)}%
+                        </span>
+                        <button
+                          onClick={() => cancelUpload(task.id)}
+                          className="text-slate-400 hover:text-red-500 text-xs"
+                          title="Cancelar"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                    {task.status === 'exito' && (
+                      <span className="text-xs text-emerald-600 font-medium">✓ Subido</span>
+                    )}
+                    {task.status === 'error' && (
+                      <span className="flex items-center gap-2">
+                        <span className="text-xs text-red-600">Error</span>
+                        <button
+                          onClick={() => retryUpload(task)}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Reintentar
+                        </button>
+                      </span>
+                    )}
                   </div>
-                )}
-                {task.status === 'exito' && (
-                  <span className="text-xs text-emerald-600 font-medium">✓ Subido</span>
-                )}
-                {task.status === 'error' && (
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs text-red-600">Error</span>
-                    <button
-                      onClick={() => retryUpload(task)}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Reintentar
-                    </button>
-                  </span>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Inbox grid header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">
-            Bandeja de entrada
-          </h2>
-          <span className="text-xs text-slate-400">
-            {documentos.length} documento{documentos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
+            {/* Inbox grid header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-700">
+                Bandeja de entrada
+              </h2>
+              <span className="text-xs text-slate-400">
+                {documentos.length} documento{documentos.length !== 1 ? 's' : ''}
+              </span>
+            </div>
 
-        {/* Document grid */}
-        {documentos.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-            <p className="text-sm text-slate-500">
-              No hay documentos sin clasificar
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Subí documentos usando el área de arriba
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {documentos.map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() => onNavigate?.({
-                  type: 'entity',
-                  entity: 'documento',
-                  mode: 'view',
-                  record: doc,
-                })}
-                className="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-emerald-300 hover:shadow-sm transition-all"
-              >
-                <p className="text-sm font-medium text-slate-800 truncate">
-                  {doc.fileName}
+            {/* Document grid */}
+            {documentos.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
+                <p className="text-sm text-slate-500">
+                  No hay documentos sin clasificar
                 </p>
-                <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                  <span>{formatFileSize(doc.size)}</span>
-                  <span>•</span>
-                  <span>{formatDate(doc.uploadedAt)}</span>
-                </div>
-                <span className="inline-block mt-2 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                  por clasificar
-                </span>
-              </button>
-            ))}
+                <p className="text-xs text-slate-400 mt-1">
+                  Subí documentos usando el área de arriba
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {documentos.map((doc) => (
+                  <button
+                    key={doc.id}
+                    onClick={() => onNavigate?.({
+                      type: 'entity',
+                      entity: 'documento',
+                      mode: 'view',
+                      record: doc,
+                    })}
+                    className="bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-emerald-300 hover:shadow-sm transition-all"
+                  >
+                    <p className="text-sm font-medium text-slate-800 truncate">
+                      {doc.fileName}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
+                      <span>{formatFileSize(doc.size)}</span>
+                      <span>•</span>
+                      <span>{formatDate(doc.uploadedAt)}</span>
+                    </div>
+                    <span className="inline-block mt-2 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                      por clasificar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
+            <p className="text-sm text-slate-500">Archivador contable (próximamente)</p>
           </div>
         )}
       </div>
