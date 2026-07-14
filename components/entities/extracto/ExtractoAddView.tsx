@@ -83,15 +83,14 @@ export function ExtractoAddView({
       const copy2 = buffer.slice(0);
       lastBufferRef.current = new Uint8Array(buffer.slice(0));
 
-      const texto = await extractPdfTextFromBuffer(
+      const { rowLayout } = await extractPdfTextFromBuffer(
         copy1,
         (current, total) => {
           setProgress({ stage: 'extrayendo', current, total });
         },
-        'row-layout',
       );
 
-      const bancoDetectado = bancoForzado ?? detectarBanco(texto);
+      const bancoDetectado = bancoForzado ?? detectarBanco(rowLayout);
 
       if (bancoDetectado === 'No detectado') {
         setError(

@@ -602,7 +602,7 @@ export function Datos({
     if (filterTipo) data = data.filter(e => e.tipo === filterTipo);
     if (filterYear) data = data.filter(e => e.fechaEjecutado?.startsWith(filterYear));
     if (filterMonth) {
-      const monthIdx = MONTHS.indexOf(filterMonth) + 1;
+      const monthIdx = MONTHS.indexOf(filterMonth as Month) + 1;
       const mm = monthIdx.toString().padStart(2, '0');
       data = data.filter(e => e.fechaEjecutado?.substring(5, 7) === mm);
     }

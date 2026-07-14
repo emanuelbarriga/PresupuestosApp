@@ -58,6 +58,7 @@ function viewFromSegments(segments?: string[]): { view: ViewType; tab?: string }
   if (main === 'proveedores') return { view: 'Proveedores' };
   if (main === 'clientes') return { view: 'Clientes' };
   if (main === 'extractos') return { view: 'Extractos' };
+  if (main === 'media') return { view: 'Media' };
   if (main === 'estado-resultados') return { view: 'EstadoResultados' };
   if (main === 'configuracion') return { view: 'Configuración' };
   return { view: 'Dashboard' };
@@ -547,7 +548,7 @@ export default function CompanyPage({ params }: Props) {
   };
 
   const handleEntitySubmit = useCallback(async (action: {
-    mode: 'create' | 'edit' | 'archive';
+    mode: 'create' | 'edit' | 'archive' | 'delete';
     entity: EntityType;
     record?: any;
     data: Record<string, any>;
@@ -569,7 +570,17 @@ export default function CompanyPage({ params }: Props) {
       } else if (action.entity === 'ejecucion' && action.record?.id) {
         await updateEjecucion(companyId, action.record.id, { archivado: action.data.archivado });
       }
-      popScreen();
+      return;
+    }
+
+    if (action.mode === 'delete') {
+      if (action.entity === 'budget' && action.record?.id) {
+        await deleteBudget(companyId, action.record.id);
+        toast.success('Presupuesto eliminado');
+      } else if (action.entity === 'ejecucion' && action.record?.id) {
+        await deleteEjecucion(companyId, action.record.id);
+        toast.success('Ejecución eliminada');
+      }
       return;
     }
 
@@ -625,7 +636,7 @@ export default function CompanyPage({ params }: Props) {
             {activeView === 'Extractos' && (
               <Extractos companyId={companyId} onNavigate={(screen) => pushScreen(screen)} />
             )}
-            {['Proyectos', 'Proveedores', 'Clientes'].includes(activeView) && (
+            {['Proyectos', 'Proveedores', 'Clientes', 'Media'].includes(activeView) && (
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (

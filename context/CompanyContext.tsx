@@ -181,7 +181,7 @@ export function CompanyProvider({
   }, [companyId, userId, isCompanyRoute, membershipState, membershipChecked]);
 
   // Determinar el userRole efectivo
-  const effectiveRole = membershipUserRole ?? (null as UserRole | null);
+  const effectiveRole = (membershipUserRole as UserRole | null);
 
   const handleSetCompany = (id: string) => {
     const company = companies.find((c) => c.id === id);

@@ -99,8 +99,8 @@ vi.mock('@/components/upload/ComprobanteUploader', () => ({
 // ─── Test data ──────────────────────────────────────────────────────────────
 
 const mockBudgets: Budget[] = [
-  { id: 'b1', descripcion: 'Honorarios', projectId: 'p1', projectName: 'Proyecto A', entityId: '', entityName: '', entityType: 'client', tipo: 'egreso', montoPresupuestado: 1000000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo' },
-  { id: 'b2', descripcion: 'Materiales', projectId: 'p1', projectName: 'Proyecto A', entityId: '', entityName: '', entityType: 'client', tipo: 'egreso', montoPresupuestado: 500000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo' },
+  { id: 'b1', descripcion: 'Honorarios', projectId: 'p1', projectName: 'Proyecto A', entityId: '', entityName: '', entityType: 'client', tipo: 'ingreso', montoPresupuestado: 1000000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo' },
+  { id: 'b2', descripcion: 'Materiales', projectId: 'p1', projectName: 'Proyecto A', entityId: '', entityName: '', entityType: 'client', tipo: 'ingreso', montoPresupuestado: 500000, mesPresupuestado: 'Enero', fechaPresupuestado: '2026-01', estadoProyecto: 'Activo' },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -334,8 +334,8 @@ describe('EjecucionForm — Comprobante pipeline', () => {
         const options = Array.from(select.querySelectorAll('option'));
         // First option is the placeholder, then 2 budgets
         expect(options.length).toBe(3);
-        expect(options[1].textContent).toContain('Honorarios');
-        expect(options[2].textContent).toContain('Materiales');
+        expect(options[1].textContent).toContain('Materiales');
+        expect(options[2].textContent).toContain('Honorarios');
       }
     });
   });

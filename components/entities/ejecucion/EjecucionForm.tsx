@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Project, Budget, CuentaBancaria, SettingsCategorias, Comprobante } from '@/lib/types';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import type { Project, Budget, CuentaBancaria, SettingsCategorias, Comprobante, Month } from '@/lib/types';
+import { MONTHS } from '@/lib/types';
 import { FormInput } from '@/components/forms/FormInput';
 import { SearchableSelect } from '@/components/forms/SearchableSelect';
 import { TipoSwitch } from '@/components/forms/TipoSwitch';
@@ -136,6 +137,28 @@ export function EjecucionForm({
   const ejecucionId = mode === 'edit' ? record?.id : undefined;
 
   const safeProjects = projects || [];
+
+  // Filter + sort budgets for smarter linking
+  const filteredBudgets = useMemo(() => {
+    const monto = Number(fields.montoEjecutado) || 0;
+    const ejecMonth = fields.fechaEjecutado
+      ? new Date(fields.fechaEjecutado + 'T12:00:00').getMonth()
+      : -1;
+
+    return allBudgets
+      .filter(b => b.tipo === fields.tipo)
+      .filter(b => !fields.projectId || b.projectId === fields.projectId)
+      .filter(b => !fields.entityId || b.entityId === fields.entityId)
+      .map(b => {
+        const montoDiff = Math.abs(b.montoPresupuestado - monto);
+        const monthDiff = ejecMonth >= 0
+          ? Math.abs(MONTHS.indexOf(b.mesPresupuestado) - ejecMonth)
+          : 0;
+        return { ...b, _score: montoDiff * 0.6 + monthDiff * 0.4 };
+      })
+      .sort((a, b) => a._score - b._score);
+  }, [allBudgets, fields.tipo, fields.projectId, fields.entityId, fields.montoEjecutado, fields.fechaEjecutado]);
+
   const set = (k: keyof EjecucionFields, v: string) => setFields(prev => ({ ...prev, [k]: v }));
 
   useEffect(() => {
@@ -332,13 +355,13 @@ export function EjecucionForm({
           <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 flex items-center gap-1.5">
             <Link2 size={12} /> Vincular presupuestos (opcional)
           </p>
-          <SearchableSelect label="" value="" onChange={v => {
+           <SearchableSelect label="" value="" onChange={v => {
             if (!v) return;
-            const b = allBudgets.find(b => b.id === v);
+            const b = filteredBudgets.find(b => b.id === v);
             if (b && !selectedBudgetLinks.some(l => l.budgetId === b.id)) {
               setSelectedBudgetLinks(prev => [...prev, { budgetId: b.id, budgetName: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}`, monto: '' }]);
             }
-          }} options={allBudgets.filter(b => !selectedBudgetLinks.some(l => l.budgetId === b.id)).map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto para vincular..." />
+          }} options={filteredBudgets.filter(b => !selectedBudgetLinks.some(l => l.budgetId === b.id)).map(b => ({ value: b.id, label: `${b.descripcion} (${formatCurrency(b.montoPresupuestado)}) - ${b.projectName}` }))} placeholder="Buscar presupuesto para vincular..." />
           {selectedBudgetLinks.map((link, idx) => (
             <div key={link.budgetId} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2.5 mt-2 border border-slate-200">
               <div className="flex-1 min-w-0">

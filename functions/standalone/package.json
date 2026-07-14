@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "clean": "next clean",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "emulators": "firebase emulators:start --project planningsaman-3cf7e --only auth,firestore",
     "seed": "FIRESTORE_EMULATOR_HOST=localhost:8081 npx tsx e2e/seed/seed-emulator.ts",
     "test:e2e": "npm run emulators & sleep 5 && npm run seed && NEXT_PUBLIC_EMULATOR_HOST=localhost NEXT_PUBLIC_EMULATOR_PORTS=8081,9099 next dev & sleep 8 && npx playwright test --config e2e/playwright.config.ts; kill $(lsof -ti:3000 -ti:8081 -ti:9099 -ti:4000) 2>/dev/null; true",
@@ -30,7 +31,9 @@
     "postcss": "^8.5.6",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "react-hot-toast": "^2.6.0"
+    "react-hot-toast": "^2.6.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
@@ -44,6 +47,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.9",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",
     "firebase-tools": "^15.0.0",

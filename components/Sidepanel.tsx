@@ -28,7 +28,7 @@ interface SidepanelProps {
   activeView?: ViewType;
   onClose: () => void;
   onSubmit: (action: {
-    mode: 'create' | 'edit' | 'archive';
+    mode: 'create' | 'edit' | 'archive' | 'delete';
     entity: EntityType;
     record?: any;
     data: Record<string, any>;

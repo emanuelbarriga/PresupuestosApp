@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import type { Budget, Ejecucion, NavScreen } from '@/lib/types';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
-import { FileText, Plus, Save, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Play, Archive, Trash2, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { groupByEntity } from '@/components/utils/groupByEntity';
 import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
@@ -70,10 +70,10 @@ export interface EntityListProps {
   onBack?: () => void;
   canGoBack?: boolean;
   onSubmit: (action: {
-    mode: 'archive';
+    mode: 'archive' | 'delete';
     entity: 'budget' | 'ejecucion';
     record: any;
-    data: { archivado: boolean };
+    data: { archivado: boolean } | Record<string, never>;
   }) => Promise<void>;
 }
 
@@ -93,7 +93,7 @@ export function EntityList({
   canGoBack = false,
   onSubmit,
 }: EntityListProps) {
-  const [archiveConfirm, setArchiveConfirm] = useState<{ type: 'budget' | 'ejecucion'; id: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ action: 'archive' | 'delete'; type: 'budget' | 'ejecucion'; id: string; archived?: boolean } | null>(null);
 
   const handleArchive = async (type: 'budget' | 'ejecucion', record: Budget | Ejecucion, archived: boolean) => {
     try {
@@ -101,7 +101,16 @@ export function EntityList({
     } catch {
       // Errors handled upstream by the page.tsx handler
     }
-    setArchiveConfirm(null);
+    setConfirmAction(null);
+  };
+
+  const handleDelete = async (type: 'budget' | 'ejecucion', record: Budget | Ejecucion) => {
+    try {
+      await onSubmit({ mode: 'delete', entity: type, record, data: {} });
+    } catch {
+      // Errors handled upstream
+    }
+    setConfirmAction(null);
   };
 
   return (
@@ -280,39 +289,19 @@ export function EntityList({
                 <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(b.montoPresupuestado)}</p>
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <button
-                  onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'view', record: b })}
-                  className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors"
-                >
-                  <FileText size={11} /> Ver
+                <button onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'view', record: b })}
+                  className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                  <Eye size={11} /> Ver
                 </button>
-                <button
-                  onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'edit', record: b })}
-                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
-                >
-                  <Save size={11} /> Editar
+                <button onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'edit', record: b })}
+                  className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                  <Pencil size={11} /> Editar
                 </button>
-                <button
-                  onClick={() =>
-                    onNavigate({
-                      type: 'entity',
-                      entity: 'ejecucion',
-                      mode: 'create',
-                      defaults: {
-                        projectId: b.projectId || '',
-                        projectName: b.projectName || '',
-                        entityId: b.entityId || '',
-                        entityName: b.entityName || '',
-                        entityType: b.entityType || 'client',
-                        tipo: b.tipo,
-                      },
-                    })
-                  }
-                  className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors"
-                >
-                  <Plus size={11} /> Ejecutar
+                <button onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'create', defaults: { projectId: b.projectId || '', projectName: b.projectName || '', entityId: b.entityId || '', entityName: b.entityName || '', entityType: b.entityType || 'client', tipo: b.tipo } })}
+                  className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors">
+                  <Play size={11} /> Ejecutar
                 </button>
-                {renderArchiveActions('budget', b)}
+                {renderRowActions('budget', b)}
               </div>
             </div>
           ))}
@@ -349,19 +338,15 @@ export function EntityList({
                   <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <button
-                    onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'view', record: e })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors"
-                  >
-                    <FileText size={11} /> Ver
+                  <button onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'view', record: e })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">
+                    <Eye size={11} /> Ver
                   </button>
-                  <button
-                    onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'edit', record: e })}
-                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
-                  >
-                    <Save size={11} /> Editar
+                  <button onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'edit', record: e })}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors">
+                    <Pencil size={11} /> Editar
                   </button>
-                  {renderArchiveActions('ejecucion', e)}
+                  {renderRowActions('ejecucion', e)}
                 </div>
                 {/* Comprobantes inline */}
                 {cCount > 0 && (
@@ -377,31 +362,53 @@ export function EntityList({
     ));
   }
 
-  function renderArchiveActions(type: 'budget' | 'ejecucion', record: Budget | Ejecucion) {
-    const isConfirming = archiveConfirm?.type === type && archiveConfirm?.id === record.id;
-    return isConfirming ? (
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => handleArchive(type, record, !(record as any).archivado)}
-          className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors"
-        >
-          Confirmar
+  function renderRowActions(type: 'budget' | 'ejecucion', record: Budget | Ejecucion) {
+    const isArchiving = confirmAction?.action === 'archive' && confirmAction?.type === type && confirmAction?.id === record.id;
+    const isDeleting = confirmAction?.action === 'delete' && confirmAction?.type === type && confirmAction?.id === record.id;
+
+    if (isArchiving) {
+      return (
+        <div className="flex items-center gap-1">
+          <button onClick={() => handleArchive(type, record, !(record as any).archivado)}
+            className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded transition-colors">
+            Confirmar
+          </button>
+          <button onClick={() => setConfirmAction(null)}
+            className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+            Cancelar
+          </button>
+        </div>
+      );
+    }
+
+    if (isDeleting) {
+      return (
+        <div className="flex items-center gap-1">
+          <button onClick={() => handleDelete(type, record)}
+            className="flex items-center gap-1 text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded transition-colors">
+            Confirmar
+          </button>
+          <button onClick={() => setConfirmAction(null)}
+            className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1">
+            Cancelar
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setConfirmAction({ action: 'archive', type, id: record.id, archived: !(record as any).archivado })}
+          className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 px-2 py-1 rounded transition-colors">
+          <Archive size={11} />
+          {(record as any).archivado ? 'Desarchivar' : 'Archivar'}
         </button>
-        <button
-          onClick={() => setArchiveConfirm(null)}
-          className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-1"
-        >
-          Cancelar
+        <button onClick={() => setConfirmAction({ action: 'delete', type, id: record.id })}
+          className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors">
+          <Trash2 size={11} />
+          Eliminar
         </button>
       </div>
-    ) : (
-      <button
-        onClick={() => setArchiveConfirm({ type, id: record.id })}
-        className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-2 py-1 rounded transition-colors"
-      >
-        {(record as any).archivado ? <Save size={11} /> : <Trash2 size={11} />}
-        {(record as any).archivado ? 'Desarchivar' : 'Archivar'}
-      </button>
     );
   }
 }

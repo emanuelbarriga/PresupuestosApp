@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { ViewType } from '@/lib/types';
 import {
   LayoutDashboard, FolderKanban, Users, Building2, Database,
-  FileText, TrendingUp, Settings, LogOut,
+  FileText, TrendingUp, Settings, LogOut, Camera,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCompanyStore } from '@/stores/companyStore';
@@ -22,6 +22,7 @@ const NAV_ITEMS: { id: ViewType; label: string; icon: any }[] = [
   { id: 'Proveedores', label: 'Proveedores', icon: Building2 },
   { id: 'Clientes', label: 'Clientes', icon: Users },
   { id: 'Extractos', label: 'Extractos', icon: FileText },
+  { id: 'Media', label: 'Media', icon: Camera },
   { id: 'Datos', label: 'Datos', icon: Database },
 ];
 
@@ -47,6 +48,7 @@ export function Sidebar({ activeView, basePath }: SidebarProps) {
     const segment = item.id === 'Dashboard' ? 'dashboard'
       : item.id === 'EstadoResultados' ? 'estado-resultados'
       : item.id === 'Configuración' ? 'configuracion'
+      : item.id === 'Media' ? 'media'
       : item.id.toLowerCase();
     return `${basePath}/${segment}`;
   };

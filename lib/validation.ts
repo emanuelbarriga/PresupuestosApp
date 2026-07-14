@@ -8,7 +8,7 @@
  */
 export function validateBudgetLinkSum(
   montoEjecutado: number,
-  links: Array<{ monto: number | string }>,
+  links: Array<{ monto: number | string | null | undefined }>,
 ): boolean {
   if (links.length === 0) return true;
   const totalLinks = links.reduce((s, l) => s + (Number(l.monto) || 0), 0);

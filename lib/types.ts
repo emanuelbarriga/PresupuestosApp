@@ -215,7 +215,7 @@ export interface Invitacion {
   acceptedBy?: string;       // who accepted
 }
 
-export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados';
+export type ViewType = 'Dashboard' | 'Proyectos' | 'Proveedores' | 'Clientes' | 'Datos' | 'Extractos' | 'Configuración' | 'EstadoResultados' | 'Media';
 
 export interface SidepanelData {
   title: string;
