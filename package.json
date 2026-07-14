@@ -16,10 +16,11 @@
     "test:e2e": "npm run emulators & sleep 5 && npm run seed && NEXT_PUBLIC_EMULATOR_HOST=localhost NEXT_PUBLIC_EMULATOR_PORTS=8081,9099 next dev & sleep 8 && npx playwright test --config e2e/playwright.config.ts; kill $(lsof -ti:3000 -ti:8081 -ti:9099 -ti:4000) 2>/dev/null; true",
     "test:e2e:run": "npx playwright test --config e2e/playwright.config.ts",
     "test:e2e:report": "npx playwright show-report e2e-report",
-    "deploy": "npm run build && npm run deploy:prepare && npm run deploy:functions && npm run deploy:hosting",
+    "deploy": "npm run build && npm run deploy:prepare && npm run deploy:functions && npm run deploy:hosting && npm run deploy:rules",
     "deploy:prepare": "rm -rf functions/standalone && cp -r .next/standalone functions/standalone && cp -r .next/static functions/standalone/.next/static && cp -r public functions/standalone/ 2>/dev/null; true",
     "deploy:functions": "cd functions && npm install",
-    "deploy:hosting": "firebase deploy --only hosting,functions"
+    "deploy:hosting": "firebase deploy --only hosting,functions",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage"
   },
   "dependencies": {
     "autoprefixer": "^10.4.21",
