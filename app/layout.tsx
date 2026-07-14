@@ -7,6 +7,9 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'Gestor de Presupuestos',
   description: 'Gestión, control y visualización de ingresos y egresos presupuestados vs. ejecutados',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
