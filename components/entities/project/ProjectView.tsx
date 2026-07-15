@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import type { Project, Budget, Ejecucion, SettingsCategorias, NavScreen, EntityType } from '@/lib/types';
 import { subscribeCompanySettings, subscribeBudgets, subscribeEjecuciones } from '@/lib/firestore';
 import { DF } from '@/components/shared/DF';
-import { Save, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Save, ChevronDown, ChevronRight, AlertTriangle, FileText } from 'lucide-react';
 import clsx from 'clsx';
 import { groupByEntity } from '@/components/utils/groupByEntity';
 import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
+import { SoportesTab } from '@/components/entities/shared/SoportesTab';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
 
@@ -34,6 +35,7 @@ export function ProjectView({ project, projects, companyId, settingsData, year, 
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [ejecuciones, setEjecuciones] = useState<Ejecucion[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'detalle' | 'soportes'>('detalle');
   const projectRef = useRef(project.id);
 
   // Subscribe to company settings (for state list)
@@ -111,7 +113,7 @@ export function ProjectView({ project, projects, companyId, settingsData, year, 
 
   return (
     <>
-      {/* Banner proyecto fantasma */}
+      {/* Banner proyecto fantasma — visible on both tabs */}
       {isInferred && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
           <div className="flex items-start gap-2">
@@ -123,107 +125,147 @@ export function ProjectView({ project, projects, companyId, settingsData, year, 
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
-        {!isInferred && project.id && (
-          <button onClick={() => onNavigate({ type: 'entity', entity: 'project', mode: 'edit', record: project })}
-            className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
-            <Save size={12} /> Editar
-          </button>
-        )}
+
+      {/* Tab bar */}
+      <div className="border-b border-slate-200 flex gap-0 bg-white shrink-0 -mx-6 px-6">
+        <button
+          className={`px-4 py-2.5 text-xs font-medium transition-colors relative ${
+            activeTab === 'detalle' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('detalle')}
+        >
+          Detalle
+          {activeTab === 'detalle' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+        <button
+          className={`px-4 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 ${
+            activeTab === 'soportes' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('soportes')}
+        >
+          <FileText size={14} />
+          Soportes
+          {activeTab === 'soportes' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
       </div>
-      <DF label="Sigla" v={project.name} />
-      {project.descripcion && <DF label="Nombre completo" v={project.descripcion} />}
-      <DF label="Cliente" v={project.clientName || '—'} />
-      {project.tipoProyectos && <DF label="Tipo de proyecto" v={project.tipoProyectos} />}
-      {project.cantidad ? <DF label="Cantidad" v={String(project.cantidad) + (project.unidades ? ` ${project.unidades}` : '')} /> : null}
-      <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Estado</p>
-        {isInferred ? (
-          <div className="space-y-2">
-            <select disabled value={selectedState} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-slate-50 text-slate-400 cursor-not-allowed">
-              {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <p className="text-[10px] text-amber-600 font-medium">Proyecto inferido — aún no tiene documento.</p>
-            <button onClick={handleCreateProject} disabled={saving} className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg py-2 text-xs font-bold transition-colors">
-              {saving ? 'Creando...' : 'Crear proyecto'}
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <select value={selectedState} onChange={e => setSelectedState(e.target.value)}
-              className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
-              {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {hasChanges && (
-              <button onClick={handleSaveState} disabled={saving} aria-label="Guardar estado"
-                className="px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg flex items-center justify-center transition-colors shadow-sm">
-                <Save size={16} />
+
+      {activeTab === 'detalle' ? (
+        <>
+          <div className="flex items-center justify-between mb-2 mt-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Detalle del Proyecto</p>
+            {!isInferred && project.id && (
+              <button onClick={() => onNavigate({ type: 'entity', entity: 'project', mode: 'edit', record: project })}
+                className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                <Save size={12} /> Editar
               </button>
             )}
           </div>
-        )}
-      </div>
-      {project.soloEgresos && (
-        <div className="flex items-center gap-2 mt-3">
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-700 border border-rose-200">Solo egresos</span>
+          <DF label="Sigla" v={project.name} />
+          {project.descripcion && <DF label="Nombre completo" v={project.descripcion} />}
+          <DF label="Cliente" v={project.clientName || '—'} />
+          {project.tipoProyectos && <DF label="Tipo de proyecto" v={project.tipoProyectos} />}
+          {project.cantidad ? <DF label="Cantidad" v={String(project.cantidad) + (project.unidades ? ` ${project.unidades}` : '')} /> : null}
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Estado</p>
+            {isInferred ? (
+              <div className="space-y-2">
+                <select disabled value={selectedState} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-slate-50 text-slate-400 cursor-not-allowed">
+                  {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <p className="text-[10px] text-amber-600 font-medium">Proyecto inferido — aún no tiene documento.</p>
+                <button onClick={handleCreateProject} disabled={saving} className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg py-2 text-xs font-bold transition-colors">
+                  {saving ? 'Creando...' : 'Crear proyecto'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <select value={selectedState} onChange={e => setSelectedState(e.target.value)}
+                  className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white">
+                  {projectStates.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {hasChanges && (
+                  <button onClick={handleSaveState} disabled={saving} aria-label="Guardar estado"
+                    className="px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg flex items-center justify-center transition-colors shadow-sm">
+                    <Save size={16} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {project.soloEgresos && (
+            <div className="flex items-center gap-2 mt-3">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-700 border border-rose-200">Solo egresos</span>
+            </div>
+          )}
+          {(!filterMode || filterMode === 'Presupuestado') && (
+            <>
+              {filterTipo && (
+                <div className="mt-3">
+                  <p className={clsx("text-[10px] font-bold uppercase", filterTipo === 'ingreso' ? "text-emerald-600" : "text-rose-600")}>
+                    {filterTipo === 'ingreso' ? 'Ingresos' : 'Egresos'} Presupuestados
+                  </p>
+                  <p className={clsx("text-sm font-bold mt-0.5", filterTipo === 'ingreso' ? "text-emerald-700" : "text-rose-700")}>
+                    {formatCurrency(budgets.reduce((s, b) => s + b.montoPresupuestado, 0))}
+                  </p>
+                </div>
+              )}
+              <AccordionSection
+                title="Presupuestos"
+                count={budgets.length}
+                emptyLabel="Sin presupuestos"
+                groups={groupByEntity(budgets).map(g => ({ ...g, total: g.items.reduce((sum, b) => sum + b.montoPresupuestado, 0) }))}
+                entityType="budget"
+                onNavigate={onNavigate}
+                expandedGroups={expandedGroups}
+                onToggle={(name) => setExpandedGroups(prev => {
+                  const next = new Set(prev);
+                  if (next.has(name)) next.delete(name); else next.add(name);
+                  return next;
+                })}
+              />
+            </>
+          )}
+          {(!filterMode || filterMode === 'Ejecutado') && (
+            <>
+              {filterTipo && (
+                <div className="mt-3">
+                  <p className={clsx("text-[10px] font-bold uppercase", filterTipo === 'ingreso' ? "text-emerald-600" : "text-rose-600")}>
+                    {filterTipo === 'ingreso' ? 'Ingresos' : 'Egresos'} Ejecutados
+                  </p>
+                  <p className={clsx("text-sm font-bold mt-0.5", filterTipo === 'ingreso' ? "text-emerald-700" : "text-rose-700")}>
+                    {formatCurrency(ejecuciones.reduce((s, e) => s + e.montoEjecutado, 0))}
+                  </p>
+                </div>
+              )}
+              <AccordionSection
+                title="Ejecuciones"
+                count={ejecuciones.length}
+                emptyLabel="Sin ejecuciones"
+                groups={groupByEntity(ejecuciones).map(g => ({ ...g, total: g.items.reduce((sum, e) => sum + e.montoEjecutado, 0) }))}
+                entityType="ejecucion"
+                onNavigate={onNavigate}
+                expandedGroups={expandedGroups}
+                onToggle={(name) => setExpandedGroups(prev => {
+                  const next = new Set(prev);
+                  if (next.has(name)) next.delete(name); else next.add(name);
+                  return next;
+                })}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <div className="mt-4">
+          <SoportesTab
+            companyId={companyId}
+            projectId={project.id}
+            onNavigate={onNavigate}
+          />
         </div>
-      )}
-      {(!filterMode || filterMode === 'Presupuestado') && (
-        <>
-          {filterTipo && (
-            <div className="mt-3">
-              <p className={clsx("text-[10px] font-bold uppercase", filterTipo === 'ingreso' ? "text-emerald-600" : "text-rose-600")}>
-                {filterTipo === 'ingreso' ? 'Ingresos' : 'Egresos'} Presupuestados
-              </p>
-              <p className={clsx("text-sm font-bold mt-0.5", filterTipo === 'ingreso' ? "text-emerald-700" : "text-rose-700")}>
-                {formatCurrency(budgets.reduce((s, b) => s + b.montoPresupuestado, 0))}
-              </p>
-            </div>
-          )}
-          <AccordionSection
-            title="Presupuestos"
-            count={budgets.length}
-            emptyLabel="Sin presupuestos"
-            groups={groupByEntity(budgets).map(g => ({ ...g, total: g.items.reduce((sum, b) => sum + b.montoPresupuestado, 0) }))}
-            entityType="budget"
-            onNavigate={onNavigate}
-            expandedGroups={expandedGroups}
-            onToggle={(name) => setExpandedGroups(prev => {
-              const next = new Set(prev);
-              if (next.has(name)) next.delete(name); else next.add(name);
-              return next;
-            })}
-          />
-        </>
-      )}
-      {(!filterMode || filterMode === 'Ejecutado') && (
-        <>
-          {filterTipo && (
-            <div className="mt-3">
-              <p className={clsx("text-[10px] font-bold uppercase", filterTipo === 'ingreso' ? "text-emerald-600" : "text-rose-600")}>
-                {filterTipo === 'ingreso' ? 'Ingresos' : 'Egresos'} Ejecutados
-              </p>
-              <p className={clsx("text-sm font-bold mt-0.5", filterTipo === 'ingreso' ? "text-emerald-700" : "text-rose-700")}>
-                {formatCurrency(ejecuciones.reduce((s, e) => s + e.montoEjecutado, 0))}
-              </p>
-            </div>
-          )}
-          <AccordionSection
-            title="Ejecuciones"
-            count={ejecuciones.length}
-            emptyLabel="Sin ejecuciones"
-            groups={groupByEntity(ejecuciones).map(g => ({ ...g, total: g.items.reduce((sum, e) => sum + e.montoEjecutado, 0) }))}
-            entityType="ejecucion"
-            onNavigate={onNavigate}
-            expandedGroups={expandedGroups}
-            onToggle={(name) => setExpandedGroups(prev => {
-              const next = new Set(prev);
-              if (next.has(name)) next.delete(name); else next.add(name);
-              return next;
-            })}
-          />
-        </>
       )}
     </>
   );
