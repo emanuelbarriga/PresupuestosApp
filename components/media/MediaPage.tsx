@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { NavScreen, TipoDocumentoMedio } from '@/lib/types';
-import { Inbox, Archive } from 'lucide-react';
+import { Inbox, Archive, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { InboxTab } from './InboxTab';
 import { ArchivadorTab } from './ArchivadorTab';
+import { ExploradorTercerosTab } from './ExploradorTercerosTab';
 
 interface MediaPageProps {
   companyId: string;
@@ -22,7 +23,7 @@ function formatCurrentMonth(): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
-  const [activeTab, setActiveTab] = useState<'inbox' | 'archivador'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'archivador' | 'explorador'>('inbox');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [activeCategory, setActiveCategory] = useState<TipoDocumentoMedio>('factura_venta');
 
@@ -78,11 +79,24 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
             <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
           )}
         </button>
+        <button
+          className={`px-4 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 ${
+            activeTab === 'explorador' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('explorador')}
+        >
+          <Users size={16} />
+          Por Tercero
+          {activeTab === 'explorador' && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'inbox' ? (
+        {activeTab === 'inbox' && (
           <InboxTab companyId={companyId} onNavigate={onNavigate} />
-        ) : (
+        )}
+        {activeTab === 'archivador' && (
           <ArchivadorTab
             companyId={companyId}
             selectedPeriod={selectedPeriod}
@@ -91,6 +105,9 @@ export function MediaPage({ companyId, onNavigate }: MediaPageProps) {
             onCategoryChange={setActiveCategory}
             onNavigate={onNavigate}
           />
+        )}
+        {activeTab === 'explorador' && (
+          <ExploradorTercerosTab companyId={companyId} onNavigate={onNavigate} />
         )}
       </div>
     </>
