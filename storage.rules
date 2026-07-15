@@ -1,33 +1,36 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Comprobantes de ejecuciones — desarrollo: sin auth, type & size validated
+    // Comprobantes de ejecuciones — auth required
     match /{companyId}/ejecuciones/{ejecucionId}/{fileName} {
-      allow read: if true;
-      allow write: if request.resource.size < 5 * 1024 * 1024
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/jpeg|image/png|application/pdf');
-      allow delete: if true;
+      allow delete: if request.auth != null;
     }
 
-    // Documentos media system — read: public (consistent with existing rules until auth lands)
+    // Documentos media system — auth required
     match /{companyId}/documentos/{fileName} {
-      allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf|image/jpeg|image/png|image/webp');
       allow delete: if false; // GC scripts only
     }
 
     // Allow listing ejecuciones folders and files (for diagnostic/fix tools)
     match /{companyId}/ejecuciones/{allPaths=**} {
-      allow list: if true;
+      allow list: if request.auth != null;
     }
 
-    // Extractos bancarios (PDF) — desarrollo: sin auth, tipo & tamaño validados
+    // Extractos bancarios (PDF) — auth required
     match /{companyId}/extractos/{fileName} {
-      allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf');
-      allow delete: if true;
+      allow delete: if request.auth != null;
     }
 
     // Deny everything else
