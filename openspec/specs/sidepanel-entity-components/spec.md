@@ -1,5 +1,7 @@
 # Sidepanel Entity Components — Specification
 
+> Changes: `soportes-entidad` (2026-07-14) · Capability: `sidepanel-entity-components`
+
 ## Purpose
 
 Per-entity component contract unifying create/edit/view modes for 10 entities (Budget, Ejecucion, Project, Tercero, Cuenta, Extracto, Settings, Invitacion, Colaborador, Compania). Replaces FormPanel/ViewPanel/DataPanel dispatch with `{ entity, mode }` routing. All existing features preserved — zero exclusion.
@@ -52,14 +54,87 @@ onFormSubmit handler MUST detect `actionType: 'archive'` and call `updateBudget`
 |--------|---------------------|-----------------------------|
 | Budget | DF fields + subscribeEjecucionesByBudget + inline mini-form (desc, monto, fecha + save) | TipoSwitch + SearchableSelect proyecto/cliente (inline "Nuevo") + Calc + fecha→mes + recurrencia (create only) |
 | Ejecucion | DF fields + budgetLinks + desvincular + onSnapshot to doc + derivarEstadoComprobantes + ComprobantesViewer delete | TipoSwitch + proyecto/cliente + Calc + fecha + multi-budget linking + sum verify + ComprobanteUploader (preGeneratedId, generateFilePath, uploadFile, pending/saved) + cuenta + recurrencia (create only) |
-| Project | DF fields + estado inline save + inferidos flow (+ "Crear proyecto") + grouped lists (groupByEntity) + subscribeCompanySettings | sigla + nombre + ColorSelect tipoProyectos (allowCustom) + cantidad + ColorSelect unidades (allowCustom) + SearchableSelect cliente + "Nuevo cliente rápido" + ColorSelect estado + soloEgresos checkbox |
-| Tercero | DF (nombre/apodo/naturaleza/documento/lugar/tipo badge) + "Editar" → edit mode | nombre + apodo + select naturaleza + select documento + número + lugar + select tipo |
+| Project | **[Tab Detalle]** DF fields + estado inline save + inferidos flow + grouped lists + subscribeCompanySettings \| **[Tab Soportes]** `<SoportesTab projectId={record.id} />` | sigla + nombre + ColorSelect tipoProyectos (allowCustom) + cantidad + ColorSelect unidades (allowCustom) + SearchableSelect cliente + "Nuevo cliente rápido" + ColorSelect estado + soloEgresos checkbox |
+| Tercero | **[Tab Detalle]** DF (nombre/apodo/naturaleza/documento/lugar/tipo badge) + "Editar" \| **[Tab Soportes]** `<SoportesTab terceroId={record.id} />` | nombre + apodo + select naturaleza + select documento + número + lugar + select tipo |
 | Cuenta | **NEW**: DF nombre/banco/tipo/número/moneda/saldoInicial/saldoActual | nombre + banco + select tipo + número + select moneda + saldoInicial; add: saldoActual=saldoInicial |
 | Extracto | **NEW**: DF mes/año/saldos/estado badge/archivo link/totalMovimientos | add: drag-drop PDF (max 10MB) + parseForPreview + ExtractoParseModal + upload + batch save; edit: manual fields + PDF replace + re-parse existing |
 | Settings | n/a | edit only: list (name+color), add inline, delete, reorder up/down, save via updateSettings |
 | Invitacion | **NEW**: DF empresas/email/rol/expiración/estado | create: empresas checkboxes + email + rol toggle + expiración (1d/3d/7d) + enviar; edit: empresa+email readonly |
 | Colaborador | **NEW**: DF email + memberships list (company+role+status) | edit: email readonly + per-company toggle (blockMember) + "Agregar a otras empresas" + addMemberToCompany + updateMemberRole |
 | Compania | **NEW**: DF nombre + created date | create: nombre + POST /api/companies/create + success redirect ("Ir a empresa") |
+
+(Previously: Tercero and Project had no tabs — all content was directly visible. SoportesTab is new.)
+
+Tab bar styling SHALL match MediaPage:
+- Container: `border-b border-slate-200 px-6 flex gap-0`
+- Active: `text-indigo-600` with bottom indicator `h-0.5 bg-indigo-600 rounded-full`
+- Inactive: `text-slate-500 hover:text-slate-700`
+- Tabs MUST be inside the scroll container (after PanelHeader), NOT in the entity header
+
+#### Scenario: TerceroView — Detalle by default
+
+- GIVEN user navigates to view a tercero
+- WHEN TerceroView renders
+- THEN "Detalle" is active — DF fields and Edit button visible; "Soportes" tab exists but not rendered
+
+#### Scenario: TerceroView — switch to Soportes
+
+- GIVEN TerceroView with "Detalle" active
+- WHEN user clicks "Soportes"
+- THEN DF fields hidden; `<SoportesTab terceroId={record.id} />` rendered
+
+#### Scenario: ProjectView — Detalle includes accordions
+
+- GIVEN user views a project
+- WHEN ProjectView renders with "Detalle" active
+- THEN DF fields, estado selector, and Presupuestos/Ejecuciones accordions are all visible
+
+#### Scenario: ProjectView — switch to Soportes
+
+- GIVEN ProjectView with "Detalle" active, accordions visible
+- WHEN user clicks "Soportes"
+- THEN DF fields, estado selector, and accordions hidden; `<SoportesTab projectId={record.id} />` rendered
+
+#### Scenario: Re-click active tab is no-op
+
+- GIVEN "Detalle" tab is active
+- WHEN user clicks "Detalle" again
+- THEN no change — same content stays rendered
+
+### Requirement: SoportesTab component
+
+The system SHALL provide a shared `SoportesTab` component with props: `{ companyId: string; terceroId?: string; projectId?: string; onNavigate: (screen: NavScreen) => void }`.
+
+The component SHALL:
+- Call `subscribeDocumentos(companyId, { terceroId | projectId, status: "enlazado" }, onData)` for real-time doc list
+- Display each document as a card (`bg-white border border-slate-200 rounded-xl p-4`) with: fileName, tipoDocumento (badge), periodo, montoTotal (COP formatted), proveedorTexto
+- Click → `onNavigate({ type: "entity", entity: "documento", mode: "view", record: doc })`
+- Show "No hay documentos asociados" on empty subscription
+- Show a spinner while initial subscription has no data yet
+
+#### Scenario: Cards rendered from documents
+
+- GIVEN SoportesTab mounts with `terceroId: "t1"` and subscription returns 3 documents
+- WHEN data arrives
+- THEN 3 cards show fileName, tipoDocumento badge, periodo, monto COP, proveedorTexto
+
+#### Scenario: Empty state
+
+- GIVEN SoportesTab mounts with `projectId: "p1"`
+- WHEN subscription returns empty array
+- THEN "No hay documentos asociados" is displayed
+
+#### Scenario: Loading spinner
+
+- GIVEN SoportesTab mounts
+- WHEN subscription has not yet fired
+- THEN a spinner is shown
+
+#### Scenario: Card click navigation
+
+- GIVEN a document card is visible
+- WHEN user clicks it
+- THEN onNavigate is called with `{ type: "entity", entity: "documento", mode: "view", record: doc }`
 
 ### R27-R30: Sidepanel Router
 
