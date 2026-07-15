@@ -22,6 +22,8 @@ export function subscribeDocumentos(
     status?: DocumentoStatus;
     tipoDocumento?: TipoDocumentoMedio;
     source?: DocumentSource;
+    terceroId?: string;
+    projectId?: string;
   } = {},
   onData: (docs: DocumentoMedio[]) => void,
   onError?: (err: Error) => void,
@@ -32,6 +34,8 @@ export function subscribeDocumentos(
   if (filters?.status) constraints.push(where('status', '==', filters.status));
   if (filters?.tipoDocumento) constraints.push(where('tipoDocumento', '==', filters.tipoDocumento));
   if (filters?.source) constraints.push(where('_source', '==', filters.source));
+  if (filters?.terceroId) constraints.push(where('terceroId', '==', filters.terceroId));
+  if (filters?.projectId) constraints.push(where('projectId', '==', filters.projectId));
 
   const q = constraints.length > 0 ? query(ref, ...constraints) : ref;
 
