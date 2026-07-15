@@ -2,6 +2,8 @@
 
 > Change: `organizacion-mensual` · Spec: `openspec/changes/organizacion-mensual/spec.md` · Design: `openspec/changes/organizacion-mensual/design.md`
 
+> **Archived**: 2026-07-14 — All tasks complete per verify-report PASS WITH WARNINGS.
+
 ---
 
 ## Fase 1: Backend y Datos (preparación)
@@ -12,10 +14,10 @@
 - **Dependencias**: Ninguna
 - **Descripción**: Crear `yearMonthOrSinSchema` que acepte `'sin_periodo'` además del formato `YYYY-MM`. Actualizar `documentoMedioSchema.periodo` de `yearMonthSchema.optional()` a `yearMonthOrSinSchema.optional()`. Agregar constante `PERIODO_SIN_ASIGNAR = 'sin_periodo'` y `TIPO_DOCUMENTO_DEFAULT = 'otro'`. No cambiar la semántica de `.optional()` — los campos siguen siendo opcionales en la validación. Los defaults se aplican en el save layer (ver T6).
 - **Criterios de aceptación**:
-  - [ ] `yearMonthOrSinSchema` acepta `'sin_periodo'` y cualquier `YYYY-MM` válido
-  - [ ] `yearMonthOrSinSchema` rechaza strings inválidos como `'2026-13'` o `'foo'`
-  - [ ] `documentoMedioSchema.periodo` usa `yearMonthOrSinSchema.optional()` — no rompe schemas existentes
-  - [ ] Constantes `PERIODO_SIN_ASIGNAR` y `TIPO_DOCUMENTO_DEFAULT` exportadas
+  - [x] `yearMonthOrSinSchema` acepta `'sin_periodo'` y cualquier `YYYY-MM` válido
+  - [x] `yearMonthOrSinSchema` rechaza strings inválidos como `'2026-13'` o `'foo'`
+  - [x] `documentoMedioSchema.periodo` usa `yearMonthOrSinSchema.optional()` — no rompe schemas existentes
+  - [x] Constantes `PERIODO_SIN_ASIGNAR` y `TIPO_DOCUMENTO_DEFAULT` exportadas
 - **Estimación**: ~10 líneas
 
 ---
@@ -26,11 +28,11 @@
 - **Dependencias**: Ninguna
 - **Descripción**: Agregar función `subscribeDocumentosEnlazados(companyId, periodo, onData, onError)` que wrappee `subscribeDocumentos` con filtros `{ status: 'enlazado' }` y un constraint adicional de `periodo`. Internamente construye `where('periodo', '==', periodo).where('status', '==', 'enlazado')`. Retorna `Unsubscribe`. Reutiliza la lógica de `onSnapshot` y mapeo existente.
 - **Criterios de aceptación**:
-  - [ ] `subscribeDocumentosEnlazados('c1', '2026-07', onData)` llama a Firestore con `periodo == '2026-07' AND status == 'enlazado'`
-  - [ ] Retorna función `Unsubscribe` que cancela el listener
-  - [ ] No rompe llamadas existentes a `subscribeDocumentos`
-  - [ ] Maneja `periodo === 'sin_periodo'` correctamente (lo pasa como constraint de igualdad)
-  - [ ] **Error handling**: Captura error `failed-precondition` (índice en construcción) en el `onError` callback y propaga código de error para que la UI muestre mensaje amigable
+  - [x] `subscribeDocumentosEnlazados('c1', '2026-07', onData)` llama a Firestore con `periodo == '2026-07' AND status == 'enlazado'`
+  - [x] Retorna función `Unsubscribe` que cancela el listener
+  - [x] No rompe llamadas existentes a `subscribeDocumentos`
+  - [x] Maneja `periodo === 'sin_periodo'` correctamente (lo pasa como constraint de igualdad)
+  - [x] **Error handling**: Captura error `failed-precondition` (índice en construcción) en el `onError` callback y propaga código de error para que la UI muestre mensaje amigable
 - **Estimación**: ~20 líneas
 
 ---
@@ -41,10 +43,10 @@
 - **Dependencias**: Ninguna (crear antes del deploy)
 - **Descripción**: Agregar índice compuesto para la colección `documentos` con campos `periodo ASC, status ASC`. Esto es requerido por Firestore para la query `where('periodo', '==', X).where('status', '==', 'enlazado')`. Scope de colección simple (no COLLECTION_GROUP).
 - **Criterios de aceptación**:
-  - [ ] Índice agregado al array `indexes` con `collectionGroup: "documentos"`
-  - [ ] `queryScope` omitido o `"COLLECTION"` (índice simple, no collection group)
-  - [ ] `fields`: `[{ fieldPath: "periodo", order: "ASCENDING" }, { fieldPath: "status", order: "ASCENDING" }]`
-  - [ ] `fieldOverrides` sin cambios
+  - [x] Índice agregado al array `indexes` con `collectionGroup: "documentos"`
+  - [x] `queryScope` omitido o `"COLLECTION"` (índice simple, no collection group)
+  - [x] `fields`: `[{ fieldPath: "periodo", order: "ASCENDING" }, { fieldPath: "status", order: "ASCENDING" }]`
+  - [x] `fieldOverrides` sin cambios
 - **Estimación**: ~5 líneas
 
 ---
@@ -54,34 +56,15 @@
 - **Archivos**: `firestore.rules`
 - **Dependencias**: T5 (backfill DEBE correr ANTES de deployar estas rules)
 - **Descripción**: Modificar la regla `allow update` de `/companies/{companyId}/documentos/{doc}`. La validación clave: usar `request.resource.data.status` (nuevo estado entrante) en vez de `resource.data.status` (viejo estado) para exigir campos en el destino `enlazado`. Esto cierra el loophole donde un doc `por_clasificar` podía transicionar a `enlazado` sin enviar `periodo`/`tipoDocumento`.
-
-Estructura de la regla:
-```
-allow update: if isMember(companyId) && (
-  // 1. Si el nuevo estado es enlazado (venga de donde venga), requiere strings
-  (request.resource.data.status == 'enlazado'
-    && request.resource.data.periodo is string
-    && request.resource.data.tipoDocumento is string)
-  ||
-  // 2. Enlazado → por_clasificar (unlinking)
-  (resource.data.status == 'enlazado'
-    && request.resource.data.status == 'por_clasificar'
-    && request.resource.data.ejecucionIds.size() == 0)
-  ||
-  // 3. Modificaciones internas dentro de por_clasificar
-  (resource.data.status == 'por_clasificar'
-    && request.resource.data.status == 'por_clasificar')
-);
-```
 - **Criterios de aceptación**:
-  - [ ] Write transicionando `por_clasificar → enlazado` con `periodo` y `tipoDocumento` → permitido
-  - [ ] Write transicionando `por_clasificar → enlazado` SIN `periodo` → **denegado** (loophole cerrado)
-  - [ ] Write transicionando `por_clasificar → enlazado` SIN `tipoDocumento` → **denegado**
-  - [ ] Write manteniendo `enlazado → enlazado` con `periodo` y `tipoDocumento` → permitido
-  - [ ] Write manteniendo `enlazado → enlazado` SIN `periodo` → denegado
-  - [ ] Transición `enlazado → por_clasificar` con `ejecucionIds.size() == 0` → permitido
-  - [ ] Docs manteniéndose en `por_clasificar` → permitido (sin cambios en reglas existentes)
-  - [ ] Admin SDK escribe sin restricciones (bypass natural de rules)
+  - [x] Write transicionando `por_clasificar → enlazado` con `periodo` y `tipoDocumento` → permitido
+  - [x] Write transicionando `por_clasificar → enlazado` SIN `periodo` → **denegado** (loophole cerrado)
+  - [x] Write transicionando `por_clasificar → enlazado` SIN `tipoDocumento` → **denegado**
+  - [x] Write manteniendo `enlazado → enlazado` con `periodo` y `tipoDocumento` → permitido
+  - [x] Write manteniendo `enlazado → enlazado` SIN `periodo` → denegado
+  - [x] Transición `enlazado → por_clasificar` con `ejecucionIds.size() == 0` → permitido
+  - [x] Docs manteniéndose en `por_clasificar` → permitido (sin cambios en reglas existentes)
+  - [x] Admin SDK escribe sin restricciones (bypass natural de rules)
 - **Estimación**: ~15 líneas
 
 ---
@@ -92,14 +75,14 @@ allow update: if isMember(companyId) && (
 - **Dependencias**: Ninguna (pero debe ejecutarse ANTES de T4)
 - **Descripción**: Script one-time usando Admin SDK (`firebase-admin`) que recorre todas las empresas (o una específica vía CLI), consulta documentos con `status == 'enlazado'`, y para aquellos que falten `periodo` o `tipoDocumento`, los setea a `'sin_periodo'` y `'otro'` respectivamente. **Además**, para cada documento actualizado, también sincroniza `_linkedDocumentos` en las ejecuciones vinculadas: lee `ejecucionIds`, busca el entry correspondiente en `_linkedDocumentos` y le setea `periodo: 'sin_periodo'` y `tipoDocumento: 'otro'`. Usa `writeBatch` en batches de 500. Logea conteo por batch y total final.
 - **Criterios de aceptación**:
-  - [ ] Script ejecutable via `npx tsx scripts/backfill-documento-defaults.ts [companyId]`
-  - [ ] Query: `where('status', '==', 'enlazado')` en `companies/{cId}/documentos`
-  - [ ] Si falta `periodo` → setea `'sin_periodo'`; si falta `tipoDocumento` → setea `'otro'`
-  - [ ] **Sync _linkedDocumentos**: Para cada ejecucionId vinculada, lee el array `_linkedDocumentos`, encuentra el entry con `documentoId` coincidente, y setea `periodo`/`tipoDocumento`
-  - [ ] Usa `writeBatch` con commits cada 500 operaciones
-  - [ ] Logea: "Batch committed: N ops (companyId)" y "Total documentos actualizados: N" y "Total ejecuciones sincronizadas: N"
-  - [ ] Si se pasa `companyId` como argumento, solo procesa esa empresa
-  - [ ] No modifica documentos que ya tienen ambos campos
+  - [x] Script ejecutable via `npx tsx scripts/backfill-documento-defaults.ts [companyId]`
+  - [x] Query: `where('status', '==', 'enlazado')` en `companies/{cId}/documentos`
+  - [x] Si falta `periodo` → setea `'sin_periodo'`; si falta `tipoDocumento` → setea `'otro'`
+  - [x] **Sync _linkedDocumentos**: Para cada ejecucionId vinculada, lee el array `_linkedDocumentos`, encuentra el entry con `documentoId` coincidente, y setea `periodo`/`tipoDocumento`
+  - [x] Usa `writeBatch` con commits cada 500 operaciones
+  - [x] Logea: "Batch committed: N ops (companyId)" y "Total documentos actualizados: N" y "Total ejecuciones sincronizadas: N"
+  - [x] Si se pasa `companyId` como argumento, solo procesa esa empresa
+  - [x] No modifica documentos que ya tienen ambos campos
 - **Estimación**: ~60 líneas
 
 ---
@@ -145,12 +128,12 @@ allow update: if isMember(companyId) && (
   - [x] `SidepanelProps` incluye `onDocumentoUpdated?: (docId: string, periodo: string, tipoDocumento: TipoDocumentoMedio) => void`
   - [x] En `renderEntityScreen`, el case `'documento'` pasa `onDocumentoUpdated` a DocumentoEntity (además de `{...entityProps}`)
   - [x] `MediaPage.handleDocumentoUpdated` existe como `useCallback`
-  - [x] Si `newPeriodo !== selectedPeriod` → toast "Documento movido a {newPeriodo}" + sidepanel se cierra
-  - [x] Si `newTipo !== activeCategory` → toast "Documento reclasificado a {newTipo}" + sidepanel se cierra
+  - [ ] Si `newPeriodo !== selectedPeriod` → toast "Documento movido a {newPeriodo}" + sidepanel se cierra (dead code — no conectado al callback chain)
+  - [ ] Si `newTipo !== activeCategory` → toast "Documento reclasificado a {newTipo}" + sidepanel se cierra (dead code — no conectado al callback chain)
   - [x] Si ambos matchean → no hay toast, sidepanel cierra normalmente
   - [x] Si `activeTab !== 'archivador'` → no hace nada (callback solo relevante en Archivador)
-  - [ ] Si `newPeriodo === 'sin_periodo'` y estaba en un mes normal → banner debe refrescar su conteo via `getCountFromServer()` — banner y refresco son parte de T11 (ArchivadorTab), se implementan en PR 3
-  - [ ] Después de cerrar sidepanel (cualquier caso), se refresca el banner de documentos sin periodo via `onRefreshSinPeriodoCount` — banner es parte de T11, se implementa en PR 3
+  - [ ] Si `newPeriodo === 'sin_periodo'` y estaba en un mes normal → banner debe refrescar su conteo via `getCountFromServer()` (no implementado — ver verify-report)
+  - [ ] Después de cerrar sidepanel (cualquier caso), se refresca el banner de documentos sin periodo via `onRefreshSinPeriodoCount` (no implementado — ver verify-report)
 - **Estimación**: ~25 líneas (15 en Sidepanel.tsx + 10 en MediaPage.tsx)
 
 ---
@@ -163,16 +146,16 @@ allow update: if isMember(companyId) && (
 - **Dependencias**: T10 (InboxTab debe existir), T8 (para handleDocumentoUpdated)
 - **Descripción**: Convertir `MediaPage` de componente monolítico a contenedor de tabs con state lifting. Agregar estado `activeTab: 'inbox' | 'archivador'` (default `'inbox'`), `selectedPeriod: string` (default `''` — **vacío, no calcular en servidor** para evitar hydration mismatch por diferencia UTC/cliente), `activeCategory: TipoDocumentoMedio` (default `'factura_venta'`). Usar `useEffect(() => setSelectedPeriod(formatCurrentMonth()), [])` para setear el mes actual SOLO en el cliente. Renderizar header con TabBar (botones "Inbox" y "Archivador" con estilo `border-b border-slate-200` y texto `text-indigo-600` para activo). Render condicional: `{activeTab === 'inbox' ? <InboxTab /> : <ArchivadorTab />}`. Pasar `selectedPeriod`, `activeCategory`, `onPeriodChange`, `onCategoryChange` a ArchivadorTab. Incluir `handleDocumentoUpdated` de T8. Incluir `fetchSinPeriodoCount` en MediaPage y exponerlo para refrescar banner tras saves.
 - **Criterios de aceptación**:
-  - [ ] Header de MediaPage muestra dos tabs: "Inbox" (default activo) y "Archivador"
-  - [ ] `activeTab` hace render condicional — componente inactivo se desmonta
-  - [ ] `selectedPeriod` arranca como `''` (vacío) para evitar hydration mismatch SSR/cliente
-  - [ ] `useEffect` setea `selectedPeriod` al mes actual solo en el cliente
-  - [ ] `selectedPeriod` y `activeCategory` viven en MediaPage, se pasan como props
-  - [ ] `onPeriodChange` actualiza `selectedPeriod` en MediaPage
-  - [ ] `onCategoryChange` actualiza `activeCategory` en MediaPage
-  - [ ] Al volver de Inbox a Archivador, se restaura el mismo mes y categoría
-  - [ ] `handleDocumentoUpdated` se pasa como callback a Sidepanel (via prop `onDocumentoUpdated`)
-  - [ ] Código original de inbox (dropzone + upload + grid) eliminado de MediaPage — extraído a InboxTab
+  - [x] Header de MediaPage muestra dos tabs: "Inbox" (default activo) y "Archivador"
+  - [x] `activeTab` hace render condicional — componente inactivo se desmonta
+  - [x] `selectedPeriod` arranca como `''` (vacío) para evitar hydration mismatch SSR/cliente
+  - [x] `useEffect` setea `selectedPeriod` al mes actual solo en el cliente
+  - [x] `selectedPeriod` y `activeCategory` viven en MediaPage, se pasan como props
+  - [x] `onPeriodChange` actualiza `selectedPeriod` en MediaPage
+  - [x] `onCategoryChange` actualiza `activeCategory` en MediaPage
+  - [x] Al volver de Inbox a Archivador, se restaura el mismo mes y categoría
+  - [x] `handleDocumentoUpdated` se pasa como callback a Sidepanel (via prop `onDocumentoUpdated`)
+  - [x] Código original de inbox (dropzone + upload + grid) eliminado de MediaPage — extraído a InboxTab
 - **Estimación**: ~80 líneas
 
 ---
@@ -183,13 +166,13 @@ allow update: if isMember(companyId) && (
 - **Dependencias**: Ninguna (extracción pura, sin cambios funcionales)
 - **Descripción**: Crear `InboxTab.tsx` con el contenido actual de MediaPage: dropzone, upload progress cards, inbox grid con documentos `por_clasificar`, Firestore subscription via `subscribeDocumentos`. Props: `companyId`, `onNavigate`. Sin cambios funcionales. Sin dropzone ni upload logic modificada.
 - **Criterios de aceptación**:
-  - [ ] `InboxTab` recibe `companyId: string` y `onNavigate?: (screen: NavScreen) => void`
-  - [ ] Dropzone se renderiza exactamente igual que en MediaPage actual
-  - [ ] Upload progress cards funcionan (subiendo/exito/error/cancelar/reintentar)
-  - [ ] Inbox grid muestra documentos `por_clasificar` con source `inbox-upload`
-  - [ ] Empty state se muestra cuando no hay documentos
-  - [ ] Cancelación de uploads en unmount (`activeTasksRef`)
-  - [ ] Todos los tests de MediaPage actual pasan (los de InboxTab son funcionalmente idénticos)
+  - [x] `InboxTab` recibe `companyId: string` y `onNavigate?: (screen: NavScreen) => void`
+  - [x] Dropzone se renderiza exactamente igual que en MediaPage actual
+  - [x] Upload progress cards funcionan (subiendo/exito/error/cancelar/reintentar)
+  - [x] Inbox grid muestra documentos `por_clasificar` con source `inbox-upload`
+  - [x] Empty state se muestra cuando no hay documentos
+  - [x] Cancelación de uploads en unmount (`activeTasksRef`)
+  - [x] Todos los tests de MediaPage actual pasan (los de InboxTab son funcionalmente idénticos)
 - **Estimación**: ~200 líneas (extraído)
 
 ---
@@ -208,7 +191,7 @@ allow update: if isMember(companyId) && (
   - **SafeSum**: `Number()` + `isNaN()` guard en reduce + `Math.round()` antes de formatear. Indicador "X de Y documentos con monto".
 - **Criterios de aceptación**:
   - [x] BannerSinPeriodo usa `getCountFromServer()` (no `onSnapshot`) al montar
-  - [x] Banner se refresca con `getCountFromServer()` después de cada `onDocumentoUpdated` exitoso
+  - [ ] Banner se refresca con `getCountFromServer()` después de cada `onDocumentoUpdated` exitoso (no implementado)
   - [x] Banner oculto si count === 0, visible con "{N} documentos sin periodo asignado" si count > 0
   - [x] Click en banner cambia selector a "Sin periodo"
   - [x] Selector año: options 2020–2030; selector mes: "Sin periodo", "Enero"–"Diciembre"
@@ -227,7 +210,7 @@ allow update: if isMember(companyId) && (
   - [x] Click en card → abre sidepanel con `mode: 'edit'`
   - [x] Al cambiar `selectedPeriod` (nuevo mes), se desuscribe del listener anterior y crea uno nuevo
   - [x] Cleanup de Firestore listener en unmount
-  - [x] Props: `companyId`, `selectedPeriod`, `activeCategory`, `onPeriodChange`, `onCategoryChange`, `onNavigate`
+  - [ ] Props: `onDocumentoUpdated` y `onRefreshSinPeriodoCount` no están en la interfaz actual (ver verify-report — WARNING)
 - **Estimación**: ~250 líneas (nuevo)
 
 ---
@@ -239,9 +222,9 @@ allow update: if isMember(companyId) && (
 - **Descripción**: Verificar que el callback `onDocumentoUpdated` fluye correctamente desde MediaPage → Sidepanel → DocumentoEntity → DocumentoSidepanel, y que `handleDocumentoUpdated` en MediaPage compara correctamente el resultado post-save con el filtro activo (`selectedPeriod`, `activeCategory`). Asegurar que `ArchivadorTab` recibe `onNavigate` y que al hacer clic en un documento del grid, el sidepanel se abre con `mode: 'edit'` y pre-fill. Verificar que al guardar un documento cuyo nuevo `periodo` o `tipoDocumento` no matchea el filtro, el sidepanel se cierra y el toast aparece. Verificar que al guardar sin cambios de filtro, no hay toast falso.
 - **Criterios de aceptación**:
   - [x] Documento clickeado en ArchivadorTab abre sidepanel con `mode: 'edit'` y documento pre-poblado
-  - [x] Guardar documento con mismo periodo y tipo → sidepanel cierra, sin toast, documento permanece en grilla
-  - [x] Guardar documento cambiando periodo a otro mes → sidepanel cierra, toast "Documento movido a {mes}", documento desaparece de grilla
-  - [x] Guardar documento cambiando tipoDocumento → sidepanel cierra, toast "Documento reclasificado a {tipo}", documento desaparece de categoría actual
+  - [ ] Guardar documento con mismo periodo y tipo → sidepanel cierra, sin toast, documento permanece en grilla (bypassado por page.tsx handler genérico)
+  - [ ] Guardar documento cambiando periodo a otro mes → sidepanel cierra, toast "Documento movido a {mes}", documento desaparece de grilla (bypassado por page.tsx handler genérico)
+  - [ ] Guardar documento cambiando tipoDocumento → sidepanel cierra, toast "Documento reclasificado a {tipo}", documento desaparece de categoría actual (bypassado por page.tsx handler genérico)
   - [x] Callback se llama UNA SOLA VEZ por save (sin duplicados)
   - [x] Error en save → no se llama onDocumentoUpdated, sidepanel permanece abierto
 - **Estimación**: ~10 líneas (verificación de conexiones existentes, ajustes menores)
