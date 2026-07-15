@@ -23,6 +23,7 @@ export function TerceroEntity({ mode, companyId, record, defaults, onSubmit, onN
       <div className="flex-1 overflow-y-auto p-6 space-y-4 select-text">
         {mode === 'view' && record ? (
           <TerceroView
+            companyId={companyId}
             tercero={record as any}
             onNavigate={onNavigate}
           />
