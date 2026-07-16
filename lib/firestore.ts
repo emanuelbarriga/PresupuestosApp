@@ -13,6 +13,7 @@ import {
   query,
   where,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   increment,
   arrayUnion,
@@ -461,19 +462,20 @@ export async function addBudgetLink(
   ejecucionId: string,
   data: Omit<EjecucionBudgetLink, 'id' | 'createdAt'>,
 ): Promise<string> {
-  const docRef = await addDoc(
+  const linkRef = doc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION),
-    { ...data, createdAt: serverTimestamp() },
   );
-  // Denormalize on the budget: totalEjecutado + linkedEjecuciones
-  await updateDoc(
-    doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId),
-    {
+  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId);
+
+  await runTransaction(db, async (transaction) => {
+    transaction.set(linkRef, { ...data, createdAt: serverTimestamp() });
+    transaction.update(budgetRef, {
       totalEjecutado: increment(data.monto),
       linkedEjecuciones: arrayUnion({ ejecucionId, monto: data.monto }),
-    },
-  );
-  return docRef.id;
+    });
+  });
+
+  return linkRef.id;
 }
 
 export async function removeBudgetLink(
@@ -481,21 +483,26 @@ export async function removeBudgetLink(
   ejecucionId: string,
   linkId: string,
 ): Promise<void> {
-  // Read the link to get budgetId and monto before deleting
   const linkRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION, linkId);
-  const linkSnap = await getDoc(linkRef);
-  const linkData = linkSnap.data() as EjecucionBudgetLink | undefined;
-  await deleteDoc(linkRef);
-  // Decrement denormalized data on the budget
-  if (linkData?.budgetId && linkData?.monto) {
-    await updateDoc(
-      doc(db, COMPANIES_COLLECTION, companyId, 'budgets', linkData.budgetId),
-      {
-        totalEjecutado: increment(-linkData.monto),
-        linkedEjecuciones: arrayRemove({ ejecucionId, monto: linkData.monto }),
-      },
-    );
-  }
+
+  await runTransaction(db, async (transaction) => {
+    const linkSnap = await transaction.get(linkRef);
+    if (!linkSnap.exists()) return;
+
+    const linkData = linkSnap.data() as EjecucionBudgetLink;
+    transaction.delete(linkRef);
+
+    // Decrement denormalized data on the budget
+    if (linkData.budgetId && linkData.monto) {
+      transaction.update(
+        doc(db, COMPANIES_COLLECTION, companyId, 'budgets', linkData.budgetId),
+        {
+          totalEjecutado: increment(-linkData.monto),
+          linkedEjecuciones: arrayRemove({ ejecucionId, monto: linkData.monto }),
+        },
+      );
+    }
+  });
 }
 
 /**

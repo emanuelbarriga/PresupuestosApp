@@ -19,6 +19,7 @@ export interface DocumentoMedioMetadata {
   nit?: string;
   fechaDocumento?: string; // YYYY-MM-DD
   montoTotal?: number;
+  descripcion?: string;   // Texto relevante extraído por IA
 }
 
 export interface DocumentoMedio {

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Banco, Month, MovimientoBancarioInput } from '@/lib/types';
 import { MONTHS } from '@/lib/types';
 import { X, Trash2, Search } from 'lucide-react';
+import { PdfViewer } from '@/components/shared/PdfViewer';
 import clsx from 'clsx';
 
 export interface ExtractoParseHeader {
@@ -326,11 +327,13 @@ export function ExtractoParseModal({
           </div>
 
           {/* Right pane: PDF preview */}
-          <div className="w-1/2 bg-slate-50 flex items-center justify-center">
+          <div className="w-1/2 bg-slate-50">
             {previewUrl ? (
-              <iframe src={previewUrl} title="Vista previa del PDF" className="w-full h-full" />
+              <PdfViewer fileUrl={previewUrl} pageMode="all" className="w-full h-full" />
             ) : (
-              <p className="text-xs text-slate-400">Sin vista previa</p>
+              <div className="flex items-center justify-center h-full">
+                <p className="text-xs text-slate-400">Sin vista previa</p>
+              </div>
             )}
           </div>
         </div>

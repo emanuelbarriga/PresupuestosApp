@@ -136,6 +136,49 @@ The component SHALL:
 - WHEN user clicks it
 - THEN onNavigate is called with `{ type: "entity", entity: "documento", mode: "view", record: doc }`
 
+### Requirement: ExploradorTercerosTab component
+
+The system SHALL provide an `ExploradorTercerosTab` component with props `{ companyId: string; onNavigate: (screen: NavScreen) => void }`. Unlike `SoportesTab`, it loads ALL linked documents (no entity filter) and groups them by `terceroId`.
+
+SHALL:
+- `subscribeDocumentos(companyId, { status: 'enlazado' })` — all linked docs
+- `subscribeTerceros()` — resolve tercero names
+- Group by `terceroId` via Map; docs with no `terceroId` → "Sin tercero" group
+- Accordion list: group header = tercero name + count badge; collapsed by default
+- Expanded: document cards match SoportesTab card pattern (fileName, tipoDocumento badge, periodo, montoTotal COP)
+- Click card → `onNavigate({ type: 'entity', entity: 'documento', mode: 'view', record: doc })`
+- "No hay documentos enlazados" on empty; spinner while loading
+
+#### Scenario: Groups rendered from docs
+
+- GIVEN subscription returns 3 docs for t1, 2 for t2
+- WHEN grouping completes
+- THEN 2 group headers with count badges; all collapsed
+
+#### Scenario: Expand group shows cards
+
+- GIVEN collapsed group header "T1 (3)"
+- WHEN user clicks header
+- THEN 3 document cards visible under that group
+
+#### Scenario: Documents without terceroId
+
+- GIVEN a doc has `terceroId: null`
+- WHEN grouping completes
+- THEN "Sin tercero (1)" header rendered
+
+#### Scenario: Empty and loading states
+
+- GIVEN subscription returns `[]` / has not fired yet
+- WHEN data arrives / mount
+- THEN "No hay documentos enlazados" / spinner
+
+#### Scenario: Card navigates to view
+
+- GIVEN a document card is visible inside an expanded group
+- WHEN user clicks it
+- THEN onNavigate called with `{ type: 'entity', entity: 'documento', mode: 'view', record: doc }`
+
 ### R27-R30: Sidepanel Router
 
 The NEW NavScreen type SHALL be:

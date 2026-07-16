@@ -91,7 +91,7 @@ describe('/companies/{companyId}/documentos/{doc} — firestore.rules', () => {
 
   // ── Status Transition Validation ──────────────────────────────────────
 
-  it('allows valid status transition por_clasificar → enlazado', async () => {
+  it('allows valid status transition por_clasificar → enlazado WITH periodo and tipoDocumento', async () => {
     const memberDb = testEnv.authenticatedContext(memberUid).firestore();
     await assertSucceeds(
       setDoc(doc(memberDb, `companies/${companyId}/documentos/status-test`), {
@@ -103,14 +103,102 @@ describe('/companies/{companyId}/documentos/{doc} — firestore.rules', () => {
         uploadedAt: new Date().toISOString(),
       }),
     );
-    // Transition to enlazado
+    // Transition to enlazado WITH required fields
     await assertSucceeds(
       setDoc(doc(memberDb, `companies/${companyId}/documentos/status-test`), {
         status: 'enlazado',
+        periodo: 'sin_periodo',
+        tipoDocumento: 'otro',
         fileName: 'test.pdf',
         storagePath: 'c1/documentos/uuid-test.pdf',
         mimeType: 'application/pdf',
         size: 1024,
+        ejecucionIds: [],
+        uploadedAt: new Date().toISOString(),
+      }),
+    );
+  });
+
+  it('DENIES transition por_clasificar → enlazado WITHOUT periodo (loophole closure)', async () => {
+    const memberDb = testEnv.authenticatedContext(memberUid).firestore();
+    await testEnv.withSecurityRulesDisabled(async (db) => {
+      await setDoc(doc(db, `companies/${companyId}/documentos/loophole-test`), {
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        status: 'por_clasificar',
+        uploadedAt: new Date().toISOString(),
+      });
+    });
+    // Try to transition to enlazado WITHOUT periodo — should be DENIED
+    await assertFails(
+      setDoc(doc(memberDb, `companies/${companyId}/documentos/loophole-test`), {
+        status: 'enlazado',
+        tipoDocumento: 'factura_venta',
+        // Missing periodo!
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        ejecucionIds: [],
+        uploadedAt: new Date().toISOString(),
+      }),
+    );
+  });
+
+  it('DENIES transition por_clasificar → enlazado WITHOUT tipoDocumento (loophole closure)', async () => {
+    const memberDb = testEnv.authenticatedContext(memberUid).firestore();
+    await testEnv.withSecurityRulesDisabled(async (db) => {
+      await setDoc(doc(db, `companies/${companyId}/documentos/loophole-tipo`), {
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        status: 'por_clasificar',
+        uploadedAt: new Date().toISOString(),
+      });
+    });
+    await assertFails(
+      setDoc(doc(memberDb, `companies/${companyId}/documentos/loophole-tipo`), {
+        status: 'enlazado',
+        periodo: '2026-07',
+        // Missing tipoDocumento!
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        ejecucionIds: [],
+        uploadedAt: new Date().toISOString(),
+      }),
+    );
+  });
+
+  it('allows enlazado → enlazado update WITH periodo and tipoDocumento', async () => {
+    const memberDb = testEnv.authenticatedContext(memberUid).firestore();
+    await testEnv.withSecurityRulesDisabled(async (db) => {
+      await setDoc(doc(db, `companies/${companyId}/documentos/ree-nlazado`), {
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        status: 'enlazado',
+        periodo: '2026-06',
+        tipoDocumento: 'factura_venta',
+        ejecucionIds: [],
+        uploadedAt: new Date().toISOString(),
+      });
+    });
+    await assertSucceeds(
+      setDoc(doc(memberDb, `companies/${companyId}/documentos/ree-nlazado`), {
+        status: 'enlazado',
+        periodo: '2026-07',
+        tipoDocumento: 'factura_compra',
+        fileName: 'test.pdf',
+        storagePath: 'c1/documentos/uuid-test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        ejecucionIds: [],
         uploadedAt: new Date().toISOString(),
       }),
     );

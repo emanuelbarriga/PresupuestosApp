@@ -24,7 +24,7 @@ export function DocumentoEntity({
 
   const [terceros, setTerceros] = useState<{ value: string; label: string }[]>([]);
   const [proyectos, setProyectos] = useState<{ value: string; label: string }[]>([]);
-  const [ejecuciones, setEjecuciones] = useState<{ value: string; label: string }[]>([]);
+  const [ejecuciones, setEjecuciones] = useState<{ value: string; label: string; montoEjecutado?: number }[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Load terceros
@@ -74,6 +74,7 @@ export function DocumentoEntity({
           snap.docs.map((d) => ({
             value: d.id,
             label: `${d.data().descripcion || ''} (${d.data().fechaEjecutado || ''})`.trim(),
+            montoEjecutado: d.data().montoEjecutado as number | undefined,
           })),
         );
       },

@@ -379,8 +379,8 @@ describe('Sidepanel — new routing', () => {
       fireEvent.click(screen.getByText('Contrato'));
 
       // Fill periodo
-      const periodoInput = screen.getByPlaceholderText('YYYY-MM') as HTMLInputElement;
-      fireEvent.change(periodoInput, { target: { value: '2026-07' } });
+      const fechaInput = screen.getByLabelText(/Fecha del Documento/) as HTMLInputElement;
+      fireEvent.change(fechaInput, { target: { value: '2026-07-01' } });
 
       // Click save
       fireEvent.click(screen.getByText('Guardar y Enlazar'));

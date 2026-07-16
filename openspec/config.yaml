@@ -84,3 +84,11 @@ archived_changes:
     archived_at: 2026-07-14
     summary: "Decoupled media system: DocumentoMedio type + /documentos collection, Inbox (bulk-upload dropzone + grid), DocumentoSidepanel (preview + classification), flat Storage paths, EjecucionForm persists to /documentos, mediaService/mediaLinking services, firestore.rules + storage.rules for documentos, migration/GC scripts. 27/27 tasks complete, 783 tests passing, 0 tsc errors."
     main_spec: openspec/specs/comprobantes-ejecucion/spec.md
+  - name: deuda-tecnica-pdf-transactions
+    archived_at: 2026-07-14
+    summary: "Hybrid transaction fix (6 atomicity gaps) + PDF canvas preview (3 components, shared PdfViewer). 14/14 tasks, 820 tests passing, 0 regressions."
+    main_spec: openspec/specs/data-atomicity/spec.md
+  - name: ocr-gemini-integration
+    archived_at: 2026-07-16
+    summary: "OCR extraction via Gemini 2.5 Flash: POST /api/ocr/extract route with auth, 5MB guard, 429 retry, structured nullable output; DocumentoSidepanel 'Extraer con IA' button with non-destructive pre-fill, 30s timeout, error mapping; new ocr-extraction spec created, document-classification spec updated. 846/846 tests passing, 0 regressions."
+    main_spec: openspec/specs/ocr-extraction/spec.md

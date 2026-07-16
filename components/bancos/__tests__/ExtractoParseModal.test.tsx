@@ -4,6 +4,20 @@ import React from 'react';
 import { ExtractoParseModal } from '@/components/bancos/ExtractoParseModal';
 import type { MovimientoBancarioInput } from '@/lib/types';
 
+// ─── Mock PdfViewer + react-pdf ───────────────────────────────────────────
+
+vi.mock('react-pdf', () => ({
+  Document: ({ children, file }: any) => {
+    if (!file) return null;
+    return <div data-testid="pdf-document">{children}</div>;
+  },
+  Page: ({ pageNumber }: any) => <div data-testid={`pdf-page-${pageNumber}`} />,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}));
+
+vi.mock('react-pdf/dist/Page/AnnotationLayer.css', () => ({}));
+vi.mock('react-pdf/dist/Page/TextLayer.css', () => ({}));
+
 function makeFile(name = 'extracto.pdf'): File {
   return new File(['%PDF-1.4 fake content'], name, { type: 'application/pdf' });
 }
@@ -114,7 +128,7 @@ describe('ExtractoParseModal', () => {
     expect(screen.getByText('Depósito nómina')).toBeInTheDocument();
   });
 
-  it('renders a PDF preview iframe using URL.createObjectURL(file)', () => {
+  it('renders a PDF preview via PdfViewer using URL.createObjectURL(file)', () => {
     const file = makeFile();
     render(
       <ExtractoParseModal
@@ -136,7 +150,8 @@ describe('ExtractoParseModal', () => {
     // available for opaque origins") when the diff engine inspects it.
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
     expect(createObjectURLSpy.mock.calls[0][0]).toBe(file);
-    expect(screen.getByTitle('Vista previa del PDF')).toBeInTheDocument();
+    // PdfViewer renders a Document from react-pdf, not an iframe
+    expect(screen.queryByTitle('Vista previa del PDF')).not.toBeInTheDocument();
   });
 
   it('revokes the object URL on unmount', () => {

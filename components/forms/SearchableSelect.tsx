@@ -34,7 +34,18 @@ export function SearchableSelect({ label, value, onChange, options, placeholder,
           placeholder={placeholder}
           className="w-full border border-slate-200 rounded-lg p-2.5 pr-8 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-white cursor-pointer"
         />
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        {value ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(''); setSearch(''); }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors"
+            title="Limpiar selección"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        )}
       </div>
       {open && (
         <>

@@ -177,6 +177,12 @@ describe('EjecucionForm — media refactor', () => {
         expect(onFormSubmit).toHaveBeenCalled();
       });
 
+      // Verify _uploadedDocumentoIds is passed in the entry
+      const submittedData = onFormSubmit.mock.calls[0][0] as Record<string, any>;
+      expect(submittedData._uploadedDocumentoIds).toBeDefined();
+      expect(Array.isArray(submittedData._uploadedDocumentoIds)).toBe(true);
+      expect(submittedData._uploadedDocumentoIds.length).toBeGreaterThan(0);
+
       const linkModule = await import('@/lib/mediaLinking');
       expect(linkModule.linkDocumentoToEntities).toHaveBeenCalled();
     });

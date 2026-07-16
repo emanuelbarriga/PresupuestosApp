@@ -6,7 +6,7 @@ import { subscribeDocumentosEnlazados } from '@/lib/mediaService';
 import { PERIODO_SIN_ASIGNAR } from '@/lib/schemas';
 import { collection, query, where, getCountFromServer } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LayoutGrid, Table2 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +138,9 @@ export function ArchivadorTab({
   const [allDocs, setAllDocs] = useState<DocumentoMedio[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Todos (muestra todos los tipos) vs categoría específica ─────────
+  const [showTodos, setShowTodos] = useState(false);
+
   useEffect(() => {
     if (!selectedPeriod) return; // hydration guard
     setLoading(true);
@@ -177,7 +180,7 @@ export function ArchivadorTab({
     return map;
   }, [allDocs]);
 
-  const activeDocs = grouped.get(activeCategory) ?? [];
+  const activeDocs = showTodos ? allDocs : (grouped.get(activeCategory) ?? []);
 
   // ── SafeSum ─────────────────────────────────────────────────────────────
 
@@ -193,6 +196,25 @@ export function ArchivadorTab({
     }
     return { sum: Math.round(sum), docsWithMonto, totalDocs: activeDocs.length };
   }, [activeDocs]);
+
+  // ── Vista: tabla (default) vs tarjetas ───────────────────────────────
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+
+  // Agrupar docs por periodo (YYYY-MM) para la vista tabla
+  const docsByPeriod = useMemo(() => {
+    const map = new Map<string, DocumentoMedio[]>();
+    for (const doc of activeDocs) {
+      const p = doc.periodo || PERIODO_SIN_ASIGNAR;
+      if (!map.has(p)) map.set(p, []);
+      map.get(p)!.push(doc);
+    }
+    return map;
+  }, [activeDocs]);
+
+  const sortedPeriods = useMemo(
+    () => [...docsByPeriod.keys()].sort().reverse(),
+    [docsByPeriod],
+  );
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
@@ -250,8 +272,8 @@ export function ArchivadorTab({
         </button>
       )}
 
-      {/* ── Selector Año-Mes ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
+      {/* ── Selector Año-Mes + Vista ──────────────────────────────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
         <select
           value={yearSelect}
           onChange={handleYearChange}
@@ -284,17 +306,58 @@ export function ArchivadorTab({
             </option>
           ))}
         </select>
+
+        <div className="flex items-center gap-1 ml-auto">
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              viewMode === 'table'
+                ? 'bg-indigo-100 text-indigo-700'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Table2 size={14} /> Tabla
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              viewMode === 'cards'
+                ? 'bg-indigo-100 text-indigo-700'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <LayoutGrid size={14} /> Tarjetas
+          </button>
+        </div>
       </div>
 
-      {/* ── 8 Category Tabs ─────────────────────────────────────────────── */}
+      {/* ── Category Tabs (Todos + 8 tipos) ──────────────────────────── */}
       <div className="border-b border-slate-200 flex gap-0 overflow-x-auto">
+        <button
+          onClick={() => setShowTodos(true)}
+          className={`px-3 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 shrink-0 ${
+            showTodos
+              ? 'text-indigo-600'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Todos
+          <span className={`text-xs ${showTodos ? 'text-indigo-400' : 'text-slate-400'}`}>
+            ({allDocs.length})
+          </span>
+          {showTodos && (
+            <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
         {CATEGORIAS.map((cat) => {
           const count = grouped.get(cat.value)?.length ?? 0;
-          const isActive = cat.value === activeCategory;
+          const isActive = !showTodos && cat.value === activeCategory;
           return (
             <button
               key={cat.value}
-              onClick={() => onCategoryChange(cat.value)}
+              onClick={() => { setShowTodos(false); onCategoryChange(cat.value); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors relative flex items-center gap-1.5 shrink-0 ${
                 isActive
                   ? 'text-indigo-600'
@@ -348,9 +411,105 @@ export function ArchivadorTab({
                 No hay documentos de este tipo en {mesLabel}
               </p>
             </div>
+          ) : viewMode === 'table' ? (
+            <>
+              {/* ── Vista Tabla ────────────────────────────────────────── */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider">
+                      <th className="text-left px-3 py-2.5">Período</th>
+                      <th className="text-left px-3 py-2.5">Fecha</th>
+                      <th className="text-left px-3 py-2.5">Tipo</th>
+                      <th className="text-left px-3 py-2.5">Proveedor</th>
+                      <th className="text-left px-3 py-2.5">NIT</th>
+                      <th className="text-right px-3 py-2.5">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {sortedPeriods.map((period) => {
+                      const docs = docsByPeriod.get(period)!;
+                      const periodSum = docs.reduce(
+                        (acc, d) => acc + Math.round(Number(d.metadata?.montoTotal ?? 0)), 0
+                      );
+                      return (
+                        <tr key={period} className="bg-slate-50/50">
+                          <td
+                            colSpan={6}
+                            className="px-3 py-2 font-bold text-slate-700 text-xs"
+                          >
+                            {period === PERIODO_SIN_ASIGNAR
+                              ? 'Sin período'
+                              : `${MESES.find((m) => m.value === period.split('-')[1])?.label ?? period} ${period.split('-')[0]}`}
+                            {' — '}
+                            <span className="font-normal text-slate-400">
+                              {docs.length} documento{docs.length !== 1 ? 's' : ''}
+                              {' — '}
+                              <span className="font-semibold text-slate-600">
+                                {formatCOP(periodSum)}
+                              </span>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {sortedPeriods.map((period) =>
+                      docsByPeriod.get(period)!.map((doc) => (
+                        <tr
+                          key={doc.id}
+                          onClick={() =>
+                            onNavigate?.({
+                              type: 'entity',
+                              entity: 'documento',
+                              mode: 'edit',
+                              record: doc,
+                            })
+                          }
+                          className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-3 py-2 text-slate-400 font-mono">
+                            {doc.periodo}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {doc.metadata?.fechaDocumento || '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              {CATEGORIAS.find((c) => c.value === doc.tipoDocumento)?.label ?? doc.tipoDocumento}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-700 font-medium truncate max-w-[200px]">
+                            {doc.metadata?.proveedorTexto || '—'}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500 font-mono">
+                            {doc.metadata?.nit || '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                            {doc.metadata?.montoTotal != null
+                              ? formatCOP(Math.round(Number(doc.metadata.montoTotal)))
+                              : '—'}
+                          </td>
+                        </tr>
+                      )),
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 font-semibold text-slate-700">
+                      <td colSpan={5} className="px-3 py-2.5 text-right">
+                        Total general:
+                        <span className="ml-2 font-normal text-slate-400">
+                          ({docsWithMonto} de {totalDocs} documentos con monto)
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">{formatCOP(sum)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           ) : (
             <>
-              {/* Document grid */}
+              {/* ── Vista Tarjetas (original) ───────────────────────────── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {activeDocs.map((doc) => (
                   <button
@@ -384,18 +543,20 @@ export function ArchivadorTab({
                   </button>
                 ))}
               </div>
-
-              {/* SafeSum */}
-              <div className="text-xs text-slate-500">
-                Total:{' '}
-                <span className="font-semibold text-slate-700">
-                  {formatCOP(sum)}
-                </span>
-                <span className="ml-2">
-                  ({docsWithMonto} de {totalDocs} documentos con monto)
-                </span>
-              </div>
             </>
+          )}
+
+          {/* SafeSum (solo en vista cards) */}
+          {viewMode === 'cards' && (
+            <div className="text-xs text-slate-500">
+              Total:{' '}
+              <span className="font-semibold text-slate-700">
+                {formatCOP(sum)}
+              </span>
+              <span className="ml-2">
+                ({docsWithMonto} de {totalDocs} documentos con monto)
+              </span>
+            </div>
           )}
         </div>
       )}

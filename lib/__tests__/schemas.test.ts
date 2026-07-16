@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   yearMonthSchema,
+  yearMonthOrSinSchema,
+  PERIODO_SIN_ASIGNAR,
   dateStringSchema,
   budgetSchema,
   ejecucionSchema,
@@ -38,6 +40,31 @@ describe('yearMonthSchema', () => {
 
   it('rejects YYYY-MM-DD format', () => {
     expect(() => yearMonthSchema.parse('2026-01-15')).toThrow();
+  });
+});
+
+// ── yearMonthOrSinSchema ────────────────────────────────────────────
+
+describe('yearMonthOrSinSchema', () => {
+  it('accepts valid YYYY-MM', () => {
+    expect(yearMonthOrSinSchema.parse('2026-01')).toBe('2026-01');
+    expect(yearMonthOrSinSchema.parse('2024-12')).toBe('2024-12');
+  });
+
+  it('accepts sin_periodo', () => {
+    expect(yearMonthOrSinSchema.parse(PERIODO_SIN_ASIGNAR)).toBe(PERIODO_SIN_ASIGNAR);
+  });
+
+  it('rejects invalid month (13)', () => {
+    expect(() => yearMonthOrSinSchema.parse('2026-13')).toThrow();
+  });
+
+  it('rejects empty string', () => {
+    expect(() => yearMonthOrSinSchema.parse('')).toThrow();
+  });
+
+  it('rejects random string', () => {
+    expect(() => yearMonthOrSinSchema.parse('foo')).toThrow();
   });
 });
 

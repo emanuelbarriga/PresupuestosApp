@@ -13,6 +13,7 @@ const { mockUnsub, mockLinkDocumentoToEntities } = vi.hoisted(() => ({
 
 vi.mock('@/lib/firebase', () => ({
   db: { type: 'db' as const },
+  app: { type: 'app' as const },
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -29,6 +30,22 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('@/lib/mediaLinking', () => ({
   linkDocumentoToEntities: mockLinkDocumentoToEntities,
 }));
+
+vi.mock('@/lib/auth', () => ({
+  auth: { currentUser: null },
+}));
+
+vi.mock('react-pdf', () => ({
+  Document: ({ children, file }: any) => {
+    if (!file) return null;
+    return <div data-testid="pdf-document">{children}</div>;
+  },
+  Page: ({ pageNumber }: any) => <div data-testid={`pdf-page-${pageNumber}`} />,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}));
+
+vi.mock('react-pdf/dist/Page/AnnotationLayer.css', () => ({}));
+vi.mock('react-pdf/dist/Page/TextLayer.css', () => ({}));
 
 // ─── Import AFTER mocks ──────────────────────────────────────────────────────
 
@@ -92,9 +109,9 @@ describe('DocumentoEntity', () => {
     // Select tipo
     fireEvent.click(screen.getByText('Contrato'));
 
-    // Fill periodo
-    const periodoInput = screen.getByPlaceholderText('YYYY-MM') as HTMLInputElement;
-    fireEvent.change(periodoInput, { target: { value: '2026-07' } });
+    // Fill fecha
+    const fechaInput = screen.getByLabelText(/Fecha del Documento/) as HTMLInputElement;
+    fireEvent.change(fechaInput, { target: { value: '2026-07-01' } });
 
     // Click save
     fireEvent.click(screen.getByText('Guardar y Enlazar'));
@@ -107,7 +124,7 @@ describe('DocumentoEntity', () => {
     await waitFor(() => {
       expect(onDocumentoUpdated).toHaveBeenCalledWith(
         'doc-1',
-        '2026-07',
+        '2026-07', // periodo derived from fecha
         'contrato',
       );
     });
@@ -119,9 +136,9 @@ describe('DocumentoEntity', () => {
     // Select tipo
     fireEvent.click(screen.getByText('Factura Venta'));
 
-    // Fill periodo
-    const periodoInput = screen.getByPlaceholderText('YYYY-MM') as HTMLInputElement;
-    fireEvent.change(periodoInput, { target: { value: '2026-07' } });
+    // Fill fecha
+    const fechaInput = screen.getByLabelText(/Fecha del Documento/) as HTMLInputElement;
+    fireEvent.change(fechaInput, { target: { value: '2026-07-01' } });
 
     // Click save — should not throw
     fireEvent.click(screen.getByText('Guardar y Enlazar'));

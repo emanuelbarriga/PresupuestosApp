@@ -1,5 +1,6 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 
 function initAdmin() {
   if (getApps().length > 0) return getApps()[0];
@@ -17,7 +18,11 @@ function initAdmin() {
     client_x509_cert_url: process.env.SA_CLIENT_CERT_URL,
   };
 
-  return initializeApp({ credential: cert(serviceAccount as any) });
+  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.SA_STORAGE_BUCKET;
+  return initializeApp({
+    credential: cert(serviceAccount as any),
+    ...(storageBucket ? { storageBucket } : {}),
+  });
 }
 
 let app: ReturnType<typeof initializeApp> | null = null;
@@ -29,4 +34,8 @@ export function getAdminApp() {
 
 export function getAdminDb() {
   return getFirestore(getAdminApp());
+}
+
+export function getAdminStorage() {
+  return getStorage(getAdminApp());
 }

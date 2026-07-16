@@ -246,6 +246,10 @@ export function EjecucionForm({
           monto: Number(l.monto) || 0,
         }));
       }
+      // Pass uploaded documento IDs so page.tsx can update them atomically inside runTransaction
+      if (uploadedDocumentoIdsRef.current.length > 0) {
+        entry._uploadedDocumentoIds = [...uploadedDocumentoIdsRef.current];
+      }
       // NOTE: comprobantes array is DEPRECATED — DocumentoMedio records are created
       // by ComprobanteUploader via flat Storage path + mediaService
       if (i > 0 && entry.fechaEjecutado) {
@@ -283,11 +287,12 @@ export function EjecucionForm({
     }
 
     // ── Link uploaded documentos to the created ejecuciones ──
-    // TODO: Wrap ejecucion creation + document linking in a single runTransaction
-    // to eliminate the consistency gap between both operations.
-    // Currently: onFormSubmit creates the ejecucion, then linkDocumentoToEntities runs
-    // afterwards. If the app crashes between steps, documents remain por_clasificar.
-    // See: sdd/sistema-medios-desacoplado design review — Two-Phase Commit.  
+    // NOTE: Ejecucion creation now updates DocumentoMedio docs inside runTransaction
+    // (via _uploadedDocumentoIds passed to page.tsx). The linkDocumentoToEntities call
+    // below is cosmetic — it syncs _linkedDocumentos and _estadoComprobantes on the
+    // ejecucion side, which is non-critical state. The atomicity guarantee is met:
+    // ejecucion + budget updates + DocumentoMedio enlazado all commit or none do.
+    // See: sdd/deuda-tecnica-pdf-transactions design
     const docsToLink = uploadedDocumentoIdsRef.current;
     if (docsToLink.length > 0 && createdEjecucionIds.length > 0) {
       try {

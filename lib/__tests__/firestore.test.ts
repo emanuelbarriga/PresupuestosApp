@@ -18,10 +18,12 @@ const {
   writeBatch,
   collectionGroup,
   deleteDoc,
+  runTransaction,
   mockUnsub,
 } = vi.hoisted(() => {
   const mockUnsub = vi.fn();
   const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
+  const mockRunTransaction = vi.fn();
   return {
     collection: vi.fn(() => ({ type: 'collection' as const })),
     doc: vi.fn(() => ({ type: 'doc' as const, path: 'companies/c1/ejecuciones/e1' })),
@@ -42,6 +44,7 @@ const {
     })),
     collectionGroup: vi.fn(() => ({ type: 'collectionGroup' as const })),
     deleteDoc: vi.fn().mockResolvedValue(undefined),
+    runTransaction: mockRunTransaction,
     mockUnsub,
   };
 });
@@ -61,6 +64,7 @@ vi.mock('firebase/firestore', () => ({
   writeBatch,
   collectionGroup,
   deleteDoc,
+  runTransaction,
   increment: vi.fn((n: number) => ({ __increment: n })),
   arrayUnion: vi.fn((v: any) => ({ __arrayUnion: v })),
   arrayRemove: vi.fn((v: any) => ({ __arrayRemove: v })),
@@ -630,16 +634,34 @@ describe('budget-links (PR3): addBudgetLink', () => {
     vi.clearAllMocks();
   });
 
-  it('creates a budget link doc under ejecucion budgetLinks subcollection', async () => {
+  it('uses runTransaction to atomically create link and update budget', async () => {
+    const mockTxn = { set: vi.fn(), update: vi.fn(), delete: vi.fn(), get: vi.fn() };
+    (runTransaction as Mock).mockImplementation(async (_db: any, fn: any) => {
+      await fn(mockTxn);
+    });
+
     await addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 50000 });
 
-    expect(collection).toHaveBeenCalledWith(
-      expect.any(Object), 'companies', 'c1', 'ejecuciones', 'ej-1', 'budgetLinks',
-    );
-    expect(addDoc).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'collection' }),
-      expect.objectContaining({ companyId: 'c1', budgetId: 'b-1', monto: 50000 }),
-    );
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(mockTxn.set).toHaveBeenCalledTimes(1);
+    expect(mockTxn.update).toHaveBeenCalledTimes(1);
+
+    // Verify the link doc is set with the correct data
+    const setCall = mockTxn.set.mock.calls[0];
+    expect(setCall[1]).toMatchObject({ companyId: 'c1', budgetId: 'b-1', monto: 50000 });
+
+    // Verify the budget is updated with denormalized fields
+    const updateCall = mockTxn.update.mock.calls[0];
+    expect(updateCall[1]).toHaveProperty('totalEjecutado');
+    expect(updateCall[1]).toHaveProperty('linkedEjecuciones');
+  });
+
+  it('propagates error when runTransaction fails', async () => {
+    (runTransaction as Mock).mockRejectedValue(new Error('Transaction failed'));
+
+    await expect(
+      addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 50000 }),
+    ).rejects.toThrow('Transaction failed');
   });
 });
 
@@ -648,18 +670,50 @@ describe('budget-links (PR3): removeBudgetLink', () => {
     vi.clearAllMocks();
   });
 
-  it('deletes a budget link doc by id', async () => {
-    (getDoc as Mock).mockResolvedValue({
-      data: () => ({ budgetId: 'b-1', monto: 50000 }),
+  it('uses runTransaction to atomically delete link and update budget', async () => {
+    const mockTxn = {
+      set: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      get: vi.fn().mockResolvedValue({
+        exists: () => true,
+        data: () => ({ budgetId: 'b-1', monto: 50000 }),
+      }),
+    };
+    (runTransaction as Mock).mockImplementation(async (_db: any, fn: any) => {
+      await fn(mockTxn);
     });
 
     await removeBudgetLink('c1', 'ej-1', 'link-1');
 
-    expect(doc).toHaveBeenCalledWith(
-      expect.any(Object), 'companies', 'c1', 'ejecuciones', 'ej-1', 'budgetLinks', 'link-1',
-    );
-    expect(getDoc).toHaveBeenCalled();
-    expect(deleteDoc).toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    // Should read the link first
+    expect(mockTxn.get).toHaveBeenCalledTimes(1);
+    // Should delete the link doc
+    expect(mockTxn.delete).toHaveBeenCalledTimes(1);
+    // Should update the budget (denormalized fields)
+    expect(mockTxn.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips budget update when link has no budgetId or monto', async () => {
+    const mockTxn = {
+      set: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      get: vi.fn().mockResolvedValue({
+        exists: () => true,
+        data: () => ({ budgetId: '', monto: 0 }),
+      }),
+    };
+    (runTransaction as Mock).mockImplementation(async (_db: any, fn: any) => {
+      await fn(mockTxn);
+    });
+
+    await removeBudgetLink('c1', 'ej-1', 'link-1');
+
+    expect(mockTxn.delete).toHaveBeenCalledTimes(1);
+    // No budget update should happen
+    expect(mockTxn.update).not.toHaveBeenCalled();
   });
 });
 
