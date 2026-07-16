@@ -35,8 +35,24 @@ export function generateFilePath(
   fileName: string,
 ): string {
   const uuid = crypto.randomUUID();
-  const sanitized = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const sanitized = fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${companyId}/ejecuciones/${ejecucionId}/${uuid}-${sanitized}`;
+}
+
+/**
+ * Generate a flat Storage path for a DocumentoMedio file.
+ * Format: companies/{companyId}/documentos/{uuid}-{sanitizedName}
+ */
+export function generateMediaFilePath(companyId: string, fileName: string): string {
+  const uuid = crypto.randomUUID();
+  const sanitized = fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `${companyId}/documentos/${uuid}-${sanitized}`;
 }
 
 /**
@@ -48,13 +64,25 @@ export async function uploadFile(
   path: string,
   onProgress?: (progress: number) => void,
 ): Promise<UploadResult> {
+  const { promise } = uploadFileWithTask(file, path, onProgress);
+  return promise;
+}
+
+/**
+ * Start an upload and return both the UploadTask (for cancellation)
+ * and a promise that resolves with the result.
+ * The task is available synchronously — no need to await it.
+ */
+export function uploadFileWithTask(
+  file: Blob | ArrayBuffer | Uint8Array,
+  path: string,
+  onProgress?: (progress: number) => void,
+): { promise: Promise<UploadResult>; task: import('firebase/storage').UploadTask } {
   const storageRef = ref(storage, path);
-  // Si no es Blob (File), agregar contentType explícito para que pase
-  // la regla de Storage que requiere application/pdf
   const metadata = file instanceof Blob ? undefined : { contentType: 'application/pdf' };
   const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
-  return new Promise((resolve, reject) => {
+  const promise = new Promise<UploadResult>((resolve, reject) => {
     uploadTask.on(
       'state_changed',
       (snapshot) => {
@@ -68,6 +96,8 @@ export async function uploadFile(
       },
     );
   });
+
+  return { promise, task: uploadTask };
 }
 
 /**

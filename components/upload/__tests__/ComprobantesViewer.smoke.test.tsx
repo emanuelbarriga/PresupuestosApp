@@ -4,6 +4,19 @@ import React from 'react';
 import { ComprobantesViewer } from '../ComprobantesViewer';
 import { Comprobante } from '@/lib/types';
 
+// Mock PdfViewer (used in modal for PDF preview)
+vi.mock('react-pdf', () => ({
+  Document: ({ children, file }: any) => {
+    if (!file) return null;
+    return <div data-testid="pdf-document">{children}</div>;
+  },
+  Page: ({ pageNumber }: any) => <div data-testid={`pdf-page-${pageNumber}`} />,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}));
+
+vi.mock('react-pdf/dist/Page/AnnotationLayer.css', () => ({}));
+vi.mock('react-pdf/dist/Page/TextLayer.css', () => ({}));
+
 const mockComprobantes: Comprobante[] = [
   {
     id: 'comp-1',

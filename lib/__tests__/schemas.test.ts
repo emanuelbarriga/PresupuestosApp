@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   yearMonthSchema,
+  yearMonthOrSinSchema,
+  PERIODO_SIN_ASIGNAR,
   dateStringSchema,
   budgetSchema,
   ejecucionSchema,
   partialBudgetSchema,
   partialEjecucionSchema,
+  documentoMedioSchema,
+  partialDocumentoMedioSchema,
 } from '@/lib/schemas';
 
 // ── yearMonthSchema ────────────────────────────────────────────
@@ -36,6 +40,31 @@ describe('yearMonthSchema', () => {
 
   it('rejects YYYY-MM-DD format', () => {
     expect(() => yearMonthSchema.parse('2026-01-15')).toThrow();
+  });
+});
+
+// ── yearMonthOrSinSchema ────────────────────────────────────────────
+
+describe('yearMonthOrSinSchema', () => {
+  it('accepts valid YYYY-MM', () => {
+    expect(yearMonthOrSinSchema.parse('2026-01')).toBe('2026-01');
+    expect(yearMonthOrSinSchema.parse('2024-12')).toBe('2024-12');
+  });
+
+  it('accepts sin_periodo', () => {
+    expect(yearMonthOrSinSchema.parse(PERIODO_SIN_ASIGNAR)).toBe(PERIODO_SIN_ASIGNAR);
+  });
+
+  it('rejects invalid month (13)', () => {
+    expect(() => yearMonthOrSinSchema.parse('2026-13')).toThrow();
+  });
+
+  it('rejects empty string', () => {
+    expect(() => yearMonthOrSinSchema.parse('')).toThrow();
+  });
+
+  it('rejects random string', () => {
+    expect(() => yearMonthOrSinSchema.parse('foo')).toThrow();
   });
 });
 
@@ -272,5 +301,122 @@ describe('partialEjecucionSchema', () => {
 
   it('rejects invalid enum value in partial update', () => {
     expect(() => partialEjecucionSchema.parse({ tipo: 'invalido' })).toThrow();
+  });
+
+  it('accepts _estadoComprobantes on ejecucionSchema', () => {
+    const obj = {
+      descripcion: 'Test',
+      projectId: 'p1',
+      projectName: 'P1',
+      entityId: 'e1',
+      entityName: 'E1',
+      entityType: '' as const,
+      tipo: 'ingreso' as const,
+      montoEjecutado: 100,
+      fechaEjecutado: '2026-01-15',
+      _estadoComprobantes: 'Completada' as const,
+    };
+    expect(ejecucionSchema.parse(obj)._estadoComprobantes).toBe('Completada');
+  });
+
+  it('rejects invalid _estadoComprobantes value', () => {
+    expect(() => ejecucionSchema.parse({
+      descripcion: 'Test',
+      projectId: 'p1',
+      projectName: 'P1',
+      entityId: 'e1',
+      entityName: 'E1',
+      entityType: '' as const,
+      tipo: 'ingreso' as const,
+      montoEjecutado: 100,
+      fechaEjecutado: '2026-01-15',
+      _estadoComprobantes: 'Invalido',
+    })).toThrow();
+  });
+});
+
+// ── documentoMedioSchema ──────────────────────────────────────────
+
+describe('documentoMedioSchema', () => {
+  const validDoc = {
+    id: 'doc-001',
+    fileName: 'factura.pdf',
+    storagePath: 'c1/documentos/uuid-factura.pdf',
+    url: 'https://example.com/factura.pdf',
+    size: 1024000,
+    mimeType: 'application/pdf',
+    status: 'por_clasificar' as const,
+    ejecucionIds: [],
+    _source: 'inbox-upload' as const,
+    uploadedAt: '2026-07-14T00:00:00Z',
+    createdBy: 'user-123',
+  };
+
+  it('accepts a valid minimal DocumentoMedio', () => {
+    expect(documentoMedioSchema.parse(validDoc)).toMatchObject(validDoc);
+  });
+
+  it('accepts all optional fields present', () => {
+    const doc = {
+      ...validDoc,
+      status: 'enlazado' as const,
+      tipoDocumento: 'factura_venta' as const,
+      periodo: '2026-07',
+      terceroId: 'ter-001',
+      projectId: 'proj-001',
+      ejecucionIds: ['ej-001'],
+      metadata: {
+        proveedorTexto: 'Proveedor SA',
+        nit: '900123456-7',
+        fechaDocumento: '2026-07-01',
+        montoTotal: 1500000,
+      },
+      updatedAt: '2026-07-14T01:00:00Z',
+    };
+    expect(documentoMedioSchema.parse(doc)).toMatchObject(doc);
+  });
+
+  it('rejects id as empty string', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, id: '' })).toThrow();
+  });
+
+  it('rejects invalid status', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, status: 'invalid' })).toThrow();
+  });
+
+  it('rejects invalid mimeType as empty', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, mimeType: '' })).toThrow();
+  });
+
+  it('rejects negative size', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, size: -1 })).toThrow();
+  });
+
+  it('rejects invalid periodo format', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, periodo: '2026-13' })).toThrow();
+    expect(() => documentoMedioSchema.parse({ ...validDoc, periodo: '26-01' })).toThrow();
+  });
+
+  it('rejects invalid _source', () => {
+    expect(() => documentoMedioSchema.parse({ ...validDoc, _source: 'invalid' })).toThrow();
+  });
+
+  it('rejects missing id', () => {
+    const { id: _, ...rest } = validDoc;
+    expect(() => documentoMedioSchema.parse(rest)).toThrow();
+  });
+});
+
+describe('partialDocumentoMedioSchema', () => {
+  it('accepts empty object', () => {
+    expect(partialDocumentoMedioSchema.parse({})).toEqual({});
+  });
+
+  it('accepts single field update', () => {
+    expect(partialDocumentoMedioSchema.parse({ status: 'enlazado' })).toEqual({ status: 'enlazado' });
+  });
+
+  it('rejects invalid status in partial update', () => {
+    expect(() => partialDocumentoMedioSchema.parse({ status: 'invalid' })).toThrow();
   });
 });

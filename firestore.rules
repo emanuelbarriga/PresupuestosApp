@@ -39,11 +39,55 @@ service cloud.firestore {
 
       // Scoped subcollections — membership required
       match /budgets/{doc} { allow read, write: if isMember(companyId); }
-      match /ejecuciones/{doc} { allow read, write: if isMember(companyId); }
+      // Ejecuciones — field-level write validation
+      match /ejecuciones/{ejecucionId} {
+        allow read: if isMember(companyId);
+        allow create: if isMember(companyId);
+        allow update: if isMember(companyId) && (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['descripcion', 'montoEjecutado', 'fechaEjecutado', 'tipo',
+                      'projectId', 'projectName',
+                      'entityId', 'entityName', 'entityType',
+                      'cuentaId', 'cuentaName', 'comprobantes',
+                      'archivado', 'updatedAt', 'createdAt',
+                      '_linkedDocumentos', '_estadoComprobantes',
+                      '_movimientoId', '_extractoId'])
+        );
+        allow delete: if false;
+      }
       match /projects/{doc} { allow read, write: if isMember(companyId); }
       match /cuentasBancarias/{doc} { allow read, write: if isMember(companyId); }
       match /extractos/{doc} { allow read, write: if isMember(companyId); }
       match /settings/{doc} { allow read, write: if isMember(companyId); }
+
+      // Documentos collection — flat media storage
+      match /documentos/{doc} {
+        allow read: if isMember(companyId);
+        allow create: if isMember(companyId)
+          && request.resource.data.keys().hasAll(['fileName', 'storagePath', 'mimeType', 'size', 'status', 'uploadedAt'])
+          && request.resource.data.status in ['por_clasificar', 'enlazado'];
+        // Status transitions:
+        // 1. Any transition TO enlazado requires periodo and tipoDocumento as strings
+        //    (uses request.resource.data.status — the NEW state — to validate)
+        // 2. enlazado → por_clasificar (unlinking) allowed only if ejecucionIds is cleared
+        // 3. Internal changes within por_clasificar are always allowed
+        allow update: if isMember(companyId) && (
+          // 1. New state is enlazado — requires periodo and tipoDocumento strings
+          (request.resource.data.status == 'enlazado'
+            && request.resource.data.periodo is string
+            && request.resource.data.tipoDocumento is string)
+          ||
+          // 2. enlazado → por_clasificar (unlinking) — requires cleared ejecucionIds
+          (resource.data.status == 'enlazado'
+            && request.resource.data.status == 'por_clasificar'
+            && request.resource.data.ejecucionIds.size() == 0)
+          ||
+          // 3. Internal changes within por_clasificar
+          (resource.data.status == 'por_clasificar'
+            && request.resource.data.status == 'por_clasificar')
+        );
+        allow delete: if false; // GC scripts only
+      }
 
       // BudgetLinks subcollection — same access as ejecuciones
       match /ejecuciones/{ejecucionId}/budgetLinks/{linkId} { allow read, write: if isMember(companyId); }

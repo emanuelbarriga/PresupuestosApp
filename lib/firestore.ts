@@ -13,6 +13,7 @@ import {
   query,
   where,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   increment,
   arrayUnion,
@@ -461,19 +462,20 @@ export async function addBudgetLink(
   ejecucionId: string,
   data: Omit<EjecucionBudgetLink, 'id' | 'createdAt'>,
 ): Promise<string> {
-  const docRef = await addDoc(
+  const linkRef = doc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION),
-    { ...data, createdAt: serverTimestamp() },
   );
-  // Denormalize on the budget: totalEjecutado + linkedEjecuciones
-  await updateDoc(
-    doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId),
-    {
+  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId);
+
+  await runTransaction(db, async (transaction) => {
+    transaction.set(linkRef, { ...data, createdAt: serverTimestamp() });
+    transaction.update(budgetRef, {
       totalEjecutado: increment(data.monto),
       linkedEjecuciones: arrayUnion({ ejecucionId, monto: data.monto }),
-    },
-  );
-  return docRef.id;
+    });
+  });
+
+  return linkRef.id;
 }
 
 export async function removeBudgetLink(
@@ -481,21 +483,26 @@ export async function removeBudgetLink(
   ejecucionId: string,
   linkId: string,
 ): Promise<void> {
-  // Read the link to get budgetId and monto before deleting
   const linkRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION, linkId);
-  const linkSnap = await getDoc(linkRef);
-  const linkData = linkSnap.data() as EjecucionBudgetLink | undefined;
-  await deleteDoc(linkRef);
-  // Decrement denormalized data on the budget
-  if (linkData?.budgetId && linkData?.monto) {
-    await updateDoc(
-      doc(db, COMPANIES_COLLECTION, companyId, 'budgets', linkData.budgetId),
-      {
-        totalEjecutado: increment(-linkData.monto),
-        linkedEjecuciones: arrayRemove({ ejecucionId, monto: linkData.monto }),
-      },
-    );
-  }
+
+  await runTransaction(db, async (transaction) => {
+    const linkSnap = await transaction.get(linkRef);
+    if (!linkSnap.exists()) return;
+
+    const linkData = linkSnap.data() as EjecucionBudgetLink;
+    transaction.delete(linkRef);
+
+    // Decrement denormalized data on the budget
+    if (linkData.budgetId && linkData.monto) {
+      transaction.update(
+        doc(db, COMPANIES_COLLECTION, companyId, 'budgets', linkData.budgetId),
+        {
+          totalEjecutado: increment(-linkData.monto),
+          linkedEjecuciones: arrayRemove({ ejecucionId, monto: linkData.monto }),
+        },
+      );
+    }
+  });
 }
 
 /**
@@ -1273,11 +1280,51 @@ export async function deleteBudget(companyId: string, budgetId: string): Promise
   await deleteDoc(budgetRef);
 }
 
+const MAX_BATCH_OPS = 450; // Safety margin below Firestore's 500-operation writeBatch limit
+
 export async function deleteEjecucion(companyId: string, ejecucionId: string): Promise<void> {
   const ejecucionRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId);
   const ejecucionSnap = await getDoc(ejecucionRef);
+
+  // ── Unlink linked DocumentoMedio records ──
+  // NOTE: Uses writeBatch (not runTransaction) for consistency with the existing
+  // budget-link reintegration logic. Known limitation: between the query and the
+  // batch commit, a concurrent write could modify documentos. For 1-3 user
+  // companies this is negligible. If concurrent usage grows, migrate to
+  // runTransaction with _linkedDocumentos-based doc ref resolution.
+  const docsQuery = query(
+    collection(db, COMPANIES_COLLECTION, companyId, 'documentos'),
+    where('ejecucionIds', 'array-contains', ejecucionId),
+  );
+  const docsSnap = await getDocs(docsQuery);
+
+  // ── Load budgetLinks ──
   const linksSnap = await getDocs(collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION));
+
+  // Guard: if total operations exceed 450, fragment into multiple batches
+  const totalOps = docsSnap.docs.length + linksSnap.docs.length * 2 + 2; // + delete ejecucion + possible movimiento reset
+  if (totalOps > MAX_BATCH_OPS) {
+    await fragmentDeleteEjecucion(companyId, ejecucionId, ejecucionSnap, docsSnap, linksSnap);
+    return;
+  }
+
   const batch = writeBatch(db);
+
+  // Unlink each linked documento
+  docsSnap.docs.forEach(d => {
+    const data = d.data();
+    const currentIds: string[] = data.ejecucionIds ?? [];
+    const updatedIds = currentIds.filter((id: string) => id !== ejecucionId);
+
+    const update: Record<string, unknown> = {
+      ejecucionIds: updatedIds,
+      updatedAt: serverTimestamp(),
+    };
+    if (updatedIds.length === 0) {
+      update.status = 'por_clasificar';
+    }
+    batch.update(d.ref, update);
+  });
 
   // Reintegro de budgetLinks
   linksSnap.docs.forEach(d => {
@@ -1319,6 +1366,75 @@ export async function deleteEjecucion(companyId: string, ejecucionId: string): P
 
   batch.delete(ejecucionRef);
   await batch.commit();
+}
+
+/**
+ * Handle the fragment path when deleteEjecucion exceeds the 450-operation limit.
+ * Processes documentos in chunks, then budget links + ejecucion delete.
+ */
+async function fragmentDeleteEjecucion(
+  companyId: string, ejecucionId: string,
+  ejecucionSnap: any, docsSnap: any, linksSnap: any,
+): Promise<void> {
+  const docChunks = chunkArray(docsSnap.docs, Math.floor(MAX_BATCH_OPS / 2));
+  for (const chunk of docChunks) {
+    const batch = writeBatch(db);
+    chunk.forEach((d: any) => {
+      const data = d.data() as Record<string, unknown>;
+      const currentIds: string[] = (data.ejecucionIds as string[]) ?? [];
+      const updatedIds = currentIds.filter((id: string) => id !== ejecucionId);
+      const update: Record<string, unknown> = {
+        ejecucionIds: updatedIds,
+        updatedAt: serverTimestamp(),
+      };
+      if (updatedIds.length === 0) update.status = 'por_clasificar';
+      batch.update(d.ref, update as any);
+    });
+    await batch.commit();
+  }
+
+  // Process budget links and delete ejecucion
+  const finalBatch = writeBatch(db);
+  const ejecucionRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId);
+  linksSnap.docs.forEach((d: any) => {
+    const data = d.data();
+    const budgetId = data.budgetId as string;
+    const monto = data.monto as number;
+    if (budgetId && monto) {
+      const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, budgetId);
+      finalBatch.update(budgetRef, {
+        totalEjecutado: increment(-monto),
+        linkedEjecuciones: arrayRemove({ ejecucionId, monto }),
+      });
+    }
+    finalBatch.delete(d.ref);
+  });
+  if (ejecucionSnap && typeof ejecucionSnap.exists === 'function' && ejecucionSnap.exists()) {
+    const ejecucionData = ejecucionSnap.data();
+    const movId = ejecucionData._movimientoId as string | undefined;
+    const extId = ejecucionData._extractoId as string | undefined;
+    const ctaId = ejecucionData.cuentaId as string | undefined;
+    if (movId && extId && ctaId) {
+      const movimientoRef = doc(
+        db, COMPANIES_COLLECTION, companyId,
+        CUENTAS_BANCARIAS_COLLECTION, ctaId,
+        EXTRACTOS_COLLECTION, extId,
+        MOVIMIENTOS_COLLECTION, movId,
+      );
+      finalBatch.update(movimientoRef, { convertido: false, _ejecucionId: '' });
+    }
+  }
+  finalBatch.delete(ejecucionRef);
+  await finalBatch.commit();
+}
+
+/** Split an array into chunks of maxSize. */
+function chunkArray<T>(arr: T[], maxSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += maxSize) {
+    chunks.push(arr.slice(i, i + maxSize));
+  }
+  return chunks;
 }
 
 // ── ER Config (Estado de Resultados per-company config) ──

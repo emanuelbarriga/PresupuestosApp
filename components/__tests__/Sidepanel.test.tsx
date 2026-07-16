@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
 // ─── Mock infrastructure ────────────────────────────────────────────────────
 
-const { mockUnsub } = vi.hoisted(() => ({ mockUnsub: vi.fn() }));
+const { mockUnsub, mockLinkDocToEntities } = vi.hoisted(() => ({
+  mockUnsub: vi.fn(),
+  mockLinkDocToEntities: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(() => ({ type: 'collection' as const })),
@@ -20,6 +23,10 @@ vi.mock('@/lib/firebase', () => ({ db: {}, storage: {} }));
 vi.mock('@/lib/auth', () => ({ auth: {} }));
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, loading: false }) }));
 vi.mock('@/context/CompanyContext', () => ({ useCompany: () => ({ selectedCompany: null, companies: [] }) }));
+
+vi.mock('@/lib/mediaLinking', () => ({
+  linkDocumentoToEntities: mockLinkDocToEntities,
+}));
 
 vi.mock('@/lib/fileUpload', () => ({
   validateFile: vi.fn().mockReturnValue({ valid: true as const }),
@@ -329,6 +336,62 @@ describe('Sidepanel — new routing', () => {
       );
 
       expect(screen.getByText('Extracto')).toBeInTheDocument();
+    });
+
+    it('entity=documento mode=view muestra el panel con clasificación', () => {
+      render(
+        <Sidepanel
+          screen={makeEntityScreen('documento', 'view', { record: { id: 'doc-1', fileName: 'factura.pdf', mimeType: 'application/pdf', status: 'por_clasificar', ejecucionIds: [], _source: 'inbox-upload', uploadedAt: '2026-07-14T00:00:00Z', createdBy: 'user-1' } })}
+          companyId="c1"
+          onClose={vi.fn()}
+          onSubmit={vi.fn()}
+          onNavigate={vi.fn()}
+          onBack={vi.fn()}
+          canGoBack={false}
+        />,
+      );
+
+      // PanelHeader title
+      expect(screen.getByText('Clasificar Documento')).toBeInTheDocument();
+      // File name should be visible in preview section
+      expect(screen.getByText('factura.pdf')).toBeInTheDocument();
+      // Should show classification form with tipo chips
+      expect(screen.getByText('Factura Venta')).toBeInTheDocument();
+    });
+
+    it('forwards onDocumentoUpdated to DocumentoEntity from Sidepanel prop', async () => {
+      const onDocUpdated = vi.fn();
+
+      render(
+        <Sidepanel
+          screen={makeEntityScreen('documento', 'view', { record: { id: 'doc-1', fileName: 'factura.pdf', mimeType: 'application/pdf', status: 'por_clasificar', ejecucionIds: [], _source: 'inbox-upload', uploadedAt: '2026-07-14T00:00:00Z', createdBy: 'user-1' } })}
+          companyId="c1"
+          onClose={vi.fn()}
+          onSubmit={vi.fn()}
+          onNavigate={vi.fn()}
+          onBack={vi.fn()}
+          canGoBack={false}
+          onDocumentoUpdated={onDocUpdated}
+        />,
+      );
+
+      // Select tipo
+      fireEvent.click(screen.getByText('Contrato'));
+
+      // Fill periodo
+      const fechaInput = screen.getByLabelText(/Fecha del Documento/) as HTMLInputElement;
+      fireEvent.change(fechaInput, { target: { value: '2026-07-01' } });
+
+      // Click save
+      fireEvent.click(screen.getByText('Guardar y Enlazar'));
+
+      await waitFor(() => {
+        expect(mockLinkDocToEntities).toHaveBeenCalledTimes(1);
+      });
+
+      await waitFor(() => {
+        expect(onDocUpdated).toHaveBeenCalledWith('doc-1', '2026-07', 'contrato');
+      });
     });
 
     it('entity=settings mode=view renderiza SettingsEntity sin PanelHeader', () => {

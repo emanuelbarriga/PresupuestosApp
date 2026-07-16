@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { Comprobante } from '@/lib/types';
 import { Upload, FileText, Download, Trash2, X } from 'lucide-react';
+import { PdfViewer } from '@/components/shared/PdfViewer';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -90,7 +91,7 @@ export function ComprobantesViewer({ comprobantes, onDelete }: { comprobantes: C
               {modal.type.startsWith('image/') ? (
                 <img src={modal.url} alt={modal.name} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
               ) : (
-                <iframe src={modal.url} className="w-full h-[70vh] rounded-lg" title={modal.name} />
+                <PdfViewer fileUrl={modal.url} pageMode="all" className="w-full h-[70vh]" />
               )}
             </div>
           </div>

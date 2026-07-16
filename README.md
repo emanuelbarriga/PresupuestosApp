@@ -6,6 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.1-06B6D4?logo=tailwindcss)](https://tailwindcss.com)
 [![Vitest](https://img.shields.io/badge/Vitest-4.1-6E9F18?logo=vitest)](https://vitest.dev)
+[![Tests](https://img.shields.io/badge/Tests-783-6E9F18)](https://vitest.dev)
 [![Playwright](https://img.shields.io/badge/Playwright-1.61-45BA4B?logo=playwright)](https://playwright.dev)
 [![License](https://img.shields.io/badge/Licencia-MIT-blue)](LICENSE)
 
@@ -160,6 +161,7 @@ Catch-all con segmentos dinámicos. La empresa activa se obtiene del path (`/:co
 | `/:company/datos/proyectos` | Datos › Proyectos | Tab específico |
 | `/:company/datos/clientes` | Datos › Clientes | Tab específico |
 | `/:company/datos/proveedores` | Datos › Proveedores | Tab específico |
+| `/:company/media` | Medios | Gestión documental desacoplada (Inbox + clasificación) |
 | `/:company/extractos` | Extractos | Gestión bancaria |
 | `/:company/configuracion` | Configuración | Settings globales |
 
@@ -180,6 +182,9 @@ app/
 └── page.tsx                  # Redirect a /saman/dashboard
 
 components/
+├── media/                   # Gestión documental (Inbox + upload + sidepanel)
+│   ├── MediaPage.tsx         # Dropzone + grilla de documentos
+│   └── DocumentoSidepanel.tsx  # Clasificación (8 tipos, periodo, entidades)
 ├── entities/                 # Componentes de entidad unificados
 │   ├── presupuesto/          # Budget*
 │   ├── ejecucion/            # Ejecucion*
@@ -221,7 +226,9 @@ scripts/
 ├── seed.ts                   # Seed de datos para emuladores
 ├── seed-providers.ts         # Seed legacy de proveedores
 ├── upload-*.ts               # Scripts de carga de datos reales
-├── migrate-*.ts              # Scripts de migración
+├── migrate-legacy-comprobantes.ts  # Migración: Ejecucion.comprobantes → /documentos
+├── down-migration-media.ts   # Rollback seguro con duplicación Storage server-side
+├── garbage-collector-media.ts      # GC: phantom files, drafts abandonados, stale unlinked
 └── cleanup-*.ts              # Scripts de limpieza
 
 e2e/
@@ -342,12 +349,33 @@ Cada entidad (`presupuesto`, `ejecucion`, `tercero`, `proyecto`, `movimiento`, `
     │       ├── fechaEjecutado: string
     │       ├── cuentaId / cuentaName?: string
     │       ├── comprobantes: Comprobante[]
+    │       ├── _linkedDocumentos?: Array<     ← CAMPO DESNORMALIZADO
+    │       │   { documentoId, tipoDocumento, periodo?, montoTotal? }
+    │       ├── _estadoComprobantes?: string  ← CAMPO DESNORMALIZADO
     │       └── archivado?: boolean
     │       │
     │       └── 📁 budgetLinks         ← join presupuesto ↔ ejecución
     │           └── {linkId}
     │               ├── budgetId: string
     │               └── monto: number
+    │
+    ├── 📁 documentos               ← sistema de medios desacoplado
+    │   └── {documentoId}
+    │       ├── fileName: string
+    │       ├── storagePath: string
+    │       ├── url: string
+    │       ├── size: number
+    │       ├── mimeType: string
+    │       ├── status: 'por_clasificar' | 'enlazado'
+    │       ├── tipoDocumento?: TipoDocumentoMedio
+    │       ├── periodo?: string (YYYY-MM)
+    │       ├── terceroId?: string
+    │       ├── projectId?: string
+    │       ├── ejecucionIds: string[]
+    │       ├── _source: 'inbox-upload' | 'ejecucion-form' | 'migration'
+    │       ├── metadata?: { proveedorTexto, nit, fechaDocumento, montoTotal }
+    │       ├── uploadedAt: string
+    │       └── createdBy: string
     │
     └── 📁 cuentasBancarias           ← cuentas bancarias
         └── {cuentaId}
@@ -388,6 +416,7 @@ Cada entidad (`presupuesto`, `ejecucion`, `tercero`, `proyecto`, `movimiento`, `
 | **Budget** | `companies/{id}/budgets/{id}` | Presupuesto: monto planeado por proyecto y mes. |
 | **Ejecucion** | `companies/{id}/ejecuciones/{id}` | Ejecución real: lo que realmente se gastó/cobró. |
 | **EjecucionBudgetLink** | `.../ejecuciones/{id}/budgetLinks/{id}` | Join N:N entre ejecución y presupuesto con monto parcial. |
+| **DocumentoMedio** | `companies/{id}/documentos/{id}` | Documento financiero plano (factura, extracto, contrato). Status-driven: `por_clasificar` → `enlazado`. |
 | **CuentaBancaria** | `.../cuentasBancarias/{id}` | Cuenta bancaria registrada. |
 | **Extracto** | `.../cuentasBancarias/{id}/extractos/{id}` | Extracto bancario subido (PDF parseado). |
 | **MovimientoBancario** | `.../extractos/{id}/movimientos/{id}` | Movimiento individual del extracto. |
@@ -511,10 +540,16 @@ El ciclo de vida de incorporación de un nuevo usuario:
 
 ### Pruebas unitarias e integración
 
-Ejecutadas con **Vitest 4**:
+Ejecutadas con **Vitest 4** (**783 tests, 65 archivos**):
 
 ```bash
 npm run test
+```
+
+Para las reglas de seguridad de Firestore/Storage (requiere emuladores):
+
+```bash
+npm run test:rules
 ```
 
 Para medir cobertura (incluye `lib/`, `components/`, `context/`, `app/`):
@@ -531,6 +566,7 @@ Cobertura:
 - **Parsers bancarios**: Parseo de extractos de Bancolombia, Bancoomeva, Global66.
 - **Tipos y entidades**: Tests de tipos compartidos y helpers de conversión.
 - **Configuración**: Tests de `toMillis()` y `fmtDate()` que manejan la dualidad Timestamp / string ISO.
+- **Sistema de medios**: Tests de MediaPage, DocumentoSidepanel, mediaLinking, mediaService, scripts de migración y GC.
 
 ### Pruebas end-to-end (E2E)
 
@@ -585,10 +621,11 @@ Para más detalles (arquitectura de deploy, variables de entorno con prefijo `SA
 
 Las siguientes secciones están en desarrollo o planificadas:
 
-- **Proyectos** — vista independiente con detalle de Avance.
-- **Clientes / Proveedores** — vistas independientes desde `terceros`.
-- **Extractos** — vista completa con arrastre de PDFs y conciliación visual.
-- Notificaciones en tiempo real sobre invitaciones.
+- **Organización Mensual** — Fase 2: archivador contable con 8 categorías y selector año-mes.
+- **Explorador por Terceros** — Fase 2: agrupación automatizada por proveedor/cliente.
+- **Vista "Soportes" en TerceroView / ProjectView** — Fase 2: inyección de pestaña sin modificar código base.
+- OCR / IA para extracción automática de metadatos (Gemini API) — Fase 3.
+- Cloud Function para integridad cross-collection de `_estadoComprobantes`.
 - Tests E2E de flujo completo de conciliación bancaria.
 - UI de administración de miembros por empresa.
 

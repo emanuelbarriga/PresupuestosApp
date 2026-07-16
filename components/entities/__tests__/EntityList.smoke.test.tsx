@@ -4,6 +4,19 @@ import React from 'react';
 import type { NavScreen } from '@/lib/types';
 import { EntityList } from '../EntityList';
 
+// Mock PdfViewer (used indirectly via ComprobantesViewer)
+vi.mock('react-pdf', () => ({
+  Document: ({ children, file }: any) => {
+    if (!file) return null;
+    return <div data-testid="pdf-document">{children}</div>;
+  },
+  Page: ({ pageNumber }: any) => <div data-testid={`pdf-page-${pageNumber}`} />,
+  pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
+}));
+
+vi.mock('react-pdf/dist/Page/AnnotationLayer.css', () => ({}));
+vi.mock('react-pdf/dist/Page/TextLayer.css', () => ({}));
+
 const mockBudgets = [
   {
     id: 'b1',

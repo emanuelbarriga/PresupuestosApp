@@ -14,32 +14,10 @@ import { addClient, addProvider, addProject } from '@/lib/firestore';
 import { ejecucionSchema } from '@/lib/schemas';
 import { ZodError } from 'zod';
 import toast from 'react-hot-toast';
-import { generateFilePath, uploadFile } from '@/lib/fileUpload';
+import { linkDocumentoToEntities } from '@/lib/mediaLinking';
 import { ComprobanteUploader } from '@/components/upload/ComprobanteUploader';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
-
-type PendingComprobante = {
-  id: string;
-  file: File;
-  name: string;
-  type: string;
-  size: number;
-  descripcion?: string;
-  tipo?: string;
-};
-
-type PendingComprobanteUploadResult = {
-  id: string;
-  name: string;
-  url: string;
-  path: string;
-  type: string;
-  size: number;
-  uploadedAt: string;
-  descripcion?: string;
-  tipo?: string;
-};
 
 interface EjecucionFormProps {
   companyId: string;
@@ -127,7 +105,8 @@ export function EjecucionForm({
 
   const [selectedBudgetLinks, setSelectedBudgetLinks] = useState<Array<{budgetId: string; budgetName: string; monto: string}>>([]);
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
-  const [pendingComprobantes, setPendingComprobantes] = useState<PendingComprobante[]>([]);
+  const [uploadedDocumentoIds, setUploadedDocumentoIds] = useState<string[]>([]);
+  const uploadedDocumentoIdsRef = useRef<string[]>([]);
   const [internalSaving, setInternalSaving] = useState(false);
 
   const ejecucionId = mode === 'edit' ? record?.id : undefined;
@@ -223,9 +202,15 @@ export function EjecucionForm({
       setComprobantes(record.comprobantes || []);
     } else {
       setComprobantes([]);
-      setPendingComprobantes([]);
+      setUploadedDocumentoIds([]);
+      uploadedDocumentoIdsRef.current = [];
     }
   }, [mode, record]);
+
+  const handleUploadComplete = useCallback((documentoId: string) => {
+    setUploadedDocumentoIds(prev => [...prev, documentoId]);
+    uploadedDocumentoIdsRef.current = [...uploadedDocumentoIdsRef.current, documentoId];
+  }, []);
 
   const handleSubmit = async () => {
     setInternalSaving(true);
@@ -239,35 +224,12 @@ export function EjecucionForm({
     const entries: Record<string, any>[] = [];
     const reps = recurring && mode === 'add' ? Math.max(1, recurringCount) : 1;
 
-    // ── Upload pending comprobantes FIRST ──
-    let uploadedComprobantes: PendingComprobanteUploadResult[] = [];
-    if (pendingComprobantes.length > 0) {
-      // For ADD mode, generate an ID now so files go to the right path
-      const uploadId = ejecucionId || crypto.randomUUID();
-      uploadedComprobantes = await Promise.all(
-        pendingComprobantes.map(async (pc) => {
-          const path = generateFilePath(companyId, uploadId, pc.name);
-          const result = await uploadFile(pc.file, path);
-          return {
-            id: crypto.randomUUID(),
-            name: pc.name,
-            url: result.url,
-            path: result.path,
-            type: pc.type,
-            size: pc.size,
-            uploadedAt: new Date().toISOString(),
-            ...(pc.descripcion ? { descripcion: pc.descripcion } : {}),
-            ...(pc.tipo ? { tipo: pc.tipo } : {}),
-          };
-        }),
-      );
-      // Carries the pre-generated ID to page.tsx for ADD mode
-      if (mode === 'add') {
-        data._preGeneratedId = uploadId;
-      }
+    // For ADD mode, generate an ID now for the ejecucion ref
+    let firstEjecucionId: string | undefined;
+    if (mode === 'add') {
+      firstEjecucionId = ejecucionId || crypto.randomUUID();
+      data._preGeneratedId = firstEjecucionId;
     }
-
-    const allComprobantes = [...comprobantes, ...uploadedComprobantes];
 
     for (let i = 0; i < reps; i++) {
       const entry = { ...data };
@@ -284,10 +246,12 @@ export function EjecucionForm({
           monto: Number(l.monto) || 0,
         }));
       }
-      // Comprobantes already uploaded — include full metadata
-      if (allComprobantes.length > 0) {
-        entry.comprobantes = allComprobantes;
+      // Pass uploaded documento IDs so page.tsx can update them atomically inside runTransaction
+      if (uploadedDocumentoIdsRef.current.length > 0) {
+        entry._uploadedDocumentoIds = [...uploadedDocumentoIdsRef.current];
       }
+      // NOTE: comprobantes array is DEPRECATED — DocumentoMedio records are created
+      // by ComprobanteUploader via flat Storage path + mediaService
       if (i > 0 && entry.fechaEjecutado) {
         const parts = (entry.fechaEjecutado as string).split('-');
         if (parts.length === 3) {
@@ -304,6 +268,7 @@ export function EjecucionForm({
       }
       entries.push(entry);
     }
+    const createdEjecucionIds: string[] = [];
     for (const entry of entries) {
       try {
         ejecucionSchema.parse(entry);
@@ -315,6 +280,35 @@ export function EjecucionForm({
         throw err;
       }
       await onFormSubmit(entry);
+      // Track the created ejecucion ID for document linking
+      if (entry._preGeneratedId) {
+        createdEjecucionIds.push(entry._preGeneratedId);
+      }
+    }
+
+    // ── Link uploaded documentos to the created ejecuciones ──
+    // NOTE: Ejecucion creation now updates DocumentoMedio docs inside runTransaction
+    // (via _uploadedDocumentoIds passed to page.tsx). The linkDocumentoToEntities call
+    // below is cosmetic — it syncs _linkedDocumentos and _estadoComprobantes on the
+    // ejecucion side, which is non-critical state. The atomicity guarantee is met:
+    // ejecucion + budget updates + DocumentoMedio enlazado all commit or none do.
+    // See: sdd/deuda-tecnica-pdf-transactions design
+    const docsToLink = uploadedDocumentoIdsRef.current;
+    if (docsToLink.length > 0 && createdEjecucionIds.length > 0) {
+      try {
+        for (const docId of docsToLink) {
+          // For MVP, link to all created ejecuciones (same comprobante backs all recurring entries)
+          await linkDocumentoToEntities(companyId, docId, {
+            tipoDocumento: 'factura_venta' as any, // Default tipo — will be updated via classification
+            periodo: new Date().toISOString().slice(0, 7),
+            terceroId: fields.entityId || '',
+            ejecucionIds: createdEjecucionIds,
+          });
+        }
+      } catch (err) {
+        console.error('[EjecucionForm] Error linking documentos:', err);
+        toast.error('Ejecución creada, pero hubo un error al vincular los documentos');
+      }
     }
     setInternalSaving(false);
   };
@@ -428,11 +422,9 @@ export function EjecucionForm({
             ejecucionId={ejecucionId}
             comprobantes={comprobantes}
             onComprobantesChange={setComprobantes}
-            pendingComprobantes={pendingComprobantes}
-            onPendingChange={setPendingComprobantes}
             tiposComprobante={settingsData?.tipoComprobante || []}
             requiredTypes={['factura', 'soporte']}
-            onSaveComprobantes={ejecucionId ? async (_id, comps) => { await onFormSubmit({ comprobantes: comps }); } : undefined}
+            onUploadComplete={handleUploadComplete}
           />
         </div>
 

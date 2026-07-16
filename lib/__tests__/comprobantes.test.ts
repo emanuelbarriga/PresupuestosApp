@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES } from '@/lib/comprobantes';
+import { derivarEstadoComprobantes, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING } from '@/lib/comprobantes';
 import type { Comprobante } from '@/lib/types';
 
 function makeComprobante(tipo?: string): Comprobante {
@@ -90,6 +90,62 @@ describe('derivarEstadoComprobantes', () => {
       { ...makeComprobante(), tipo: '' }, // empty tipo
     ];
     const result = derivarEstadoComprobantes(comprobantes, REQUIRED_COMPROBANTE_TYPES);
+    expect(result).toEqual({ estado: 'Falta un comprobante', faltante: 'falta_cuenta_cobro' });
+  });
+
+  // ─── DocumentoMedio[] support (systema-medios-desacoplado) ────────────
+
+  it('accepts DocumentoMedio-like objects with tipoDocumento mapping (comprobante_egreso → Comprobante de pago)', () => {
+    const docs = [
+      { tipoDocumento: 'comprobante_egreso' },
+      { tipoDocumento: 'comprobante_ingreso' },
+    ];
+    const result = derivarEstadoComprobantes(docs, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING);
+    expect(result).toEqual({ estado: 'Completada' });
+  });
+
+  it('returns Falta un comprobante when only one mapped tipo present', () => {
+    const docs = [
+      { tipoDocumento: 'comprobante_egreso' },
+    ];
+    const result = derivarEstadoComprobantes(docs, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING);
+    expect(result).toEqual({ estado: 'Falta un comprobante', faltante: 'falta_cuenta_cobro' });
+  });
+
+  it('returns Sin comprobantes when unmapped tipos present', () => {
+    const docs = [
+      { tipoDocumento: 'factura_venta' },
+      { tipoDocumento: 'contrato' },
+    ];
+    const result = derivarEstadoComprobantes(docs, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING);
+    expect(result).toEqual({ estado: 'Sin comprobantes' });
+  });
+
+  it('works with _linkedDocumentos-style array (tipoDocumento field only)', () => {
+    const linkedDocs = [
+      { documentoId: 'doc-1', tipoDocumento: 'comprobante_egreso' },
+      { documentoId: 'doc-2', tipoDocumento: 'comprobante_ingreso' },
+    ];
+    const result = derivarEstadoComprobantes(linkedDocs, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING);
+    expect(result).toEqual({ estado: 'Completada' });
+  });
+
+  it('uses default mapping when third arg omitted (backward compat with legacy identity)', () => {
+    const docs = [
+      { tipoDocumento: 'Comprobante de pago' },
+      { tipoDocumento: 'Cuenta de Cobro' },
+    ];
+    const result = derivarEstadoComprobantes(docs, REQUIRED_COMPROBANTE_TYPES);
+    expect(result).toEqual({ estado: 'Completada' });
+  });
+
+  it('ignores documentos without tipoDocumento', () => {
+    const docs = [
+      { tipoDocumento: 'comprobante_egreso' },
+      { tipoDocumento: '' },
+      { tipoDocumento: undefined },
+    ];
+    const result = derivarEstadoComprobantes(docs, REQUIRED_COMPROBANTE_TYPES, DEFAULT_TIPO_MEDIO_MAPPING);
     expect(result).toEqual({ estado: 'Falta un comprobante', faltante: 'falta_cuenta_cobro' });
   });
 });

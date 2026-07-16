@@ -2,9 +2,9 @@
 
 import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario, ErConfig } from '@/lib/types';
+import { ViewType, SidepanelData, Budget, Ejecucion, Comprobante, Project, Client, Provider, RecordDetail, ActiveForm, FormType, NavScreen, EntityType, Month, TransactionType, MONTHS, CuentaBancaria, ExtractoBancario, ErConfig, TipoDocumentoMedio } from '@/lib/types';
 import { db, storage } from '@/lib/firebase';
-import { collection, doc, writeBatch, serverTimestamp, increment, arrayUnion, getDocs } from 'firebase/firestore';
+import { collection, doc, writeBatch, runTransaction, serverTimestamp, increment, arrayUnion, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import {
   subscribeBudgets,
@@ -25,11 +25,7 @@ import {
   subscribeCompanies,
   addCuentaBancaria,
   updateCuentaBancaria,
-  addExtracto,
   updateExtracto,
-  batchAddMovimientos,
-  updateExtractoStatus,
-  updateMovimiento,
   deleteBudget, deleteEjecucion, deleteTercero,
   getErConfig, saveErConfig,
 } from '@/lib/firestore';
@@ -42,6 +38,7 @@ import { EstadoResultados } from '@/components/EstadoResultados';
 import { Extractos } from '@/components/Extractos';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Sidepanel } from '@/components/Sidepanel';
+import { MediaPage } from '@/components/media/MediaPage';
 import { Company } from '@/lib/types';
 import { DEFAULT_ER_CONFIG } from '@/lib/er-config-defaults';
 
@@ -412,6 +409,7 @@ export default function CompanyPage({ params }: Props) {
         case 'ejecucion': {
           const preGeneratedId = data._preGeneratedId as string | undefined;
           const budgetLinks = data._budgetLinks as Array<{ budgetId: string; monto: number }> | undefined;
+          const uploadedDocIds = data._uploadedDocumentoIds as string[] | undefined;
           // Mark movimiento as converted (from Extractos flow)
           let movCuentaId = data._cuentaId as string | undefined;
           let movExtractoId = data._extractoId as string | undefined;
@@ -421,6 +419,7 @@ export default function CompanyPage({ params }: Props) {
           delete data._cuentaId;
           delete data._extractoId;
           delete data._movimientoId;
+          delete data._uploadedDocumentoIds;
           // Auto-match: when creating from EjecucionForm with cuentaId but no explicit movimiento refs
           if (!movCuentaId && !movExtractoId && !movMovimientoId && data.cuentaId) {
             try {
@@ -437,38 +436,55 @@ export default function CompanyPage({ params }: Props) {
               console.error('[page] auto-match movimiento falló:', err);
             }
           }
-          // Use writeBatch for atomic creation of ejecucion + budgetLinks + budget totals
-          const batch = writeBatch(db);
+          // Use runTransaction for atomic creation of ejecucion + budgetLinks + budget totals + DocumentoMedio link
           const ejecucionRef = preGeneratedId
             ? doc(db, 'companies', companyId, 'ejecuciones', preGeneratedId)
             : doc(collection(db, 'companies', companyId, 'ejecuciones'));
-          batch.set(ejecucionRef, {
-            ...data,
-            createdAt: serverTimestamp(),
-            ...(movMovimientoId ? { _movimientoId: movMovimientoId, _extractoId: movExtractoId } : {}),
-          });
-          if (budgetLinks && budgetLinks.length > 0) {
-            for (const link of budgetLinks) {
-              const linkRef = doc(collection(db, ejecucionRef.path, 'budgetLinks'));
-              batch.set(linkRef, {
-                companyId,
-                budgetId: link.budgetId,
-                monto: link.monto,
-                createdAt: serverTimestamp(),
-              });
-              // Denormalize on the budget: totalEjecutado + linkedEjecuciones
-              const budgetRef = doc(db, 'companies', companyId, 'budgets', link.budgetId);
-              batch.update(budgetRef, {
-                totalEjecutado: increment(link.monto),
-                linkedEjecuciones: arrayUnion({ ejecucionId: ejecucionRef.id, monto: link.monto }),
-              });
+          await runTransaction(db, async (transaction) => {
+            transaction.set(ejecucionRef, {
+              ...data,
+              createdAt: serverTimestamp(),
+              ...(movMovimientoId ? { _movimientoId: movMovimientoId, _extractoId: movExtractoId } : {}),
+            });
+            if (budgetLinks && budgetLinks.length > 0) {
+              for (const link of budgetLinks) {
+                const linkRef = doc(collection(db, ejecucionRef.path, 'budgetLinks'));
+                transaction.set(linkRef, {
+                  companyId,
+                  budgetId: link.budgetId,
+                  monto: link.monto,
+                  createdAt: serverTimestamp(),
+                });
+                // Denormalize on the budget: totalEjecutado + linkedEjecuciones
+                const budgetRef = doc(db, 'companies', companyId, 'budgets', link.budgetId);
+                transaction.update(budgetRef, {
+                  totalEjecutado: increment(link.monto),
+                  linkedEjecuciones: arrayUnion({ ejecucionId: ejecucionRef.id, monto: link.monto }),
+                });
+              }
             }
-          }
-          await batch.commit();
-          // Mark movimiento as converted and store ejecucion ID
-          if (movCuentaId && movExtractoId && movMovimientoId) {
-            updateMovimiento(companyId, movCuentaId, movExtractoId, movMovimientoId, { convertido: true, _ejecucionId: ejecucionRef.id }).catch((err) => console.error('[page] updateMovimiento falló:', err));
-          }
+            // Update DocumentoMedio docs with ejecucion reference atomically
+            if (uploadedDocIds && uploadedDocIds.length > 0) {
+              for (const docId of uploadedDocIds) {
+                const docRef = doc(db, 'companies', companyId, 'documentos', docId);
+                transaction.update(docRef, {
+                  ejecucionIds: arrayUnion(ejecucionRef.id),
+                  status: 'por_clasificar',
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            }
+            // Mark movimiento as converted (inline in transaction — no more fire-and-forget)
+            if (movCuentaId && movExtractoId && movMovimientoId) {
+              const movimientoRef = doc(
+                db, 'companies', companyId,
+                'cuentasBancarias', movCuentaId,
+                'extractos', movExtractoId,
+                'movimientos', movMovimientoId,
+              );
+              transaction.update(movimientoRef, { convertido: true, _ejecucionId: ejecucionRef.id });
+            }
+          });
           break;
         }
         case 'project':
@@ -492,19 +508,34 @@ export default function CompanyPage({ params }: Props) {
           delete data._pendingMovimientos;
           delete data._pendingSaldoFinal;
 
-          const extractoId = await addExtracto(companyId, data.accountId, data as Omit<ExtractoBancario, 'id'>);
+          // Pre-generate extracto doc ID and fold ALL writes into a single writeBatch
+          const extractoRef = doc(collection(db, 'companies', companyId, 'cuentasBancarias', data.accountId, 'extractos'));
+          const batch = writeBatch(db);
 
-          // Save pre-parsed movements in one go
+          batch.set(extractoRef, {
+            ...data,
+            createdAt: serverTimestamp(),
+          });
+
           if (pendingMovs && pendingMovs.length > 0) {
-            await batchAddMovimientos(companyId, data.accountId, extractoId, pendingMovs);
-            const totalMov = pendingMovs.length;
-            // Update saldoFinal with the parsed value (source of truth)
-            await updateExtractoStatus(companyId, data.accountId, extractoId, 'Completado', {
-              totalMovimientosParseados: totalMov,
+            const movimientosRef = collection(db, extractoRef.path, 'movimientos');
+            for (const mov of pendingMovs) {
+              const movRef = doc(movimientosRef);
+              const cleanMov = Object.fromEntries(
+                Object.entries(mov).filter(([_, v]) => v !== undefined),
+              );
+              batch.set(movRef, { ...cleanMov, createdAt: serverTimestamp() });
+            }
+            batch.update(extractoRef, {
+              estado: 'Completado',
+              totalMovimientosParseados: pendingMovs.length,
               saldoInicial: Number(data.saldoInicial) || 0,
               saldoFinal: pendingSaldoFinal ?? (Number(data.saldoFinal) || 0),
+              updatedAt: serverTimestamp(),
             });
           }
+
+          await batch.commit();
           break;
         }
       }
@@ -608,6 +639,16 @@ export default function CompanyPage({ params }: Props) {
 
   const handleSidepanelBack = () => popScreen();
 
+  const handleDocumentoUpdatedSidepanel = useCallback((
+    _docId: string,
+    _newPeriodo: string,
+    _newTipo: TipoDocumentoMedio,
+  ) => {
+    // Close the sidepanel — the document was saved successfully
+    closePanel();
+    toast('Documento actualizado');
+  }, [closePanel]);
+
   return (
     <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
         <Sidebar activeView={activeView} basePath={`/${companyId}`} />
@@ -637,7 +678,10 @@ export default function CompanyPage({ params }: Props) {
             {activeView === 'Extractos' && (
               <Extractos companyId={companyId} onNavigate={(screen) => pushScreen(screen)} />
             )}
-            {['Proyectos', 'Proveedores', 'Clientes', 'Media'].includes(activeView) && (
+            {activeView === 'Media' && (
+              <MediaPage companyId={companyId} onNavigate={pushScreen} />
+            )}
+            {['Proyectos', 'Proveedores', 'Clientes'].includes(activeView) && (
               <Construction view={activeView} />
             )}
             {activeView === 'Configuración' && (
@@ -656,7 +700,8 @@ export default function CompanyPage({ params }: Props) {
             selectedProjects={selectedProjects}
             projectSearch={projectSearch}
             onProjectsChange={setSelectedProjects}
-            onSearchChange={setProjectSearch} />
+            onSearchChange={setProjectSearch}
+            onDocumentoUpdated={handleDocumentoUpdatedSidepanel} />
         </main>
         <CommandPalette onNavigate={(view, tab) => navigateTo(view, tab)} onAddNew={(type, defaults) => handleAddNew(type, defaults)} />
       </div>
