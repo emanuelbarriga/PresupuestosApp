@@ -19,15 +19,15 @@ After review and user feedback, all decisions are settled:
 
 ## Task Breakdown
 
-| # | Task | Files | Effort | Deps |
-|---|------|-------|--------|------|
-| 1 | Create `lib/ocr.ts` | `lib/ocr.ts` (new), `app/api/ocr/extract/route.ts` (refactor) | L | - |
-| 2 | Add `updateDocumentoMedio()` to firestore.ts | `lib/firestore.ts` (mod) | S | - |
-| 3 | Add multi-selection state + checkboxes to InboxTab | `components/media/InboxTab.tsx` (mod) | M | - |
-| 4 | Add floating action bar + cancel + progress | `components/media/InboxTab.tsx` (mod) | M | 3 |
-| 5 | Add batch OCR orchestration + per-doc writes + overlays | `components/media/InboxTab.tsx` (mod) | L | 1,2,4 |
-| 6 | Add retry-failed + dismiss-failed flow | `components/media/InboxTab.tsx` (mod) | S | 5 |
-| 7 | Tests | `lib/__tests__/ocr.test.ts`, `lib/__tests__/firestore.test.ts`, `components/media/__tests__/InboxTab.test.tsx` | L | 1-6 |
+| # | Task | Files | Effort | Deps | Status |
+|---|------|-------|--------|------|--------|
+| 1 | Create `lib/ocr.ts` | `lib/ocr.ts` (new), `app/api/ocr/extract/route.ts` (refactor) | L | - | ✅ (PR 1) |
+| 2 | Add `updateDocumentoMedio()` to firestore.ts | `lib/firestore.ts` (mod) | S | - | ✅ (PR 1) |
+| 3 | Add multi-selection state + checkboxes to InboxTab | `components/media/InboxTab.tsx` (mod) | M | - | ✅ |
+| 4 | Add floating action bar + cancel + progress | `components/media/InboxTab.tsx` (mod) | M | 3 | ✅ |
+| 5 | Add batch OCR orchestration + per-doc writes + overlays | `components/media/InboxTab.tsx` (mod) | L | 1,2,4 | ✅ |
+| 6 | Add retry-failed + dismiss-failed flow | `components/media/InboxTab.tsx` (mod) | S | 5 | ✅ |
+| 7 | Tests | `lib/__tests__/ocr.test.ts`, `lib/__tests__/firestore.test.ts`, `components/media/__tests__/InboxTab.test.tsx` | L | 1-6 | ✅ |
 
 ---
 

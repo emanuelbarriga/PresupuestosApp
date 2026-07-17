@@ -92,3 +92,7 @@ archived_changes:
     archived_at: 2026-07-16
     summary: "OCR extraction via Gemini 2.5 Flash: POST /api/ocr/extract route with auth, 5MB guard, 429 retry, structured nullable output; DocumentoSidepanel 'Extraer con IA' button with non-destructive pre-fill, 30s timeout, error mapping; new ocr-extraction spec created, document-classification spec updated. 846/846 tests passing, 0 regressions."
     main_spec: openspec/specs/ocr-extraction/spec.md
+  - name: batch-ocr
+    archived_at: 2026-07-16
+    summary: "Batch multi-document OCR from Inbox: checkbox selection (max 30), floating action bar, 3-parallel client-orchestrated extraction via existing /api/ocr/extract, per-doc progress overlays via useReducer, non-destructive individual writes via updateDocumentoMedio, 429 retry with backoff, AbortController cancel, lib/ocr.ts extracted. 885/885 tests passing, 0 tsc errors."
+    main_spec: openspec/specs/batch-ocr/spec.md
