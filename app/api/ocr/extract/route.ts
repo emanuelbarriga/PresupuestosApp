@@ -2,78 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { GoogleGenAI } from '@google/genai';
 import { getAdminApp, getAdminStorage } from '@/lib/firebase-admin';
-import path from 'path';
-
-// ─── Constants ───────────────────────────────────────────────────────────
-
-const MAX_FILE_SIZE = 5_242_880; // 5 MB
-const ALLOWED_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg']);
-const EXTENSION_MIME_MAP: Record<string, string> = {
-  '.pdf': 'application/pdf',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-};
-
-const OCR_JSON_SCHEMA = {
-  type: 'object' as const,
-  properties: {
-    proveedorTexto: { type: 'string', nullable: true },
-    nit: { type: 'string', nullable: true },
-    fechaDocumento: { type: 'string', nullable: true },
-    montoTotal: { type: 'number', nullable: true },
-    tipoDocumentoSugerido: {
-      type: 'string',
-      nullable: true,
-      description: 'Tipo de documento: factura_venta, factura_compra, extracto_bancario, comprobante_egreso, comprobante_ingreso, planilla, contrato, otro',
-    },
-    descripcion: {
-      type: 'string',
-      nullable: true,
-      description: 'Descripción del documento o texto relevante extraído (ej. concepto, notas, referencias)',
-    },
-  },
-  required: ['proveedorTexto', 'nit', 'fechaDocumento', 'montoTotal'],
-};
-
-function buildPrompt(context?: {
-  tipoDocumento?: string;
-  terceroCount?: number;
-  proyectoCount?: number;
-}): string {
-  const tipo = context?.tipoDocumento
-    ? `${context.tipoDocumento} colombiano`
-    : 'factura o comprobante colombiano';
-
-  const stats = [];
-  if (context?.terceroCount && context.terceroCount > 0) {
-    stats.push(`${context.terceroCount} proveedores registrados`);
-  }
-  if (context?.proyectoCount && context.proyectoCount > 0) {
-    stats.push(`${context.proyectoCount} proyectos activos`);
-  }
-
-  const statsLine = stats.length > 0
-    ? `\nEl sistema tiene ${stats.join(' y ')}. Devolvé el nombre EXACTO del proveedor tal como aparece en el sistema para facilitar el matching automático.\n`
-    : '\n';
-
-  return `Extraé los siguientes datos de este ${tipo}:${statsLine}- proveedorTexto: nombre del proveedor o emisor (EXACTO para matching automático)
-- nit: NIT del proveedor (formato XX.XXX.XXX-X o XXXXXXXXX-X)
-- fechaDocumento: fecha del documento en formato YYYY-MM-DD
-- montoTotal: monto total del documento (solo números, sin símbolos)
-- tipoDocumentoSugerido: clasificá el documento en UNO de estos tipos según su contenido (devolvé null si no estás seguro):
-  - factura_venta: factura de venta o factura de compra
-  - factura_compra: factura de compra
-  - extracto_bancario: extracto bancario o estado de cuenta
-  - comprobante_egreso: comprobante de egreso, recibo de pago
-  - comprobante_ingreso: comprobante de ingreso, recibo de cobro
-  - planilla: planilla, nómina
-  - contrato: contrato
-  - otro: cualquier otro tipo de documento
-- descripcion: texto relevante del documento como concepto, descripción, referencias, notas, números de factura, o cualquier información textual importante que pueda servir para identificar el documento
-
-Si un campo no es visible o no se puede determinar, devolvé null.`;
-}
+import {
+  buildPrompt,
+  extractFromGemini,
+  validateFileForOcr,
+  isGoogleApiError,
+  MAX_FILE_SIZE,
+} from '@/lib/ocr';
 
 // ─── Logger ─────────────────────────────────────────────────────────────
 
@@ -89,91 +24,6 @@ function logError(step: string, ...args: unknown[]) {
 
 function logSuccess(step: string, ...args: unknown[]) {
   console.log(`${LOG_PREFIX} ✅ ${step}:`, ...args);
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────
-
-function getMimeFromExtension(storagePath: string): string | null {
-  const ext = path.extname(storagePath).toLowerCase();
-  log('Extension check', `storagePath="${storagePath}" -> ext="${ext}"`);
-  if (!ALLOWED_EXTENSIONS.has(ext)) {
-    log('Extension rejected', `"${ext}" not in allowed set`);
-    return null;
-  }
-  const mime = EXTENSION_MIME_MAP[ext];
-  log('Extension accepted', `"${ext}" -> MIME "${mime}"`);
-  return mime;
-}
-
-function isGoogleApiError(err: unknown): err is Error & { status?: number } {
-  return err instanceof Error && 'status' in err;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// ─── Gemini caller with retry ────────────────────────────────────────────
-
-async function callGeminiWithRetry(
-  client: GoogleGenAI,
-  base64Data: string,
-  mimeType: string,
-  promptText: string,
-): Promise<unknown> {
-  const dataSizeKB = (base64Data.length / 1024).toFixed(1);
-  const content = [
-    { text: promptText },
-    {
-      inlineData: {
-        data: base64Data,
-        mimeType,
-      },
-    },
-  ];
-
-  const makeCall = (attempt: number) => {
-    const model = 'gemini-3.1-flash-lite';
-    log('Gemini request', `Attempt #${attempt} | model="${model}" | mimeType="${mimeType}" | base64Size="${dataSizeKB}KB"`);
-    return client.models.generateContent({
-      model,
-      contents: content,
-      config: { responseJsonSchema: OCR_JSON_SCHEMA },
-    });
-  };
-
-  try {
-    const result = await makeCall(1);
-    const text = result.text;
-    log('Gemini raw response text', text ? `"${text.slice(0, 200)}..."` : 'EMPTY');
-    if (!text) throw new Error('Empty response from Gemini');
-    const parsed = JSON.parse(text);
-    logSuccess('Gemini parse OK', JSON.stringify(parsed));
-    return parsed;
-  } catch (error) {
-    if (isGoogleApiError(error) && error.status === 429) {
-      log('Gemini 429 rate limit', 'Waiting 1s and retrying...');
-      await sleep(1000);
-      try {
-        const result = await makeCall(2);
-        const retryText = result.text;
-        log('Gemini retry raw response text', retryText ? `"${retryText.slice(0, 200)}..."` : 'EMPTY');
-        if (!retryText) throw new Error('Empty response from Gemini on retry');
-        const parsed = JSON.parse(retryText);
-        logSuccess('Gemini retry parse OK', JSON.stringify(parsed));
-        return parsed;
-      } catch (retryError) {
-        if (isGoogleApiError(retryError) && retryError.status === 429) {
-          logError('Gemini retry also 429', 'Propagating 429 to client');
-          throw retryError;
-        }
-        logError('Gemini retry failed', retryError instanceof Error ? retryError.message : String(retryError));
-        throw retryError;
-      }
-    }
-    logError('Gemini first call failed', error instanceof Error ? error.message : String(error));
-    throw error;
-  }
 }
 
 // ─── Route Handler ───────────────────────────────────────────────────────
@@ -240,14 +90,15 @@ export async function POST(request: NextRequest) {
 
     // ── Extension validation ──────────────────────────────────────────
     log(`[${requestId}] Step 3/6: Validate file extension`);
-    const mimeType = getMimeFromExtension(storagePath);
-    if (!mimeType) {
-      logError(`[${requestId}] Extension REJECTED`, `"${path.extname(storagePath).toLowerCase()}" not supported`);
+    const validation = validateFileForOcr(storagePath);
+    if (!validation.valid) {
+      logError(`[${requestId}] Extension REJECTED`, `"${storagePath.split('.').pop()}" not supported`);
       return NextResponse.json(
         { error: 'Formato no soportado. Usá PDF, PNG o JPG.' },
         { status: 400 },
       );
     }
+    const mimeType = validation.mime;
     logSuccess(`[${requestId}] Extension OK`, `MIME="${mimeType}"`);
 
     // ── File fetch from Storage ──────────────────────────────────────
@@ -314,7 +165,7 @@ export async function POST(request: NextRequest) {
     try {
       log(`[${requestId}] Sending to Gemini...`);
       const startTime = Date.now();
-      parsed = await callGeminiWithRetry(client, base64Data, mimeType, promptText);
+      parsed = await extractFromGemini(client, base64Data, mimeType, promptText);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logSuccess(`[${requestId}] Gemini completed in ${elapsed}s`);
     } catch (error) {

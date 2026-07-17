@@ -35,6 +35,7 @@ const CUENTAS_BANCARIAS_COLLECTION = 'cuentasBancarias';
 const EXTRACTOS_COLLECTION = 'extractos';
 const MOVIMIENTOS_COLLECTION = 'movimientos';
 const INVITATIONS_COLLECTION = 'invitations';
+const DOCUMENTOS_COLLECTION = 'documentos';
 
 export async function getCompanies(): Promise<Company[]> {
   const snapshot = await getDocs(collection(db, COMPANIES_COLLECTION));
@@ -1435,6 +1436,19 @@ function chunkArray<T>(arr: T[], maxSize: number): T[][] {
     chunks.push(arr.slice(i, i + maxSize));
   }
   return chunks;
+}
+
+// ── DocumentoMedio (subcollection of companies) ──
+
+export async function updateDocumentoMedio(
+  companyId: string,
+  docId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await updateDoc(
+    doc(db, COMPANIES_COLLECTION, companyId, DOCUMENTOS_COLLECTION, docId),
+    { ...data, updatedAt: serverTimestamp() },
+  );
 }
 
 // ── ER Config (Estado de Resultados per-company config) ──

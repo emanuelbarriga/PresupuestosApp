@@ -91,7 +91,7 @@ function makeMockSnapshot(
 
 // ─── Imports (resolved after mocks) ──────────────────────────────────────────
 
-import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros, batchUpdatePresupuestos, batchUpdateEjecuciones, cascadeTerceroName, updateTercero, batchUpdateTerceros } from '@/lib/firestore';
+import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros, batchUpdatePresupuestos, batchUpdateEjecuciones, cascadeTerceroName, updateTercero, batchUpdateTerceros, updateDocumentoMedio } from '@/lib/firestore';
 import type { Budget, Ejecucion, EjecucionBudgetLink, Tercero } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1422,5 +1422,53 @@ describe('T-12: batchUpdateTerceros cascade', () => {
 
     expect(result).toEqual({ successCount: 2, failedIds: [] });
     expect(getDocs).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// batch-ocr: updateDocumentoMedio
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('updateDocumentoMedio', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('updates documento with correct path and includes updatedAt', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    const { updateDocumentoMedio } = await import('@/lib/firestore');
+    await updateDocumentoMedio('c1', 'doc-1', { tipoDocumento: 'factura_compra' });
+
+    expect(doc).toHaveBeenCalledWith({}, 'companies', 'c1', 'documentos', 'doc-1');
+    expect(updateDoc).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        tipoDocumento: 'factura_compra',
+        updatedAt: expect.any(Object),
+      }),
+    );
+  });
+
+  it('merges multiple fields into the documento', async () => {
+    (updateDoc as Mock).mockResolvedValue(undefined);
+
+    const { updateDocumentoMedio } = await import('@/lib/firestore');
+    await updateDocumentoMedio('c1', 'doc-2', {
+      status: 'enlazado',
+      ejecucionIds: ['ej-1'],
+      ocrData: { proveedorTexto: 'Test' },
+    });
+
+    expect(updateDoc).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        status: 'enlazado',
+        ejecucionIds: ['ej-1'],
+        ocrData: { proveedorTexto: 'Test' },
+        updatedAt: expect.any(Object),
+      }),
+    );
+    expect(serverTimestamp).toHaveBeenCalled();
   });
 });
