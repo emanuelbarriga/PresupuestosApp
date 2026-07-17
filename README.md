@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.1-06B6D4?logo=tailwindcss)](https://tailwindcss.com)
 [![Vitest](https://img.shields.io/badge/Vitest-4.1-6E9F18?logo=vitest)](https://vitest.dev)
-[![Tests](https://img.shields.io/badge/Tests-783-6E9F18)](https://vitest.dev)
+[![Tests](https://img.shields.io/badge/Tests-917-6E9F18)](https://vitest.dev)
 [![Playwright](https://img.shields.io/badge/Playwright-1.61-45BA4B?logo=playwright)](https://playwright.dev)
 [![License](https://img.shields.io/badge/Licencia-MIT-blue)](LICENSE)
 
@@ -60,7 +60,8 @@ Aplicación empresarial multi-empresa para el control y seguimiento de presupues
 | **Backend** | Firebase Firestore (client SDK v12) + Admin SDK v14 |
 | **Auth** | Firebase Authentication |
 | **Serverless** | Cloud Functions 2nd Gen (Node.js 22) |
-| **Parseo PDF** | pdfjs-dist |
+| **Parseo PDF** | pdfjs-dist + react-pdf |
+| **IA/OCR** | Google Gemini API 2.5 Flash (Gemini 3.1 Flash Lite) vía `@google/genai` |
 | **Tests unitarios** | Vitest 4 + Testing Library |
 | **Tests E2E** | Playwright + Firebase Emulator Suite |
 | **Herramientas** | Firebase CLI, ESLint 9 |
@@ -528,6 +529,15 @@ El ciclo de vida de incorporación de un nuevo usuario:
 - **Acciones inline**: editar, ver detalle (sidepanel), crear nuevo.
 - Suscripciones Firestore en tiempo real.
 
+### Sistema de medios (Inbox + Archivador)
+
+- **Inbox**: Dropzone drag-and-drop + grilla de documentos pendientes de clasificar.
+- **OCR con IA**: Extracción automática de proveedor, NIT, fecha, monto, tipo de documento y descripción mediante Google Gemini 2.5 Flash.
+  - **Batch OCR**: Selección múltiple con checkboxes (máx 30), procesamiento 3-en-paralelo, progreso por documento, cancelación vía AbortController, reintento individual de fallidos.
+- **Archivador contable**: Clasificación por 8 tipos documentales + período mensual. Pestaña "Todos" por defecto. Vistas Tabla (con subtotales por mes y total general) y Tarjetas. Preferencia de vista persistida en localStorage.
+- **DocumentoSidepanel**: Clasificación completa (tipo, período, tercero, proyecto, ejecuciones, metadatos). Undo/redo persistente con history stack en localStorage (Ctrl+Z / Ctrl+Shift+Z). Autocompletado de terceros vía datalist. Indicador visual del período derivado.
+- **Explorador por Terceros**: Docs agrupados por proveedor/cliente.
+
 ### Sidebar
 
 - Selector de empresa con dropdown (soporta multi-empresa).
@@ -540,7 +550,7 @@ El ciclo de vida de incorporación de un nuevo usuario:
 
 ### Pruebas unitarias e integración
 
-Ejecutadas con **Vitest 4** (**783 tests, 65 archivos**):
+Ejecutadas con **Vitest 4** (**917 tests, 72 archivos**):
 
 ```bash
 npm run test
@@ -566,7 +576,9 @@ Cobertura:
 - **Parsers bancarios**: Parseo de extractos de Bancolombia, Bancoomeva, Global66.
 - **Tipos y entidades**: Tests de tipos compartidos y helpers de conversión.
 - **Configuración**: Tests de `toMillis()` y `fmtDate()` que manejan la dualidad Timestamp / string ISO.
-- **Sistema de medios**: Tests de MediaPage, DocumentoSidepanel, mediaLinking, mediaService, scripts de migración y GC.
+- **Sistema de medios**: Tests de MediaPage, DocumentoSidepanel, InboxTab, ArchivadorTab, mediaLinking, mediaService, scripts de migración y GC.
+- **OCR/IA**: Tests de extracción Gemini (`lib/ocr.ts`), batch OCR en InboxTab, route de extracción.
+- **Undo/Redo**: Tests del hook `useDocumentHistory` (18 tests) + integración en DocumentoSidepanel (9 tests).
 
 ### Pruebas end-to-end (E2E)
 
@@ -619,12 +631,8 @@ Para más detalles (arquitectura de deploy, variables de entorno con prefijo `SA
 
 ## Pendiente
 
-Las siguientes secciones están en desarrollo o planificadas:
+Las siguientes secciones están planificadas:
 
-- **Organización Mensual** — Fase 2: archivador contable con 8 categorías y selector año-mes.
-- **Explorador por Terceros** — Fase 2: agrupación automatizada por proveedor/cliente.
-- **Vista "Soportes" en TerceroView / ProjectView** — Fase 2: inyección de pestaña sin modificar código base.
-- OCR / IA para extracción automática de metadatos (Gemini API) — Fase 3.
 - Cloud Function para integridad cross-collection de `_estadoComprobantes`.
 - Tests E2E de flujo completo de conciliación bancaria.
 - UI de administración de miembros por empresa.
