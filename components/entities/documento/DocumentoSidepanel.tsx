@@ -635,18 +635,29 @@ export function DocumentoSidepanel({
             <label htmlFor="fecha-documento" className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
               Fecha del Documento <span className="text-rose-500">*</span>
             </label>
-            <input
-              id="fecha-documento"
-              type="date"
-              value={fechaDocumento}
-              onChange={(e) => setFechaDocumento(e.target.value)}
-              onBlur={handleBlurCapture}
-              disabled={saving}
-              className={clsx(
-                'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all',
-                saving && 'pointer-events-none opacity-50',
-              )}
-            />
+            <div className="relative">
+              <input
+                id="fecha-documento"
+                type="date"
+                value={fechaDocumento}
+                onChange={(e) => setFechaDocumento(e.target.value)}
+                onBlur={handleBlurCapture}
+                disabled={saving}
+                className={clsx(
+                  'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all',
+                  saving && 'pointer-events-none opacity-50',
+                )}
+              />
+              {fechaDocumento && (() => {
+                const parts = fechaDocumento.split('-');
+                const monthLabel = parts[1] === '01' ? 'Enero' : parts[1] === '02' ? 'Febrero' : parts[1] === '03' ? 'Marzo' : parts[1] === '04' ? 'Abril' : parts[1] === '05' ? 'Mayo' : parts[1] === '06' ? 'Junio' : parts[1] === '07' ? 'Julio' : parts[1] === '08' ? 'Agosto' : parts[1] === '09' ? 'Septiembre' : parts[1] === '10' ? 'Octubre' : parts[1] === '11' ? 'Noviembre' : parts[1] === '12' ? 'Diciembre' : '';
+                return (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-indigo-500 font-medium pointer-events-none">
+                    → {monthLabel} {parts[0]}
+                  </span>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Tercero (required) */}
@@ -719,12 +730,18 @@ export function DocumentoSidepanel({
                 onChange={(e) => setProveedorTexto(e.target.value)}
                 onBlur={handleBlurCapture}
                 placeholder="Proveedor"
+                list="tercero-suggestions"
                 disabled={saving}
                 className={clsx(
                   'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 outline-none transition-all',
                   saving && 'pointer-events-none opacity-50',
                 )}
               />
+              <datalist id="tercero-suggestions">
+                {terceroOptions.map((opt) => (
+                  <option key={opt.value} value={opt.label} />
+                ))}
+              </datalist>
               <textarea
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
