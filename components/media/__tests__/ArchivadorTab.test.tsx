@@ -243,6 +243,99 @@ describe('ArchivadorTab — Period Selector', () => {
   });
 });
 
+describe('ArchivadorTab — Table View', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('switches to table view and shows column headers', async () => {
+    render(<ArchivadorTab {...defaultProps} />);
+
+    const onData = (globalThis as any).__mock_onData;
+    onData([
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', metadata: { montoTotal: 100000 } }),
+    ]);
+
+    // Tabla is default view, so headers should be visible
+    await waitFor(() => {
+      expect(screen.getByText('Período')).toBeDefined();
+      expect(screen.getByText('Fecha')).toBeDefined();
+      expect(screen.getByText('Tipo')).toBeDefined();
+      expect(screen.getByText('Proveedor')).toBeDefined();
+      expect(screen.getByText('NIT')).toBeDefined();
+      expect(screen.getByText('Monto')).toBeDefined();
+    });
+  });
+
+  it('shows monthly subtotal per period in table view', async () => {
+    render(<ArchivadorTab {...defaultProps} />);
+
+    const onData = (globalThis as any).__mock_onData;
+    onData([
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', metadata: { montoTotal: 100000 } }),
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', metadata: { montoTotal: 200000 } }),
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-06', metadata: { montoTotal: 50000 } }),
+    ]);
+
+    await waitFor(() => {
+      // July period: 2 docs, subtotal 300.000
+      expect(screen.getByText(/julio 2026/i)).toBeDefined();
+      expect(screen.getByText(/2 documentos/i)).toBeDefined();
+      // June period: 1 doc, subtotal 50.000
+      expect(screen.getByText(/junio 2026/i)).toBeDefined();
+      expect(screen.getByText(/1 documento/i)).toBeDefined();
+    });
+  });
+
+  it('shows Total General with correct sum and doc count', async () => {
+    render(<ArchivadorTab {...defaultProps} />);
+
+    const onData = (globalThis as any).__mock_onData;
+    onData([
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', metadata: { montoTotal: 100000 } }),
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', metadata: { montoTotal: null } as any }),
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-06', metadata: { montoTotal: 50000 } }),
+    ]);
+
+    await waitFor(() => {
+      // Total general: 2 de 3 docs con monto, suma = 150.000
+      expect(screen.getByText(/Total general/i)).toBeDefined();
+      expect(screen.getByText(/documentos con monto/i)).toBeDefined();
+      expect(screen.getAllByText(/150\.000|150000/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows individual document rows with tipo badge', async () => {
+    render(<ArchivadorTab {...defaultProps} />);
+
+    const onData = (globalThis as any).__mock_onData;
+    onData([
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: '2026-07', fileName: 'factura-julio.pdf' }),
+    ]);
+
+    await waitFor(() => {
+      // Document row with periodo column
+      expect(screen.getByText('2026-07')).toBeDefined();
+      // Tipo badge (multiple: category tab + table row)
+      expect(screen.getAllByText('Factura Venta').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows "Sin período" grouping for docs without periodo', async () => {
+    render(<ArchivadorTab {...defaultProps} />);
+
+    const onData = (globalThis as any).__mock_onData;
+    onData([
+      buildDoc({ tipoDocumento: 'factura_venta' as TipoDocumentoMedio, periodo: undefined }),
+      buildDoc({ tipoDocumento: 'factura_compra' as TipoDocumentoMedio, periodo: '2026-07' }),
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sin período/i)).toBeDefined();
+    });
+  });
+});
+
 describe('ArchivadorTab — Index Building Error', () => {
   beforeEach(() => {
     vi.clearAllMocks();

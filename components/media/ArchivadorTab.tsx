@@ -139,7 +139,7 @@ export function ArchivadorTab({
   const [loading, setLoading] = useState(true);
 
   // ── Todos (muestra todos los tipos) vs categoría específica ─────────
-  const [showTodos, setShowTodos] = useState(false);
+  const [showTodos, setShowTodos] = useState(true);
 
   useEffect(() => {
     if (!selectedPeriod) return; // hydration guard
@@ -198,7 +198,18 @@ export function ArchivadorTab({
   }, [activeDocs]);
 
   // ── Vista: tabla (default) vs tarjetas ───────────────────────────────
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('archivador-viewmode');
+      if (saved === 'table' || saved === 'cards') return saved;
+    }
+    return 'table';
+  });
+
+  // Persist preference
+  useEffect(() => {
+    localStorage.setItem('archivador-viewmode', viewMode);
+  }, [viewMode]);
 
   // Agrupar docs por periodo (YYYY-MM) para la vista tabla
   const docsByPeriod = useMemo(() => {
