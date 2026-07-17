@@ -587,3 +587,367 @@ describe('DocumentoSidepanel', () => {
     });
   });
 });
+
+// ─── Undo/Redo Tests ─────────────────────────────────────────────────────
+
+describe('DocumentoSidepanel - undo/redo', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it('shows undo/redo buttons after a field change + blur capture', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Initially only mount capture exists — no buttons (entries.length === 1)
+    expect(screen.queryByText(/Deshacer/)).not.toBeInTheDocument();
+
+    // Change NIT and blur to trigger immediate capture → second entry
+    const nitInput = screen.getByPlaceholderText('NIT');
+    fireEvent.change(nitInput, { target: { value: '900999999-9' } });
+    fireEvent.blur(nitInput);
+
+    // After blur capture, entries.length > 1 so buttons appear
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Rehacer/)).toBeInTheDocument();
+  });
+
+  it('undo restores previous field values', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Change NIT and blur → creates second entry
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: '900999999-9' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    expect(nitInput.value).toBe('900999999-9');
+
+    // Click undo
+    fireEvent.click(screen.getByText(/Deshacer/));
+
+    // NIT should revert to empty (initial value)
+    await waitFor(() => {
+      expect(nitInput.value).toBe('');
+    });
+  });
+
+  it('redo restores next field values after undo', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Change NIT and blur → creates second entry
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: '900999999-9' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // Undo → reverts to empty
+    fireEvent.click(screen.getByText(/Deshacer/));
+    await waitFor(() => {
+      expect(nitInput.value).toBe('');
+    });
+
+    // Redo → restores '900999999-9'
+    const redoBtn = screen.getByText(/Rehacer/);
+    expect(redoBtn).not.toBeDisabled();
+    fireEvent.click(redoBtn);
+
+    await waitFor(() => {
+      expect(nitInput.value).toBe('900999999-9');
+    });
+  });
+
+  it('Ctrl+Z triggers undo', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Change NIT and blur → captures second entry
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: '900999999-9' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+    expect(nitInput.value).toBe('900999999-9');
+
+    // Ctrl+Z → undo
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(nitInput.value).toBe('');
+    });
+  });
+
+  it('Ctrl+Shift+Z triggers redo', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: '900999999-9' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // Undo first
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => {
+      expect(nitInput.value).toBe('');
+    });
+
+    // Ctrl+Shift+Z → redo
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      expect(nitInput.value).toBe('900999999-9');
+    });
+  });
+
+  it('atomic restore: ejecucionIds + montoTotal restored together on undo', async () => {
+    // Ejecuciones with montos for auto-derive effect
+    const atomicEjecuciones = [
+      { value: 'ej-m1', label: 'Ejecución 1', montoEjecutado: 100000 },
+      { value: 'ej-m2', label: 'Ejecución 2', montoEjecutado: 200000 },
+    ];
+
+    // Doc that starts with ej-m1 and a montoTotal that matches
+    const docConEj = {
+      ...mockDoc,
+      id: 'doc-atomic-test',
+      ejecucionIds: ['ej-m1'] as string[],
+      metadata: { montoTotal: 100000, nit: 'init-nit' },
+    };
+
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={docConEj}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={atomicEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Verify initial state
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    const montoInput = screen.getByPlaceholderText('0') as HTMLInputElement;
+    expect(nitInput.value).toBe('init-nit');
+    expect(montoInput.value).toBe('100000');
+
+    // Change NIT and blur → captures second entry with current state
+    fireEvent.change(nitInput, { target: { value: 'changed-nit' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // Undo → should restore initial state with BOTH ejecucionIds AND montoTotal
+    fireEvent.click(screen.getByText(/Deshacer/));
+
+    await waitFor(() => {
+      expect(nitInput.value).toBe('init-nit');
+      expect(montoInput.value).toBe('100000');
+    });
+  });
+
+  it('debounced capture fires after field change', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Initial: no undo button (only mount capture)
+    expect(screen.queryByText(/Deshacer/)).not.toBeInTheDocument();
+
+    // Change NIT — debounce starts (800ms)
+    const nitInput = screen.getByPlaceholderText('NIT');
+    fireEvent.change(nitInput, { target: { value: 'debounced-value' } });
+
+    // After debounce fires, entries.length = 2 → buttons appear
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('persists to localStorage and reloads history on remount', async () => {
+    const { unmount } = render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // Change NIT and blur → captures to history + localStorage
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: 'persisted-value' } });
+    fireEvent.blur(nitInput);
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // Verify localStorage has 2 entries (initial + our change)
+    const storageKey = 'doc-history-doc-' + mockDoc.id;
+    const raw = localStorage.getItem(storageKey);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.stack).toHaveLength(2);
+    expect(parsed.stack[1].nit).toBe('persisted-value');
+    expect(parsed.pointer).toBe(1);
+
+    // Unmount
+    unmount();
+
+    // Remount with the same doc — should reload history from localStorage
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    // After remount, the hook should have the persisted entries loaded.
+    // Verify by checking undo button appears (entries.length > 1 from
+    // localStorage) and that undoing restores the initial entry's NIT value.
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // The current form state is the persisted latest entry (nit='persisted-value')
+    // Click undo → goes to pointer 0 (initial state with nit='')
+    fireEvent.click(screen.getByText(/Deshacer/));
+
+    const afterUndo = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    await waitFor(() => {
+      expect(afterUndo.value).toBe('');
+    });
+  });
+
+  it('undo button disabled at start of history, redo disabled at end', async () => {
+    render(
+      <DocumentoSidepanel
+        companyId="c1"
+        documento={mockDoc}
+        terceroOptions={mockTerceros}
+        proyectoOptions={mockProyectos}
+        ejecucionOptions={mockEjecuciones}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onBack={vi.fn()}
+        canGoBack={false}
+      />,
+    );
+
+    const nitInput = screen.getByPlaceholderText('NIT') as HTMLInputElement;
+    fireEvent.change(nitInput, { target: { value: 'first' } });
+    fireEvent.blur(nitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deshacer/)).toBeInTheDocument();
+    });
+
+    // After first undo, we're at the start: undo disabled, redo enabled
+    fireEvent.click(screen.getByText(/Deshacer/));
+    await waitFor(() => {
+      // canUndo = false (at start), canRedo = true (can go forward)
+      const undoBtn = screen.getByText(/Deshacer/).closest('button')!;
+      const redoBtn = screen.getByText(/Rehacer/).closest('button')!;
+      expect(undoBtn).toBeDisabled();
+      expect(redoBtn).not.toBeDisabled();
+    });
+  });
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FileText, ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import type { DocumentoMedio, TipoDocumentoMedio } from '@/lib/types';
@@ -10,6 +10,7 @@ import { PanelHeader } from '@/components/shared/PanelHeader';
 import { PdfViewer } from '@/components/shared/PdfViewer';
 import { PERIODO_SIN_ASIGNAR, TIPO_DOCUMENTO_DEFAULT } from '@/lib/schemas';
 import { auth } from '@/lib/auth';
+import { useHistory } from '@/lib/hooks/useDocumentHistory';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -27,6 +28,19 @@ interface OcrExtractResponse {
   tipoDocumentoSugerido?: string | null;
   descripcion?: string | null;
 }
+
+type FormState = {
+  tipoDocumento: string;
+  periodo: string;
+  fechaDocumento: string;
+  terceroId: string;
+  projectId: string;
+  ejecucionIds: string[];
+  nit: string;
+  proveedorTexto: string;
+  montoTotal: string;
+  descripcion: string;
+};
 
 const TIPO_OPTIONS: { value: TipoDocumentoMedio; label: string }[] = [
   { value: 'factura_venta', label: 'Factura Venta' },
@@ -114,27 +128,113 @@ export function DocumentoSidepanel({
   const [internalSaving, setInternalSaving] = useState(false);
   const [ocrState, setOcrState] = useState<OcrState>({ status: 'idle' });
 
-  // ─── Undo / Redo history (pila de estados) ──────────────────────────
-  type FormState = {
-    nit: string; proveedorTexto: string; fechaDocumento: string;
-    montoTotal: string; descripcion: string; tipoDocumento: string;
-  };
-  const [history, setHistory] = useState<FormState[]>([]);
-  const [historyIdx, setHistoryIdx] = useState(-1);
+  // ─── Undo / Redo history (hook) ────────────────────────────────────
+  const history = useHistory<FormState>(`doc-${documento.id}`, { maxEntries: 50 });
+  const isRestoringRef = useRef(false);
+  const lastCaptureRef = useRef<FormState | null>(null);
 
   const captureState = (): FormState => ({
-    nit: nit ?? '', proveedorTexto: proveedorTexto ?? '', fechaDocumento: fechaDocumento ?? '',
-    montoTotal: montoTotal ?? '', descripcion: descripcion ?? '', tipoDocumento: tipoDocumento ?? '',
+    tipoDocumento: (tipoDocumento as string) || '',
+    periodo: periodo || '',
+    fechaDocumento: fechaDocumento || '',
+    terceroId: terceroId || '',
+    projectId: projectId || '',
+    ejecucionIds: ejecucionIds ?? [],
+    nit: nit || '',
+    proveedorTexto: proveedorTexto || '',
+    montoTotal: montoTotal || '',
+    descripcion: descripcion || '',
   });
 
   const applyState = (s: FormState) => {
-    setNit(s.nit); setProveedorTexto(s.proveedorTexto); setFechaDocumento(s.fechaDocumento);
-    setMontoTotal(s.montoTotal); setDescripcion(s.descripcion);
+    isRestoringRef.current = true;
     setTipoDocumento((s.tipoDocumento || '') as any);
+    setPeriodo(s.periodo || '');
+    setFechaDocumento(s.fechaDocumento || '');
+    setTerceroId(s.terceroId || '');
+    setProjectId(s.projectId || '');
+    setEjecucionIds(s.ejecucionIds ?? []);
+    setNit(s.nit || '');
+    setProveedorTexto(s.proveedorTexto || '');
+    setMontoTotal(s.montoTotal || '');
+    setDescripcion(s.descripcion || '');
+    queueMicrotask(() => {
+      isRestoringRef.current = false;
+    });
   };
 
-  const canUndo = historyIdx >= 0;
-  const canRedo = history.length > 0 && historyIdx < history.length - 1;
+  const handleUndo = useCallback(() => {
+    const result = history.undo();
+    if (result) {
+      applyState(result);
+      lastCaptureRef.current = result;
+    }
+  }, [history]);
+
+  const handleRedo = useCallback(() => {
+    const result = history.redo();
+    if (result) {
+      applyState(result);
+      lastCaptureRef.current = result;
+    }
+  }, [history]);
+
+  // On mount: push initial state if history is empty, otherwise restore latest
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (mountedRef.current) return; // guard against StrictMode double-fire
+    mountedRef.current = true;
+
+    if (history.entries.length > 0 && history.pointer >= 0) {
+      const latest = history.entries[history.pointer];
+      if (latest) {
+        lastCaptureRef.current = latest;
+        applyState(latest);
+      }
+    } else {
+      const initial = captureState();
+      history.push(initial);
+      lastCaptureRef.current = initial;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps — mount only
+  }, []);
+
+  // Debounced auto-capture on field change (800ms)
+  useEffect(() => {
+    const currentState = captureState();
+    const timer = setTimeout(() => {
+      if (JSON.stringify(currentState) !== JSON.stringify(lastCaptureRef.current)) {
+        history.push(currentState);
+        lastCaptureRef.current = currentState;
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [tipoDocumento, periodo, fechaDocumento, terceroId, projectId, ejecucionIds, nit, proveedorTexto, montoTotal, descripcion, history]);
+
+  // Immediate capture on blur (no debounce wait)
+  const handleBlurCapture = () => {
+    const current = captureState();
+    if (JSON.stringify(current) !== JSON.stringify(lastCaptureRef.current)) {
+      history.push(current);
+      lastCaptureRef.current = current;
+    }
+  };
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z = redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleUndo, handleRedo]);
 
   // Sincronizar periodo cuando cambia la fecha del documento
   // (para que al cambiar la fecha, el documento se ubique en el mes correcto del Archivador)
@@ -146,24 +246,65 @@ export function DocumentoSidepanel({
   }, [fechaDocumento, periodo]);
 
   // Re-initialize fields when documento.id changes (e.g., another document clicked)
+  const prevDocIdRef = useRef<string | null>(null);
   useEffect(() => {
-    setTipoDocumento(documento.tipoDocumento ?? '');
-    setPeriodo(documento.periodo ?? '');
-    setTerceroId(documento.terceroId ?? '');
-    setProjectId(documento.projectId ?? '');
-    setEjecucionIds(documento.ejecucionIds ?? []);
-    setNit(documento.metadata?.nit ?? '');
-    setProveedorTexto(documento.metadata?.proveedorTexto ?? '');
-    setMontoTotal(documento.metadata?.montoTotal?.toString() ?? '');
-    setFechaDocumento(documento.metadata?.fechaDocumento ?? '');
-    setDescripcion(documento.metadata?.descripcion ?? '');
-    setError('');
+    // Skip on initial mount — the mount effect already handles history init
+    if (prevDocIdRef.current === null) {
+      prevDocIdRef.current = documento.id;
+      // Only reset fields from props (don't clear history — mount effect already loaded it)
+      setTipoDocumento(documento.tipoDocumento ?? '');
+      setPeriodo(documento.periodo ?? '');
+      setTerceroId(documento.terceroId ?? '');
+      setProjectId(documento.projectId ?? '');
+      setEjecucionIds(documento.ejecucionIds ?? []);
+      setNit(documento.metadata?.nit ?? '');
+      setProveedorTexto(documento.metadata?.proveedorTexto ?? '');
+      setMontoTotal(documento.metadata?.montoTotal?.toString() ?? '');
+      setFechaDocumento(documento.metadata?.fechaDocumento ?? '');
+      setDescripcion(documento.metadata?.descripcion ?? '');
+      setError('');
+      return;
+    }
+
+    // Actual document change — reinit fields + history
+    if (prevDocIdRef.current !== documento.id) {
+      prevDocIdRef.current = documento.id;
+      setTipoDocumento(documento.tipoDocumento ?? '');
+      setPeriodo(documento.periodo ?? '');
+      setTerceroId(documento.terceroId ?? '');
+      setProjectId(documento.projectId ?? '');
+      setEjecucionIds(documento.ejecucionIds ?? []);
+      setNit(documento.metadata?.nit ?? '');
+      setProveedorTexto(documento.metadata?.proveedorTexto ?? '');
+      setMontoTotal(documento.metadata?.montoTotal?.toString() ?? '');
+      setFechaDocumento(documento.metadata?.fechaDocumento ?? '');
+      setDescripcion(documento.metadata?.descripcion ?? '');
+      setError('');
+
+      // Re-initialize history for new document
+      history.clear();
+      const initial: FormState = {
+        tipoDocumento: documento.tipoDocumento ?? '',
+        periodo: documento.periodo ?? '',
+        fechaDocumento: documento.metadata?.fechaDocumento ?? '',
+        terceroId: documento.terceroId ?? '',
+        projectId: documento.projectId ?? '',
+        ejecucionIds: documento.ejecucionIds ?? [],
+        nit: documento.metadata?.nit ?? '',
+        proveedorTexto: documento.metadata?.proveedorTexto ?? '',
+        montoTotal: documento.metadata?.montoTotal?.toString() ?? '',
+        descripcion: documento.metadata?.descripcion ?? '',
+      };
+      history.push(initial);
+      lastCaptureRef.current = initial;
+    }
   }, [documento.id]);
 
   const saving = internalSaving || externalSaving;
 
   // Cuando se selecciona una ejecución, el montoTotal se actualiza al monto de esa ejecución
   useEffect(() => {
+    if (isRestoringRef.current) return;
     if (ejecucionIds.length > 0) {
       const firstEj = ejecucionOptions.find((ej) => ej.value === ejecucionIds[0]);
       if (firstEj?.montoEjecutado !== undefined) {
@@ -287,11 +428,8 @@ export function DocumentoSidepanel({
       console.log('[OCR] ✅ Datos extraídos:', JSON.stringify(data));
 
       // Guardar estado actual en el historial antes del pre-fill
-      setHistory((prev) => {
-        const truncated = historyIdx >= 0 ? prev.slice(0, historyIdx + 1) : prev;
-        return [...truncated, captureState()];
-      });
-      setHistoryIdx((prev) => prev + 1);
+      history.push(captureState());
+      lastCaptureRef.current = captureState();
 
       // Pre-fill no destructivo: solo campos vacíos
       let filledCount = 0;
@@ -437,18 +575,15 @@ export function DocumentoSidepanel({
                 {ocrState.message}
               </p>
             )}
-            {(canUndo || canRedo) && (
+            {history.entries.length > 1 && (
               <div className="flex items-center justify-center gap-2 py-1">
                 <button
                   type="button"
-                  disabled={!canUndo}
-                  onClick={() => {
-                    applyState(history[historyIdx]);
-                    setHistoryIdx((prev) => prev - 1);
-                  }}
+                  disabled={!history.canUndo}
+                  onClick={handleUndo}
                   className={clsx(
                     'flex items-center gap-1 text-[11px] font-bold transition-colors',
-                    canUndo ? 'text-slate-500 hover:text-slate-700' : 'text-slate-300 cursor-not-allowed',
+                    history.canUndo ? 'text-slate-500 hover:text-slate-700' : 'text-slate-300 cursor-not-allowed',
                   )}
                 >
                   ↩ Deshacer
@@ -456,15 +591,11 @@ export function DocumentoSidepanel({
                 <span className="text-[10px] text-slate-300">|</span>
                 <button
                   type="button"
-                  disabled={!canRedo}
-                  onClick={() => {
-                    const next = historyIdx + 1;
-                    applyState(history[next]);
-                    setHistoryIdx(next);
-                  }}
+                  disabled={!history.canRedo}
+                  onClick={handleRedo}
                   className={clsx(
                     'flex items-center gap-1 text-[11px] font-bold transition-colors',
-                    canRedo ? 'text-slate-500 hover:text-slate-700' : 'text-slate-300 cursor-not-allowed',
+                    history.canRedo ? 'text-slate-500 hover:text-slate-700' : 'text-slate-300 cursor-not-allowed',
                   )}
                 >
                   Rehacer ↪
@@ -509,6 +640,7 @@ export function DocumentoSidepanel({
               type="date"
               value={fechaDocumento}
               onChange={(e) => setFechaDocumento(e.target.value)}
+              onBlur={handleBlurCapture}
               disabled={saving}
               className={clsx(
                 'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all',
@@ -553,6 +685,7 @@ export function DocumentoSidepanel({
               type="number"
               value={montoTotal}
               onChange={(e) => setMontoTotal(e.target.value)}
+              onBlur={handleBlurCapture}
               placeholder="0"
               disabled={saving}
               className={clsx(
@@ -572,6 +705,7 @@ export function DocumentoSidepanel({
                 type="text"
                 value={nit}
                 onChange={(e) => setNit(e.target.value)}
+                onBlur={handleBlurCapture}
                 placeholder="NIT"
                 disabled={saving}
                 className={clsx(
@@ -583,6 +717,7 @@ export function DocumentoSidepanel({
                 type="text"
                 value={proveedorTexto}
                 onChange={(e) => setProveedorTexto(e.target.value)}
+                onBlur={handleBlurCapture}
                 placeholder="Proveedor"
                 disabled={saving}
                 className={clsx(
@@ -593,6 +728,7 @@ export function DocumentoSidepanel({
               <textarea
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
+                onBlur={handleBlurCapture}
                 placeholder="Descripción o notas extraídas del documento..."
                 disabled={saving}
                 rows={3}
