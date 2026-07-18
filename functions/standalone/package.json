@@ -23,6 +23,7 @@
     "deploy:rules": "firebase deploy --only firestore:rules,storage"
   },
   "dependencies": {
+    "@google/genai": "2.12.0",
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
     "firebase": "^12.15.0",
@@ -34,6 +35,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-hot-toast": "^2.6.0",
+    "react-pdf": "^9.2.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

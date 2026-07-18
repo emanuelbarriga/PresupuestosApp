@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFirestore, mockUnsub, mockTerceros } = vi.hoisted(
+const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFirestore, mockUnsub, mockTerceros, mockCountResults, mockToast } = vi.hoisted(
   () => {
     const mockUnsub = vi.fn();
     const mockTerceros: any[] = [];
+    const mockCountResults = { ejecuciones: 0, budgets: 0, documentos: 0, proyectos: 0 };
+    const mockToast = Object.assign(
+      vi.fn(() => 'toast-id'),
+      { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() },
+    );
     return {
       collection: vi.fn(() => ({ type: 'collection' as const })),
       doc: vi.fn(() => ({ type: 'doc' as const })),
@@ -16,6 +21,8 @@ const { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp, getFire
       getFirestore: vi.fn(),
       mockUnsub,
       mockTerceros,
+      mockCountResults,
+      mockToast,
     };
   },
 );
@@ -30,7 +37,7 @@ vi.mock('firebase/firestore', () => ({
   getFirestore,
 }));
 
-vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() }, Toaster: () => null }));
+vi.mock('react-hot-toast', () => ({ default: mockToast, Toaster: () => null }));
 
 vi.mock('@/lib/firebase', () => ({ db: {} }));
 
@@ -48,6 +55,11 @@ vi.mock('@/lib/firestore', () => ({
   subscribeCuentasBancarias: vi.fn(() => mockUnsub),
   subscribeExtractos: vi.fn(() => mockUnsub),
   subscribeBudgets: vi.fn(() => mockUnsub),
+  countEjecucionesByTercero: vi.fn(() => Promise.resolve(mockCountResults.ejecuciones)),
+  countBudgetsByTercero: vi.fn(() => Promise.resolve(mockCountResults.budgets)),
+  countDocumentosByTercero: vi.fn(() => Promise.resolve(mockCountResults.documentos)),
+  countProyectosByTercero: vi.fn(() => Promise.resolve(mockCountResults.proyectos)),
+  deleteTercero: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { Datos } from '@/components/Datos';
@@ -444,5 +456,154 @@ describe('Datos — Terceros bulk edit', () => {
 
     // Action bar not present
     expect(screen.queryByText('Editar en lote')).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Broken References Prevention — Task 3.3: handleDeleteTercero guard
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('broken-refs (3.3): handleDeleteTercero warns about references', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTerceros.length = 0;
+    mockCountResults.ejecuciones = 0;
+    mockCountResults.budgets = 0;
+    mockCountResults.documentos = 0;
+    mockCountResults.proyectos = 0;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  /** Helper: render Datos on terceros tab with given mock terceros */
+  function renderDatosConTerceros() {
+    return render(
+      <Datos
+        budgets={[]}
+        ejecuciones={[]}
+        activeTab="terceros"
+        companyId="c1"
+      />,
+    );
+  }
+
+  it('calls all 4 count functions when delete button is clicked and shows warning', async () => {
+    mockTerceros.push(makeTercero({ id: 't1', name: 'Tercero Con Referencias' }));
+    mockCountResults.ejecuciones = 3;
+    mockCountResults.budgets = 2;
+    mockCountResults.documentos = 1;
+    mockCountResults.proyectos = 0;
+
+    renderDatosConTerceros();
+
+    // Wait for terceros to render
+    await waitFor(() => {
+      expect(screen.getByText('Tercero Con Referencias')).toBeInTheDocument();
+    });
+
+    // Click the delete button (title="Borrar")
+    const deleteBtn = screen.getByTitle('Borrar');
+    fireEvent.click(deleteBtn);
+
+    // Wait for async handler to complete and toast to show
+    await waitFor(() => {
+      // Toast.error should have been called with the warning message
+      expect(mockToast.error).toHaveBeenCalledWith(
+        expect.stringContaining('No se puede eliminar'),
+      );
+    });
+
+    // Verify the message includes all reference types with counts
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('3 ejecuciónes'),
+    );
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('2 presupuestos'),
+    );
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('1 documento'),
+    );
+  });
+
+  it('blocks deletion when any references exist, even if count is 1', async () => {
+    mockTerceros.push(makeTercero({ id: 't2', name: 'Tercero Unico' }));
+    mockCountResults.ejecuciones = 0;
+    mockCountResults.budgets = 1; // solo 1 referencia
+
+    renderDatosConTerceros();
+
+    await waitFor(() => {
+      expect(screen.getByText('Tercero Unico')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('Borrar'));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalled();
+    });
+
+    // Singular form
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('1 presupuesto'),
+    );
+    // Should NOT have ejecuciones, documentos, proyectos (they are 0)
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('ejecuciónes'),
+    );
+  });
+
+  it('shows toast with all 4 types when all have references', async () => {
+    mockTerceros.push(makeTercero({ id: 't3', name: 'Tercero Completo' }));
+    mockCountResults.ejecuciones = 5;
+    mockCountResults.budgets = 3;
+    mockCountResults.documentos = 2;
+    mockCountResults.proyectos = 4;
+
+    renderDatosConTerceros();
+
+    await waitFor(() => {
+      expect(screen.getByText('Tercero Completo')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('Borrar'));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        expect.stringContaining('5 ejecuciónes'),
+      );
+    });
+
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('3 presupuestos'),
+    );
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('2 documentos'),
+    );
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining('4 proyectos'),
+    );
+  });
+
+  it('shows confirmation toast when zero references (allows delete)', async () => {
+    mockTerceros.push(makeTercero({ id: 't4', name: 'Tercero Sin Referencias' }));
+    // All counts already 0 from beforeEach
+
+    renderDatosConTerceros();
+
+    await waitFor(() => {
+      expect(screen.getByText('Tercero Sin Referencias')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('Borrar'));
+
+    // Should NOT show error toast (zero refs)
+    await waitFor(() => {
+      expect(mockToast.error).not.toHaveBeenCalled();
+    });
+
+    // Should show confirmation dialog via toast() directly (not toast.error)
+    expect(mockToast).toHaveBeenCalled();
   });
 });

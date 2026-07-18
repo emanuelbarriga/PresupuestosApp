@@ -20,6 +20,7 @@ const {
   deleteDoc,
   runTransaction,
   mockUnsub,
+  mockBatchCommit,
 } = vi.hoisted(() => {
   const mockUnsub = vi.fn();
   const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
@@ -46,6 +47,7 @@ const {
     deleteDoc: vi.fn().mockResolvedValue(undefined),
     runTransaction: mockRunTransaction,
     mockUnsub,
+    mockBatchCommit,
   };
 });
 
@@ -91,7 +93,7 @@ function makeMockSnapshot(
 
 // ─── Imports (resolved after mocks) ──────────────────────────────────────────
 
-import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros, batchUpdatePresupuestos, batchUpdateEjecuciones, cascadeTerceroName, updateTercero, batchUpdateTerceros, updateDocumentoMedio } from '@/lib/firestore';
+import { addBudget, addEjecucion, getCompanies, subscribeEjecuciones, subscribeArchivedEjecuciones, subscribeProviders, addBudgetLink, removeBudgetLink, subscribeBudgetLinks, subscribeEjecucionesByBudget, deleteEjecucion, deleteTercero, subscribeTerceros, batchUpdatePresupuestos, batchUpdateEjecuciones, cascadeTerceroName, updateTercero, batchUpdateTerceros, updateDocumentoMedio, formatEjecucion, deleteBudget, countBudgetsByTercero, countDocumentosByTercero, countProyectosByTercero } from '@/lib/firestore';
 import type { Budget, Ejecucion, EjecucionBudgetLink, Tercero } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1470,5 +1472,348 @@ describe('updateDocumentoMedio', () => {
       }),
     );
     expect(serverTimestamp).toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Broken References Prevention — Tasks 1.5 / 1.6: formatEjecucion helper
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('broken-refs (1.5/1.6): formatEjecucion helper', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns _linkedDocumentos: [] when data lacks the field', () => {
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      montoEjecutado: 1000,
+    });
+    expect(result._linkedDocumentos).toEqual([]);
+  });
+
+  it('returns _estadoComprobantes: "" when data lacks the field', () => {
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      montoEjecutado: 1000,
+    });
+    expect(result._estadoComprobantes).toBe('');
+  });
+
+  it('does NOT overwrite existing _linkedDocumentos value', () => {
+    const existing = [{ documentoId: 'doc1', tipoDocumento: 'factura_compra' as const }];
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      _linkedDocumentos: existing,
+    });
+    expect(result._linkedDocumentos).toEqual(existing);
+    expect(result._linkedDocumentos).toHaveLength(1);
+    expect(result._linkedDocumentos![0].documentoId).toBe('doc1');
+  });
+
+  it('does NOT overwrite existing _estadoComprobantes value', () => {
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      _estadoComprobantes: 'Completada',
+    });
+    expect(result._estadoComprobantes).toBe('Completada');
+  });
+
+  it('includes comprobantes: [] by default when data lacks the field', () => {
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      montoEjecutado: 1000,
+    });
+    expect(result.comprobantes).toEqual([]);
+  });
+
+  it('preserves comprobantes when present in data', () => {
+    const comprobantes = [
+      { id: 'c1', name: 'a.pdf', url: '', type: 'application/pdf', size: 100, uploadedAt: '' },
+    ];
+    const result = formatEjecucion({
+      descripcion: 'Test',
+      comprobantes,
+    });
+    expect(result.comprobantes).toEqual(comprobantes);
+    expect(result.comprobantes).toHaveLength(1);
+  });
+});
+
+describe('broken-refs (1.5/1.6): subscribeEjecuciones hydration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('delivers _linkedDocumentos: [] and _estadoComprobantes: "" from doc lacking both fields', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeEjecuciones('empresa-1', onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      {
+        id: 'ej-1',
+        descripcion: 'Sin comprobantes ni docs',
+        projectId: 'proj-1',
+        projectName: 'Proyecto',
+        entityId: 'prov-1',
+        entityName: 'Proveedor',
+        entityType: 'provider',
+        tipo: 'egreso',
+        montoEjecutado: 5000,
+        fechaEjecutado: '2026-06-01',
+        comprobantes: [],
+      },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as any[];
+    expect(result[0]._linkedDocumentos).toEqual([]);
+    expect(result[0]._estadoComprobantes).toBe('');
+  });
+
+  it('delivers stored _linkedDocumentos and _estadoComprobantes when present in doc', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    subscribeEjecuciones('empresa-2', onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      {
+        id: 'ej-2',
+        descripcion: 'Con datos completos',
+        projectId: 'proj-2',
+        projectName: 'Proyecto',
+        entityId: 'prov-2',
+        entityName: 'Proveedor',
+        entityType: 'provider',
+        tipo: 'egreso',
+        montoEjecutado: 10000,
+        fechaEjecutado: '2026-06-15',
+        comprobantes: [],
+        _linkedDocumentos: [{ documentoId: 'd1', tipoDocumento: 'factura_compra' }],
+        _estadoComprobantes: 'Completada',
+      },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as any[];
+    expect(result[0]._linkedDocumentos).toHaveLength(1);
+    expect(result[0]._linkedDocumentos[0].documentoId).toBe('d1');
+    expect(result[0]._estadoComprobantes).toBe('Completada');
+  });
+
+  it('subscribeArchivedEjecuciones applies formatEjecucion via subscribeEjecucionesWithFilter', () => {
+    const onData = vi.fn();
+    const onError = vi.fn();
+
+    // subscribeArchivedEjecuciones calls subscribeEjecucionesWithFilter(companyId, true, onData, onError)
+    // which internally uses formatEjecucion in the snapshot mapper
+    subscribeArchivedEjecuciones('empresa-1', onData, onError);
+
+    const snapshotCallback = (onSnapshot as Mock).mock.calls[0][1];
+    const mockSnapshot = makeMockSnapshot([
+      {
+        id: 'ej-legacy',
+        descripcion: 'Legacy',
+        projectId: 'proj-1',
+        projectName: 'Viejo',
+        entityId: '',
+        entityName: 'Interno',
+        entityType: 'interno',
+        tipo: 'ingreso',
+        montoEjecutado: 1000,
+        fechaEjecutado: '2025-01-01',
+      },
+    ]);
+    snapshotCallback(mockSnapshot);
+
+    expect(onData).toHaveBeenCalledTimes(1);
+    const result = onData.mock.calls[0][0] as any[];
+    expect(result[0]._linkedDocumentos).toEqual([]);
+    expect(result[0]._estadoComprobantes).toBe('');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Broken References Prevention — Task 2.6: Count functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('broken-refs (2.6): countByTercero functions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('countBudgetsByTercero returns the count from getDocs size', async () => {
+    (getDocs as Mock).mockResolvedValue({ size: 5 });
+
+    const result = await countBudgetsByTercero('c1', 't1');
+
+    expect(result).toBe(5);
+    expect(collection).toHaveBeenCalledWith({}, 'companies', 'c1', 'budgets');
+    expect(where).toHaveBeenCalledWith('entityId', '==', 't1');
+  });
+
+  it('countDocumentsosByTercero returns the count from getDocs size', async () => {
+    (getDocs as Mock).mockResolvedValue({ size: 3 });
+
+    const result = await countDocumentosByTercero('c1', 't1');
+
+    expect(result).toBe(3);
+    expect(collection).toHaveBeenCalledWith({}, 'companies', 'c1', 'documentos');
+    expect(where).toHaveBeenCalledWith('terceroId', '==', 't1');
+  });
+
+  it('countProyectosByTercero returns the count from getDocs size', async () => {
+    (getDocs as Mock).mockResolvedValue({ size: 2 });
+
+    const result = await countProyectosByTercero('c1', 't1');
+
+    expect(result).toBe(2);
+    expect(collection).toHaveBeenCalledWith({}, 'companies', 'c1', 'projects');
+    expect(where).toHaveBeenCalledWith('clientId', '==', 't1');
+  });
+
+  it('returns 0 when no documents match', async () => {
+    (getDocs as Mock).mockResolvedValue({ size: 0 });
+
+    const [budgets, docs, proys] = await Promise.all([
+      countBudgetsByTercero('c1', 'ghost'),
+      countDocumentosByTercero('c1', 'ghost'),
+      countProyectosByTercero('c1', 'ghost'),
+    ]);
+
+    expect(budgets).toBe(0);
+    expect(docs).toBe(0);
+    expect(proys).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Broken References Prevention — Task 4.2: deleteBudget writeBatch refactor
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('broken-refs (4.2): deleteBudget writeBatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses batch.delete for each budgetLink and batch.commit exactly once', async () => {
+    // Mock budget doc with a single linkedEjecucion
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        descripcion: 'Budget Test',
+        linkedEjecuciones: [
+          { ejecucionId: 'ej-1', monto: 50000 },
+        ],
+      }),
+    });
+
+    // getDocs is called once per linkedEjecucion — returns 3 link docs
+    const linkDocs = [
+      { id: 'link-1', ref: { path: 'companies/c1/ejecuciones/ej-1/budgetLinks/link-1' } },
+      { id: 'link-2', ref: { path: 'companies/c1/ejecuciones/ej-1/budgetLinks/link-2' } },
+      { id: 'link-3', ref: { path: 'companies/c1/ejecuciones/ej-1/budgetLinks/link-3' } },
+    ];
+    (getDocs as Mock).mockResolvedValue({
+      docs: linkDocs,
+      forEach: linkDocs.forEach.bind(linkDocs),
+    });
+
+    await deleteBudget('c1', 'b1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    // 3 budgetLinks + 1 budget doc = 4 deletes
+    expect(batch.delete).toHaveBeenCalledTimes(4);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(writeBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes only budget doc when there are no linkedEjecuciones', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        descripcion: 'Budget sin links',
+        linkedEjecuciones: [],
+      }),
+    });
+
+    await deleteBudget('c1', 'b1');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.delete).toHaveBeenCalledTimes(1); // solo el budget
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(writeBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns early when budget doc does not exist', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => false,
+      data: () => undefined,
+    });
+
+    await deleteBudget('c1', 'nonexistent');
+
+    expect(writeBatch).not.toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
+
+  it('handles budget without linkedEjecuciones field (undefined)', async () => {
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        descripcion: 'Budget legacy',
+        // no linkedEjecuciones field
+      }),
+    });
+
+    await deleteBudget('c1', 'legacy');
+
+    const batch = (writeBatch as Mock).mock.results[0].value;
+    expect(batch.delete).toHaveBeenCalledTimes(1);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes batch every 400 link deletes and creates a new batch', async () => {
+    const budget = {
+      descripcion: 'Budget con muchos links',
+      linkedEjecuciones: [] as Array<{ ejecucionId: string; monto: number }>,
+    };
+    // Simulate 450 links spread across several linkedEjecuciones
+    for (let i = 0; i < 15; i++) {
+      budget.linkedEjecuciones.push({ ejecucionId: `ej-${i}`, monto: 1000 });
+    }
+
+    (getDoc as Mock).mockResolvedValue({
+      exists: () => true,
+      data: () => budget,
+    });
+
+    // Each of the 15 linkedEjecuciones returns 30 link docs = 450 total
+    const manyLinkDocs = Array.from({ length: 30 }, (_, i) => ({
+      id: `link-${i}`,
+      ref: { path: `some/path/link-${i}` },
+    }));
+    (getDocs as Mock).mockResolvedValue({
+      docs: manyLinkDocs,
+      forEach: manyLinkDocs.forEach.bind(manyLinkDocs),
+    });
+
+    await deleteBudget('c1', 'massive');
+
+    // 450 links → flush at 400 → first batch has 400, second batch has 50 + 1 budget
+    expect(writeBatch).toHaveBeenCalledTimes(2);
+    const firstBatch = (writeBatch as Mock).mock.results[0].value;
+    const secondBatch = (writeBatch as Mock).mock.results[1].value;
+    expect(firstBatch.delete).toHaveBeenCalledTimes(400);
+    expect(secondBatch.delete).toHaveBeenCalledTimes(51); // 50 links + 1 budget
+    // Both batches share the same mockBatchCommit function for commit
+    expect(mockBatchCommit).toHaveBeenCalledTimes(2);
   });
 });

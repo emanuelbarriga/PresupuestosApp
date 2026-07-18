@@ -272,27 +272,10 @@ function subscribeEjecucionesWithFilter(
       where('archivado', '==', archivedFilter),
     ),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          descripcion: data.descripcion ?? '',
-          projectId: data.projectId ?? '',
-          projectName: data.projectName ?? data.proyectoAsignado ?? '',
-          entityId: data.entityId ?? '',
-          entityName: data.entityName ?? data.clienteOProveedor ?? '',
-          entityType: data.entityType ?? '',
-          tipo: data.tipo ?? 'ingreso',
-          montoEjecutado: data.montoEjecutado ?? 0,
-          fechaEjecutado: data.fechaEjecutado ?? '',
-          cuentaId: data.cuentaId ?? undefined,
-          cuentaName: data.cuentaName ?? undefined,
-          comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
-          archivado: data.archivado ?? false,
-          _movimientoId: data._movimientoId ?? undefined,
-          _extractoId: data._extractoId ?? undefined,
-        } as Ejecucion;
-      }));
+      onData(snapshot.docs.map((d) => ({
+        id: d.id,
+        ...formatEjecucion(d.data()),
+      })) as Ejecucion[]);
     },
     onError,
   );
@@ -306,27 +289,10 @@ export function subscribeEjecuciones(
   return onSnapshot(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
     (snapshot) => {
-      onData(snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          descripcion: data.descripcion ?? '',
-          projectId: data.projectId ?? '',
-          projectName: data.projectName ?? data.proyectoAsignado ?? '',
-          entityId: data.entityId ?? '',
-          entityName: data.entityName ?? data.clienteOProveedor ?? '',
-          entityType: data.entityType ?? '',
-          tipo: data.tipo ?? 'ingreso',
-          montoEjecutado: data.montoEjecutado ?? 0,
-          fechaEjecutado: data.fechaEjecutado ?? '',
-          cuentaId: data.cuentaId ?? undefined,
-          cuentaName: data.cuentaName ?? undefined,
-          comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
-          _movimientoId: data._movimientoId ?? undefined,
-          _extractoId: data._extractoId ?? undefined,
-          archivado: data.archivado ?? false,
-        } as Ejecucion;
-      }));
+      onData(snapshot.docs.map((d) => ({
+        id: d.id,
+        ...formatEjecucion(d.data()),
+      })) as Ejecucion[]);
     },
     onError,
   );
@@ -338,6 +304,19 @@ export function subscribeArchivedEjecuciones(
   onError?: (err: Error) => void,
 ): Unsubscribe {
   return subscribeEjecucionesWithFilter(companyId, true, onData, onError);
+}
+
+/**
+ * Hydrate raw Firestore data into an Ejecucion, ensuring _linkedDocumentos
+ * and _estadoComprobantes are always present with safe defaults.
+ */
+export function formatEjecucion(data: Record<string, unknown>): Partial<Ejecucion> {
+  return {
+    ...data,
+    comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
+    _linkedDocumentos: (data._linkedDocumentos as Ejecucion['_linkedDocumentos']) ?? [],
+    _estadoComprobantes: (data._estadoComprobantes as Ejecucion['_estadoComprobantes']) ?? '',
+  } as Partial<Ejecucion>;
 }
 
 export async function addBudget(
@@ -560,20 +539,8 @@ export function subscribeEjecucionesByBudget(
       const ejecucionPath = `${COMPANIES_COLLECTION}/${companyId}/${EJECUCIONES_COLLECTION}`;
       const filtered = await fetchDocsByIds(ejecucionPath, linkedIds, (id, data) => ({
         id,
-        descripcion: (data.descripcion as string) ?? '',
-        projectId: (data.projectId as string) ?? '',
-        projectName: (data.projectName as string) ?? (data.proyectoAsignado as string) ?? '',
-        entityId: (data.entityId as string) ?? '',
-        entityName: (data.entityName as string) ?? (data.clienteOProveedor as string) ?? '',
-        entityType: (data.entityType as string) ?? '',
-        tipo: (data.tipo as string) ?? 'ingreso',
-        montoEjecutado: (data.montoEjecutado as number) ?? 0,
-        fechaEjecutado: (data.fechaEjecutado as string) ?? '',
-        cuentaId: (data.cuentaId as string) ?? undefined,
-        cuentaName: (data.cuentaName as string) ?? undefined,
-        comprobantes: Array.isArray(data.comprobantes) ? data.comprobantes : [],
-        archivado: (data.archivado as boolean) ?? false,
-      } as Ejecucion));
+        ...formatEjecucion(data),
+      })) as Ejecucion[];
       if (isSubscribed) onData(filtered);
     } catch (err) {
       if (isSubscribed) onError?.(err as Error);
@@ -766,6 +733,33 @@ export async function countEjecucionesByTercero(companyId: string, terceroId: st
   const q = query(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION),
     where('entityId', '==', terceroId),
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
+export async function countBudgetsByTercero(companyId: string, terceroId: string): Promise<number> {
+  const q = query(
+    collection(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION),
+    where('entityId', '==', terceroId),
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
+export async function countDocumentosByTercero(companyId: string, terceroId: string): Promise<number> {
+  const q = query(
+    collection(db, COMPANIES_COLLECTION, companyId, DOCUMENTOS_COLLECTION),
+    where('terceroId', '==', terceroId),
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
+export async function countProyectosByTercero(companyId: string, terceroId: string): Promise<number> {
+  const q = query(
+    collection(db, COMPANIES_COLLECTION, companyId, PROJECTS_COLLECTION),
+    where('clientId', '==', terceroId),
   );
   const snap = await getDocs(q);
   return snap.size;
@@ -1266,19 +1260,31 @@ export async function deleteBudget(companyId: string, budgetId: string): Promise
   const budget = budgetSnap.data() as Budget;
   const links = budget.linkedEjecuciones ?? [];
 
-  // Clean up budgetLinks under each linked ejecucion
+  // Collect all budgetLink refs
+  const budgetLinkRefs: Array<import('firebase/firestore').DocumentReference> = [];
   for (const link of links) {
     const q = query(
       collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, link.ejecucionId, BUDGET_LINKS_COLLECTION),
       where('budgetId', '==', budgetId),
     );
     const linkSnap = await getDocs(q);
-    for (const linkDoc of linkSnap.docs) {
-      await deleteDoc(linkDoc.ref);
-    }
+    linkSnap.docs.forEach((linkDoc) => budgetLinkRefs.push(linkDoc.ref));
   }
 
-  await deleteDoc(budgetRef);
+  // Delete in writeBatch, flush every 400 ops for safety margin
+  let batch = writeBatch(db);
+  let count = 0;
+  for (const linkRef of budgetLinkRefs) {
+    batch.delete(linkRef);
+    count++;
+    if (count >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      count = 0;
+    }
+  }
+  batch.delete(budgetRef);
+  await batch.commit();
 }
 
 const MAX_BATCH_OPS = 450; // Safety margin below Firestore's 500-operation writeBatch limit

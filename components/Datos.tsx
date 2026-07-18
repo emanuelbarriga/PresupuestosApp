@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Budget, Ejecucion, Project, Tercero, RecordDetail, FormType, MONTHS, Month, SettingsCategorias, SettingsItem, CuentaBancaria, ExtractoBancario, MovimientoBancario, MovimientoBancarioInput, NavScreen } from '@/lib/types';
-import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, deleteTercero } from '@/lib/firestore';
+import { subscribeProjects, subscribeTerceros, subscribeSettings, subscribeCompanySettings, subscribeCuentasBancarias, subscribeExtractos, subscribeMovimientos, deleteMovimiento, deleteExtracto, batchAddMovimientos, updateExtracto, setCuentaPredeterminada, countEjecucionesByTercero, countBudgetsByTercero, countDocumentosByTercero, countProyectosByTercero, deleteTercero } from '@/lib/firestore';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Search, X, Paperclip, Trash2, List, TrendingUp, TrendingDown, CheckCircle, XCircle, Download, Eye, FileText, Star, CheckSquare, Square, Users, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MovimientosTable } from '@/components/bancos/MovimientosTable';
@@ -944,17 +944,29 @@ export function Datos({
   }, [selectedEjecuciones, onNavigate]);
 
   const handleDeleteTercero = useCallback(async (terceroId: string, terceroName: string) => {
-    // Check for asociada ejecuciones
-    const count = await countEjecucionesByTercero(companyId, terceroId);
-    if (count > 0) {
-      toast.error(`No se puede eliminar "${terceroName}" — tiene ${count} ejecución${count !== 1 ? 'es' : ''} asociada${count !== 1 ? 's' : ''}`);
+    // Query all reference types in parallel
+    const [ejecucionesCount, budgetsCount, documentosCount, proyectosCount] = await Promise.all([
+      countEjecucionesByTercero(companyId, terceroId),
+      countBudgetsByTercero(companyId, terceroId),
+      countDocumentosByTercero(companyId, terceroId),
+      countProyectosByTercero(companyId, terceroId),
+    ]);
+
+    const totalRefs = ejecucionesCount + budgetsCount + documentosCount + proyectosCount;
+    if (totalRefs > 0) {
+      const parts: string[] = [];
+      if (ejecucionesCount > 0) parts.push(`${ejecucionesCount} ejecución${ejecucionesCount !== 1 ? 'es' : ''}`);
+      if (budgetsCount > 0) parts.push(`${budgetsCount} presupuesto${budgetsCount !== 1 ? 's' : ''}`);
+      if (documentosCount > 0) parts.push(`${documentosCount} documento${documentosCount !== 1 ? 's' : ''}`);
+      if (proyectosCount > 0) parts.push(`${proyectosCount} proyecto${proyectosCount !== 1 ? 's' : ''}`);
+      toast.error(`No se puede eliminar "${terceroName}" — tiene referencias: ${parts.join(', ')}`);
       return;
     }
     const confirmed = await new Promise<boolean>((resolve) => {
       toast((t) => (
         <div className="text-sm space-y-3">
           <p className="text-slate-700 font-medium">¿Eliminar tercero &ldquo;{terceroName}&rdquo;?</p>
-          <p className="text-xs text-slate-500">Esta acción no se puede deshacer.</p>
+          <p className="text-xs text-slate-500">Sin referencias asociadas. Esta acción no se puede deshacer.</p>
           <div className="flex justify-end gap-2">
             <button onClick={() => { toast.dismiss(t.id); resolve(false); }}
               className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">No</button>
