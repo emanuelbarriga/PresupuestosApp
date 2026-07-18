@@ -1,19 +1,25 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Comprobantes de ejecuciones — auth required
-    match /{companyId}/ejecuciones/{ejecucionId}/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/jpeg|image/png|application/pdf');
-      allow delete: if request.auth != null;
+    function isMember(companyId) {
+      return request.auth != null &&
+        firestore.exists(
+          /databases/(default)/documents/companies/$(companyId)/members/$(request.auth.uid));
     }
 
-    // Documentos media system — auth required
+    // Comprobantes de ejecuciones — membership required
+    match /{companyId}/ejecuciones/{ejecucionId}/{fileName} {
+      allow read: if isMember(companyId);
+      allow write: if isMember(companyId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/jpeg|image/png|application/pdf');
+      allow delete: if isMember(companyId);
+    }
+
+    // Documentos media system — membership required
     match /{companyId}/documentos/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
+      allow read: if isMember(companyId);
+      allow write: if isMember(companyId)
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf|image/jpeg|image/png|image/webp');
       allow delete: if false; // GC scripts only
@@ -21,16 +27,16 @@ service firebase.storage {
 
     // Allow listing ejecuciones folders and files (for diagnostic/fix tools)
     match /{companyId}/ejecuciones/{allPaths=**} {
-      allow list: if request.auth != null;
+      allow list: if isMember(companyId);
     }
 
-    // Extractos bancarios (PDF) — auth required
+    // Extractos bancarios (PDF) — membership required
     match /{companyId}/extractos/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
+      allow read: if isMember(companyId);
+      allow write: if isMember(companyId)
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf');
-      allow delete: if request.auth != null;
+      allow delete: if isMember(companyId);
     }
 
     // Deny everything else
