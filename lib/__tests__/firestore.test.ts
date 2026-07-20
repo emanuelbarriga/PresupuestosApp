@@ -636,26 +636,107 @@ describe('budget-links (PR3): addBudgetLink', () => {
     vi.clearAllMocks();
   });
 
-  it('uses runTransaction to atomically create link and update budget', async () => {
+  function setupTransaction(
+    ejecucionData: Record<string, unknown>,
+    budgetData?: Record<string, unknown>,
+  ) {
     const mockTxn = { set: vi.fn(), update: vi.fn(), delete: vi.fn(), get: vi.fn() };
     (runTransaction as Mock).mockImplementation(async (_db: any, fn: any) => {
+      // First get call → ejecucion doc
+      mockTxn.get.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ejecucionData,
+      });
+      // Second get call → budget doc (if needed)
+      if (budgetData) {
+        mockTxn.get.mockResolvedValueOnce({
+          exists: () => true,
+          data: () => budgetData,
+        });
+      }
       await fn(mockTxn);
     });
+    return mockTxn;
+  }
 
-    await addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 50000 });
+  it('reads ejecucion doc (not collection query) to validate montoAsignadoAcumulado', async () => {
+    const mockTxn = setupTransaction(
+      { montoAsignadoAcumulado: 50000, montoEjecutado: 100000 },
+      { montoPresupuestado: 100000 },
+    );
 
-    expect(runTransaction).toHaveBeenCalledTimes(1);
+    await addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 40000 });
+
+    // Reads ejecucion doc to get montoAsignadoAcumulado (no collection query)
+    expect(mockTxn.get).toHaveBeenCalledTimes(2);
+    // Verifies it updates ejecucion.montoAsignadoAcumulado via increment
+    const ejecUpdate = mockTxn.update.mock.calls.find(
+      (c: any[]) => c[0]?.path?.includes('ejecuciones'),
+    );
+    expect(ejecUpdate).toBeDefined();
+    expect(ejecUpdate![1]).toHaveProperty('montoAsignadoAcumulado');
+  });
+
+  it('rejects monto < 0', async () => {
+    setupTransaction(
+      { montoAsignadoAcumulado: 0, montoEjecutado: 100000 },
+      { montoPresupuestado: 100000 },
+    );
+
+    await expect(
+      addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: -1 }),
+    ).rejects.toThrow(/monto/i);
+  });
+
+  it('rejects sum > montoEjecutado + TOLERANCIA_TRM (100 COP)', async () => {
+    // acumulado=95000, monto=6000 → newSum=101000 > 100000+100=100100
+    setupTransaction(
+      { montoAsignadoAcumulado: 95000, montoEjecutado: 100000 },
+    );
+
+    await expect(
+      addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 6000 }),
+    ).rejects.toThrow(/excede|exceeds|montoEjecutado/);
+  });
+
+  it('allows sum within TOLERANCIA_TRM', async () => {
+    // acumulado=95000, monto=5000 → newSum=100000 ≤ 100000+100=100100
+    const mockTxn = setupTransaction(
+      { montoAsignadoAcumulado: 95000, montoEjecutado: 100000 },
+      { montoPresupuestado: 100000 },
+    );
+
+    await addBudgetLink('c1', 'ej-1', { companyId: 'c1', budgetId: 'b-1', monto: 5000 });
+
     expect(mockTxn.set).toHaveBeenCalledTimes(1);
-    expect(mockTxn.update).toHaveBeenCalledTimes(1);
+    expect(mockTxn.update).toHaveBeenCalledTimes(2);
+  });
 
-    // Verify the link doc is set with the correct data
-    const setCall = mockTxn.set.mock.calls[0];
-    expect(setCall[1]).toMatchObject({ companyId: 'c1', budgetId: 'b-1', monto: 50000 });
+  it('rejects total closure under budget without justificacion', async () => {
+    // budget.montoPresupuestado=1000, link.monto=400 (< 1000)
+    setupTransaction(
+      { montoAsignadoAcumulado: 0, montoEjecutado: 100000 },
+      { montoPresupuestado: 1000 },
+    );
 
-    // Verify the budget is updated with denormalized fields
-    const updateCall = mockTxn.update.mock.calls[0];
-    expect(updateCall[1]).toHaveProperty('totalEjecutado');
-    expect(updateCall[1]).toHaveProperty('linkedEjecuciones');
+    await expect(
+      addBudgetLink('c1', 'ej-1', {
+        companyId: 'c1', budgetId: 'b-1', monto: 400, tipo_cierre: 'total',
+      }),
+    ).rejects.toThrow(/justificacion/i);
+  });
+
+  it('accepts total closure under budget WITH justificacion', async () => {
+    const mockTxn = setupTransaction(
+      { montoAsignadoAcumulado: 0, montoEjecutado: 100000 },
+      { montoPresupuestado: 1000 },
+    );
+
+    await addBudgetLink('c1', 'ej-1', {
+      companyId: 'c1', budgetId: 'b-1', monto: 400, tipo_cierre: 'total', justificacion: 'TRM',
+    });
+
+    expect(mockTxn.set).toHaveBeenCalledTimes(1);
   });
 
   it('propagates error when runTransaction fails', async () => {

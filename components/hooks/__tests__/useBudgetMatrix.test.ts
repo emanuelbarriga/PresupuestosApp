@@ -6,9 +6,10 @@ import {
   buildMatrixData,
   computeFilteredTotals,
   filterAndSortRows,
+  computeCellState,
   type ProjectRow,
 } from '@/components/hooks/useBudgetMatrix';
-import { MONTHS, type Month, type Budget, type Ejecucion, type Project, type ProjectState } from '@/lib/types';
+import { MONTHS, type Month, type Budget, type EjecucionBudgetLink, type Ejecucion, type Project, type ProjectState } from '@/lib/types';
 
 // ─── Factory helpers ───────────────────────────────────────────────
 
@@ -586,5 +587,115 @@ describe('filterAndSortRows', () => {
     // Activo (no estadoOrder entry → 99) should come after Unknown (also 99), alphabetically A comes first
     expect(result[0].proyecto).toBe('A');
     expect(result[1].proyecto).toBe('B');
+  });
+});
+
+// ─── computeCellState ──────────────────────────────────────────────
+
+describe('computeCellState', () => {
+  function makeBudget(overrides: Partial<Budget> & { id: string }): Budget {
+    return {
+      descripcion: '',
+      projectId: '',
+      projectName: '',
+      entityId: '',
+      entityName: '',
+      entityType: 'client',
+      tipo: 'egreso',
+      montoPresupuestado: 1000,
+      mesPresupuestado: 'Enero',
+      fechaPresupuestado: '2026-01',
+      estadoProyecto: 'Activo',
+      ...overrides,
+    };
+  }
+
+  function makeLink(overrides: Partial<EjecucionBudgetLink> & { monto: number }): EjecucionBudgetLink {
+    return {
+      id: 'l1',
+      companyId: 'c1',
+      budgetId: 'b1',
+      ...overrides,
+    };
+  }
+
+  it('returns pending when no links exist', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const result = computeCellState(budget, []);
+
+    expect(result.estado).toBe('pending');
+    expect(result.presupuestado).toBe(1000);
+    expect(result.ejecutado).toBe(0);
+    expect(result.porEjecutar).toBe(1000);
+  });
+
+  it('returns over-run when ejecutado > presupuestado (checked before completed)', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const links = [
+      makeLink({ monto: 600 }),
+      makeLink({ monto: 600 }),
+    ];
+    const result = computeCellState(budget, links);
+
+    expect(result.estado).toBe('over-run');
+    expect(result.ejecutado).toBe(1200);
+    expect(result.porEjecutar).toBe(0); // Math.max clamps to 0
+  });
+
+  it('returns completed when porEjecutar === 0 (ejecutado === presupuestado)', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const links = [
+      makeLink({ monto: 400 }),
+      makeLink({ monto: 600 }),
+    ];
+    const result = computeCellState(budget, links);
+
+    expect(result.estado).toBe('completed');
+    expect(result.ejecutado).toBe(1000);
+    expect(result.porEjecutar).toBe(0);
+  });
+
+  it('returns completed when any link has tipo_cierre=total', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const links = [
+      makeLink({ monto: 400, tipo_cierre: 'total' }),
+    ];
+    const result = computeCellState(budget, links);
+
+    expect(result.estado).toBe('completed');
+    expect(result.ejecutado).toBe(400);
+    expect(result.porEjecutar).toBe(600); // Still shows remaining
+  });
+
+  it('returns partial when links exist but no closure and ejecutado < presupuestado', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const links = [
+      makeLink({ monto: 400 }),
+    ];
+    const result = computeCellState(budget, links);
+
+    expect(result.estado).toBe('partial');
+    expect(result.ejecutado).toBe(400);
+    expect(result.porEjecutar).toBe(600);
+  });
+
+  it('handles null-safe fallback: missing tipo_cierre is treated as partial', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    // Link without tipo_cierre → treat as partial
+    const links = [
+      { id: 'l1', companyId: 'c1', budgetId: 'b1', monto: 300 } as EjecucionBudgetLink,
+    ];
+    const result = computeCellState(budget, links);
+
+    expect(result.estado).toBe('partial');
+    expect(result.ejecutado).toBe(300);
+  });
+
+  it('includes variacionCambiaria from budget', () => {
+    const budget = makeBudget({ id: 'b1', montoPresupuestado: 1000 });
+    const links: EjecucionBudgetLink[] = [];
+    const result = computeCellState(budget, links);
+
+    expect(result.variacionCambiaria).toBe(0);
   });
 });

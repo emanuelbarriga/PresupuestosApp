@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react';
-import { MONTHS, Month, Budget, Ejecucion, TransactionType, ProjectState, Project, DetalleTerceroGroup } from '@/lib/types';
+import { MONTHS, Month, Budget, Ejecucion, EjecucionBudgetLink, CellStatus, CellState, TransactionType, ProjectState, Project, DetalleTerceroGroup } from '@/lib/types';
 
 // ─── Leaf helpers ──────────────────────────────────────────────────
 
@@ -12,6 +12,41 @@ export const getMonthFromDateStr = (dateString: string): Month => {
 
 export const getDiferencia = (presupuestado: number, ejecutado: number): number =>
   ejecutado - presupuestado;
+
+/**
+ * Compute cell state for a budget given its linked ejecucion links.
+ * Order: over-run > completed > partial > pending.
+ */
+export function computeCellState(budget: Budget, links: EjecucionBudgetLink[]): CellState {
+  const presupuestado = budget.montoPresupuestado;
+  let ejecutado = 0;
+
+  for (const l of links) {
+    ejecutado += l.monto;
+  }
+
+  const porEjecutar = Math.max(0, presupuestado - ejecutado);
+
+  // IMPORTANT: check over-run BEFORE completed (porEjecutar=0 when ejecutado > presupuestado)
+  let estado: CellStatus;
+  if (links.length === 0) {
+    estado = 'pending';
+  } else if (ejecutado > presupuestado) {
+    estado = 'over-run';
+  } else if (porEjecutar === 0 || links.some(l => l.tipo_cierre === 'total')) {
+    estado = 'completed';
+  } else {
+    estado = 'partial';
+  }
+
+  return {
+    presupuestado,
+    ejecutado,
+    porEjecutar,
+    variacionCambiaria: budget.variacionCambiariaTotal ?? 0,
+    estado,
+  };
+}
 
 // ─── Internal types ─────────────────────────────────────────────────
 

@@ -148,6 +148,8 @@ export interface Budget {
   totalEjecutado?: number;
   /** Denormalized — linked ejecucion IDs. Updated atomically via arrayUnion/arrayRemove. */
   linkedEjecuciones?: Array<{ ejecucionId: string; monto: number }>;
+  /** TRM variance display-only — aggregated from linked ejecuciones for matrix rendering. */
+  variacionCambiariaTotal?: number;
 }
 
 export interface EjecucionBudgetLink {
@@ -155,7 +157,20 @@ export interface EjecucionBudgetLink {
   companyId: string;
   budgetId: string;
   monto: number;
+  tipo_cierre?: 'total' | 'parcial';
+  fecha_afectacion_presupuestal?: string; // YYYY-MM
+  justificacion?: string;
   createdAt?: Timestamp;
+}
+
+// Estados de celda para Dashboard
+export type CellStatus = 'over-run' | 'completed' | 'partial' | 'pending';
+export interface CellState {
+  presupuestado: number;
+  ejecutado: number;
+  porEjecutar: number;
+  variacionCambiaria: number;
+  estado: CellStatus;
 }
 
 export interface Ejecucion {
@@ -169,6 +184,8 @@ export interface Ejecucion {
   tipo: TransactionType;
   montoEjecutado: number;
   fechaEjecutado: string;
+  montoAsignadoAcumulado?: number;  // sum of budgetLinks monto — validated at write time
+  variacionCambiariaTotal?: number; // COP, display-only, computed on form submit
   cuentaId?: string;
   cuentaName?: string;
   comprobantes: Comprobante[];

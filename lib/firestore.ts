@@ -437,25 +437,52 @@ export function subscribeBudgetLinks(
   );
 }
 
+const TOLERANCIA_TRM = 100;
+
 export async function addBudgetLink(
   companyId: string,
   ejecucionId: string,
   data: Omit<EjecucionBudgetLink, 'id' | 'createdAt'>,
 ): Promise<string> {
+  if (data.monto < 0) throw new Error('monto must be >= 0');
+
   const linkRef = doc(
     collection(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId, BUDGET_LINKS_COLLECTION),
   );
-  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, 'budgets', data.budgetId);
+  const ejecucionRef = doc(db, COMPANIES_COLLECTION, companyId, EJECUCIONES_COLLECTION, ejecucionId);
+  const budgetRef = doc(db, COMPANIES_COLLECTION, companyId, BUDGETS_COLLECTION, data.budgetId);
 
-  await runTransaction(db, async (transaction) => {
-    transaction.set(linkRef, { ...data, createdAt: serverTimestamp() });
-    transaction.update(budgetRef, {
+  return runTransaction(db, async (tx) => {
+    const ejecSnap = await tx.get(ejecucionRef);
+    if (!ejecSnap.exists()) throw new Error('Ejecucion not found');
+    const ejec = ejecSnap.data();
+    const acumulado = (ejec.montoAsignadoAcumulado ?? 0) as number;
+    const montoTotal = (ejec.montoEjecutado as number) ?? 0;
+    const newSum = acumulado + data.monto;
+
+    if (newSum > montoTotal + TOLERANCIA_TRM) {
+      throw new Error(
+        `Suma (${newSum}) excede montoEjecutado (${montoTotal}) por > ${TOLERANCIA_TRM} COP`,
+      );
+    }
+
+    const budgetSnap = await tx.get(budgetRef);
+    const budget = budgetSnap.data() as Budget;
+    if (data.tipo_cierre === 'total' && data.monto < budget.montoPresupuestado && !data.justificacion) {
+      throw new Error('justificacion required for under-closed total');
+    }
+
+    tx.set(linkRef, { ...data, createdAt: serverTimestamp() });
+    tx.update(ejecucionRef, {
+      montoAsignadoAcumulado: increment(data.monto),
+    });
+    tx.update(budgetRef, {
       totalEjecutado: increment(data.monto),
       linkedEjecuciones: arrayUnion({ ejecucionId, monto: data.monto }),
     });
-  });
 
-  return linkRef.id;
+    return linkRef.id;
+  });
 }
 
 export async function removeBudgetLink(

@@ -171,6 +171,118 @@ describe('EntityProps', () => {
   });
 });
 
+// ─── Budget Closure Tracking — Phase 1 Types ─────────────────────────
+
+describe('Ejecucion — budget closure fields', () => {
+  it('accepts montoAsignadoAcumulado as optional number', () => {
+    const ejecucion: import('@/lib/types').Ejecucion = {
+      id: 'e1', descripcion: '', projectId: '', projectName: '',
+      entityId: '', entityName: '', entityType: '',
+      tipo: 'egreso', montoEjecutado: 100000, fechaEjecutado: '2026-06-15',
+      comprobantes: [],
+      montoAsignadoAcumulado: 95000,
+    };
+    expect(ejecucion.montoAsignadoAcumulado).toBe(95000);
+  });
+
+  it('accepts montoAsignadoAcumulado as undefined', () => {
+    const ejecucion: import('@/lib/types').Ejecucion = {
+      id: 'e2', descripcion: '', projectId: '', projectName: '',
+      entityId: '', entityName: '', entityType: '',
+      tipo: 'egreso', montoEjecutado: 100000, fechaEjecutado: '2026-06-15',
+      comprobantes: [],
+    };
+    expect(ejecucion.montoAsignadoAcumulado).toBeUndefined();
+  });
+
+  it('accepts variacionCambiariaTotal as optional number', () => {
+    const ejecucion: import('@/lib/types').Ejecucion = {
+      id: 'e3', descripcion: '', projectId: '', projectName: '',
+      entityId: '', entityName: '', entityType: '',
+      tipo: 'egreso', montoEjecutado: 100000, fechaEjecutado: '2026-06-15',
+      comprobantes: [],
+      variacionCambiariaTotal: 80,
+    };
+    expect(ejecucion.variacionCambiariaTotal).toBe(80);
+  });
+
+  it('accepts variacionCambiariaTotal as undefined', () => {
+    const ejecucion: import('@/lib/types').Ejecucion = {
+      id: 'e4', descripcion: '', projectId: '', projectName: '',
+      entityId: '', entityName: '', entityType: '',
+      tipo: 'egreso', montoEjecutado: 100000, fechaEjecutado: '2026-06-15',
+      comprobantes: [],
+    };
+    expect(ejecucion.variacionCambiariaTotal).toBeUndefined();
+  });
+});
+
+describe('EjecucionBudgetLink — closure fields', () => {
+  it('accepts tipo_cierre as total', () => {
+    const link: import('@/lib/types').EjecucionBudgetLink = {
+      id: 'l1', companyId: 'c1', budgetId: 'b1', monto: 400,
+      tipo_cierre: 'total',
+    };
+    expect(link.tipo_cierre).toBe('total');
+  });
+
+  it('accepts tipo_cierre as parcial', () => {
+    const link: import('@/lib/types').EjecucionBudgetLink = {
+      id: 'l2', companyId: 'c1', budgetId: 'b1', monto: 400,
+      tipo_cierre: 'parcial',
+    };
+    expect(link.tipo_cierre).toBe('parcial');
+  });
+
+  it('accepts tipo_cierre as undefined', () => {
+    const link: import('@/lib/types').EjecucionBudgetLink = {
+      id: 'l3', companyId: 'c1', budgetId: 'b1', monto: 400,
+    };
+    expect(link.tipo_cierre).toBeUndefined();
+  });
+
+  it('accepts fecha_afectacion_presupuestal as string', () => {
+    const link: import('@/lib/types').EjecucionBudgetLink = {
+      id: 'l4', companyId: 'c1', budgetId: 'b1', monto: 400,
+      fecha_afectacion_presupuestal: '2026-07',
+    };
+    expect(link.fecha_afectacion_presupuestal).toBe('2026-07');
+  });
+
+  it('accepts justificacion as string', () => {
+    const link: import('@/lib/types').EjecucionBudgetLink = {
+      id: 'l5', companyId: 'c1', budgetId: 'b1', monto: 400,
+      tipo_cierre: 'total', justificacion: 'TRM',
+    };
+    expect(link.justificacion).toBe('TRM');
+  });
+});
+
+describe('CellStatus / CellState exports', () => {
+  it('exports CellStatus as type allowing all four states', () => {
+    const over: import('@/lib/types').CellStatus = 'over-run';
+    const comp: import('@/lib/types').CellStatus = 'completed';
+    const part: import('@/lib/types').CellStatus = 'partial';
+    const pend: import('@/lib/types').CellStatus = 'pending';
+    expect([over, comp, part, pend]).toEqual(['over-run', 'completed', 'partial', 'pending']);
+  });
+
+  it('exports CellState interface with all fields', () => {
+    const state: import('@/lib/types').CellState = {
+      presupuestado: 1000,
+      ejecutado: 800,
+      porEjecutar: 200,
+      variacionCambiaria: 0,
+      estado: 'partial',
+    };
+    expect(state.presupuestado).toBe(1000);
+    expect(state.ejecutado).toBe(800);
+    expect(state.porEjecutar).toBe(200);
+    expect(state.variacionCambiaria).toBe(0);
+    expect(state.estado).toBe('partial');
+  });
+});
+
 describe('_linkedDocumentos expanded interface', () => {
   it('accepts all optional fields', () => {
     const entry: NonNullable<import('@/lib/types').Ejecucion['_linkedDocumentos']>[number] = {
