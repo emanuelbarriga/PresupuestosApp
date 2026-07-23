@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Ejecucion, Budget, Comprobante, NavScreen, EntityType, MovimientoBancario, CuentaBancaria } from '@/lib/types';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscribeBudgets, removeBudgetLink, updateEjecucion } from '@/lib/firestore';
 import { deleteFile } from '@/lib/fileUpload';
@@ -86,16 +86,28 @@ export function EjecucionView({ ejecucion, companyId, cuentas, onSubmit, onNavig
     for (const b of budgets) {
       const match = (b.linkedEjecuciones ?? []).find(le => le.ejecucionId === ejecucion.id);
       if (match) {
-        links.push({ id: match.ejecucionId, budgetId: b.id, budgetName: b.descripcion, monto: match.monto });
+        links.push({ id: `${match.ejecucionId}_${b.id}`, budgetId: b.id, budgetName: b.descripcion, monto: match.monto });
       }
     }
     return links;
   }, [budgets, ejecucion.id]);
 
-  const handleRemoveLink = async (linkId: string) => {
+  const handleRemoveLink = async (budgetId: string) => {
     try {
-      await removeBudgetLink(companyId, ejecucion.id, linkId);
+      // Buscar el document ID real del budgetLink en la subcolección
+      const q = query(
+        collection(db, 'companies', companyId, 'ejecuciones', ejecucion.id, 'budgetLinks'),
+        where('budgetId', '==', budgetId),
+      );
+      const snap = await getDocs(q);
+      const linkDoc = snap.docs[0];
+      if (!linkDoc) {
+        console.warn('[EjecucionView] No se encontró budgetLink para budgetId', budgetId);
+        return;
+      }
+      await removeBudgetLink(companyId, ejecucion.id, linkDoc.id);
     } catch (err) {
+      console.error('[EjecucionView] Error al desvincular presupuesto:', err);
     }
   };
 
@@ -198,7 +210,7 @@ export function EjecucionView({ ejecucion, companyId, cuentas, onSubmit, onNavig
                   {link.monto > 0 && <span className="ml-2 font-bold">{formatCurrency(link.monto)}</span>}
                 </p>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); handleRemoveLink(link.id); }}
+              <button onClick={(e) => { e.stopPropagation(); handleRemoveLink(link.budgetId); }}
                 className="text-slate-400 hover:text-rose-500 transition-colors shrink-0 ml-2" title="Desvincular">
                 <Unlink size={14} />
               </button>

@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import type { Budget, Ejecucion, NavScreen } from '@/lib/types';
 import { PanelHeader } from '@/components/shared/PanelHeader';
 import { ComprobantesViewer } from '@/components/upload/ComprobantesViewer';
-import { Eye, Pencil, Play, Archive, Trash2, Plus } from 'lucide-react';
+import { Eye, Pencil, Play, Archive, Trash2, Plus, Link2 } from 'lucide-react';
 import clsx from 'clsx';
 import { groupByEntity } from '@/components/utils/groupByEntity';
 import { EntityTypeBadge } from '@/components/shared/EntityTypeBadge';
@@ -328,6 +328,10 @@ export function EntityList({
         <div className="border border-slate-100 rounded-b-lg divide-y divide-slate-50">
           {group.items.map(e => {
             const cCount = e.comprobantes?.length || 0;
+            // Find linked budgets from budgets' linkedEjecuciones
+            const linkedBudgets = budgets.filter(b =>
+              b.linkedEjecuciones?.some(le => le.ejecucionId === e.id)
+            );
             return (
               <div key={e.id} className="px-2 py-1.5">
                 <div className="flex items-start justify-between mb-1">
@@ -337,6 +341,24 @@ export function EntityList({
                   </div>
                   <p className="text-xs font-bold text-slate-800 shrink-0">{formatCurrency(e.montoEjecutado)}</p>
                 </div>
+                {/* Linked budgets indicator */}
+                {linkedBudgets.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {linkedBudgets.map(b => {
+                      const link = b.linkedEjecuciones?.find(le => le.ejecucionId === e.id);
+                      return (
+                        <button key={b.id}
+                          onClick={() => onNavigate({ type: 'entity', entity: 'budget', mode: 'view', record: b })}
+                          className="flex items-center gap-1 text-[10px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-colors"
+                          title={`Vinculado a ${b.descripcion}`}
+                        >
+                          <Link2 size={10} />
+                          {b.descripcion}: {link ? formatCurrency(link.monto) : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <button onClick={() => onNavigate({ type: 'entity', entity: 'ejecucion', mode: 'view', record: e })}
                     className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded transition-colors">

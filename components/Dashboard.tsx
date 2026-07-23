@@ -467,6 +467,40 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
       t.totalEjecutado += e.montoEjecutado;
     });
 
+    // Merge tercero groups with the same entityName within each project
+    // (fixes duplicate rows when budgets have different entityId for the same name)
+    for (const [, pd] of projectsMap) {
+      const byName = new Map<string, { keys: string[]; merged: TerceroRowdata }>();
+      for (const [eid, t] of pd.terceros) {
+        const name = t.entityName || 'sin-nombre';
+        if (!byName.has(name)) {
+          byName.set(name, { keys: [], merged: initTercero(name, name, t.entityType) });
+        }
+        const entry = byName.get(name)!;
+        entry.keys.push(eid);
+        // Merge all fields
+        for (const m of MONTHS) {
+          entry.merged.presupuestoPorMes[m] += t.presupuestoPorMes[m] ?? 0;
+          entry.merged.ejecucionPorMes[m] += t.ejecucionPorMes[m] ?? 0;
+          entry.merged.budgetsPorMes[m].push(...(t.budgetsPorMes[m] ?? []));
+          entry.merged.ejecucionesPorMes[m].push(...(t.ejecucionesPorMes[m] ?? []));
+        }
+        entry.merged.allBudgets.push(...t.allBudgets);
+        entry.merged.allEjecuciones.push(...t.allEjecuciones);
+        entry.merged.totalPresupuestado += t.totalPresupuestado;
+        entry.merged.totalEjecutado += t.totalEjecutado;
+        // Keep the first entityType (or 'ambos' if mixed)
+        if (entry.merged.entityType !== t.entityType) {
+          entry.merged.entityType = 'ambos';
+        }
+      }
+      // Replace terceros map with merged entries (use first key)
+      pd.terceros.clear();
+      for (const [, entry] of byName) {
+        pd.terceros.set(entry.keys[0], entry.merged);
+      }
+    }
+
     const rows = Array.from(projectsMap.entries()).map(([key, data]) => {
       const totalPresupuestado = visibleMonths.reduce((sum, m) => sum + data.presupuestoPorMes[m], 0);
       const totalEjecutado = visibleMonths.reduce((sum, m) => sum + data.ejecucionPorMes[m], 0);
@@ -477,7 +511,8 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
           const vEjecutado = visibleMonths.reduce((s, m) => s + t.ejecucionPorMes[m], 0);
           return { ...t, totalPresupuestado: vPresupuestado, totalEjecutado: vEjecutado };
         })
-        .filter(t => t.totalPresupuestado !== 0 || t.totalEjecutado !== 0);
+        .filter(t => t.totalPresupuestado !== 0 || t.totalEjecutado !== 0)
+        .sort((a, b) => (a.entityName || '').localeCompare(b.entityName || 'es-CO'));
       return { ...data, proyecto: data.proyecto, projectId: data.projectId, totalPresupuestado, totalEjecutado, terceroRows };
     });
 
@@ -692,7 +727,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
           )}
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto select-none">
         <table className="w-full text-left border-collapse">
           <thead className={clsx("border-b", isP ? "bg-sky-50 border-sky-100" : "bg-slate-800 border-slate-700")}>
             <tr>
@@ -749,20 +784,29 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                         </td>
                       );
                     })}
-                    <td className={clsx("p-3 text-right border-l transition-colors font-bold cursor-pointer", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 ? (isP ? "hover:bg-sky-50 text-sky-900" : "hover:bg-slate-50 text-slate-800") : "text-slate-400")}
+                    <td className={clsx("p-3 text-right border-l transition-colors font-bold cursor-pointer", isP ? "border-sky-100" : "border-slate-200", (mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado) > 0 ? (isP ? "hover:bg-sky-50 text-sky-900" : `hover:bg-slate-50 ${colorTheme}`) : "text-slate-400")}
                       onClick={() => onProjectClick?.(row.projectId, row.proyecto, year, tipo, mode)}>
                       {formatCurrency(mode === 'Presupuestado' ? row.totalPresupuestado : row.totalEjecutado)}
                     </td>
                   </tr>
                 );
 
-                // Tercero sub-rows
+                // Tercero sub-rows with rowSpan for same-name consecutive rows
                 if (isExpanded && row.terceroRows && row.terceroRows.length > 0) {
+                  // Pre-compute rowSpan for each tercero name group
+                  const terceroSpans: number[] = new Array(row.terceroRows.length).fill(1);
+                  for (let i = row.terceroRows.length - 2; i >= 0; i--) {
+                    if ((row.terceroRows[i].entityName || '').toLowerCase() === (row.terceroRows[i + 1].entityName || '').toLowerCase()) {
+                      terceroSpans[i] = terceroSpans[i + 1] + 1;
+                      terceroSpans[i + 1] = 0;
+                    }
+                  }
                   row.terceroRows.forEach((t, ti) => {
                     const tKey = `${rowKey}-tercero-${t.entityId}-${ti}`;
                     rows.push(
                       <tr key={tKey} className={clsx("transition-colors", isP ? "bg-sky-50/20 hover:bg-sky-50" : "bg-slate-50/40 hover:bg-slate-50")}>
-                        <td className={clsx("p-2 pl-8 sticky left-0 z-10 border-r text-[10px] cursor-pointer", isP ? "bg-sky-50/20 border-sky-100 hover:bg-sky-100" : "bg-slate-50/40 border-slate-200 hover:bg-slate-100")}
+                        {terceroSpans[ti] > 0 ? (
+                        <td rowSpan={terceroSpans[ti]} className={clsx("p-2 pl-8 sticky left-0 z-10 border-r text-[10px] cursor-pointer", isP ? "bg-sky-50/20 border-sky-100 hover:bg-sky-100" : "bg-slate-50/40 border-slate-200 hover:bg-slate-100")}
                           onClick={() => onTerceroSubRowClick?.(row, t, tipo)}>
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium text-slate-700 truncate">{t.entityName}</span>
@@ -771,6 +815,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                             </span>
                           </div>
                         </td>
+                        ) : null /* rowSpan from previous row occupies this position */}
                         {visibleMonths.map(m => {
                           const presupuestado = t.presupuestoPorMes[m];
                           const ejecutado = t.ejecucionPorMes[m];
@@ -815,7 +860,7 @@ function Matrix({ tipo, showNegociacion, mode, year, onCellClick, onProjectClick
                 const p = filteredTotals.colTotals.presupuestado[m];
                 const e = filteredTotals.colTotals.ejecutado[m];
                 const val = mode === 'Presupuestado' ? p : e;
-                return (<td key={m} className={clsx("p-2 text-center border-r transition-colors", isP ? "border-sky-800" : "border-slate-700", val > 0 && `cursor-pointer ${isP ? "hover:bg-sky-800 text-sky-100" : "hover:bg-slate-800 text-slate-100"}`, val === 0 && (isP ? "text-sky-700" : "text-slate-500"))} onClick={() => handleColTotalClick(m, p, e)}>{val === 0 ? '-' : formatCurrency(val)}</td>);
+                return (<td key={m} className={clsx("p-2 text-center border-r transition-colors", isP ? "border-sky-800" : "border-slate-700", val > 0 && `cursor-pointer ${isP ? "hover:bg-sky-800 text-sky-100" : `hover:bg-slate-800 ${tipo === 'ingreso' ? 'text-emerald-300' : 'text-rose-300'}`}`, val === 0 && (isP ? "text-sky-700" : "text-slate-500"))} onClick={() => handleColTotalClick(m, p, e)}>{val === 0 ? '-' : formatCurrency(val)}</td>);
               })}
               <td className={clsx("p-3 text-right border-l cursor-pointer transition-colors", isP ? "bg-sky-900 border-sky-800 hover:bg-sky-800 text-emerald-300" : "bg-slate-900 border-slate-700 hover:bg-slate-800 text-emerald-400")} onClick={handleGrandTotalClick}>
                 {formatCurrency(mode === 'Presupuestado' ? filteredTotals.grandTotalPresupuestado : filteredTotals.grandTotalEjecutado)}

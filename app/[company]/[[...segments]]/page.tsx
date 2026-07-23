@@ -650,7 +650,7 @@ export default function CompanyPage({ params }: Props) {
   }, [closePanel]);
 
   return (
-    <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden select-none">
+    <div className="flex h-screen w-full bg-[#F4F6F8] text-slate-900 font-sans overflow-hidden">
         <Sidebar activeView={activeView} basePath={`/${companyId}`} />
 
         <main className="flex-1 flex overflow-hidden relative min-w-0">
